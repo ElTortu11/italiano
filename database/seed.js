@@ -313,32 +313,6 @@ const prompts = [
 const insertPrompt = db.prepare(`INSERT OR IGNORE INTO writing_exercises(prompt,type) VALUES(?,?)`);
 prompts.forEach(p => insertPrompt.run(p.prompt, p.type));
 
-// ── Sample errors (to demonstrate error notebook) ──────────────────────────
-const sampleErrors = [
-  { orig: 'Sono andato a casa di mia amico.', corr: 'Sono andato a casa del mio amico.', expl: 'El posesivo italiano requiere artículo: "mio amico" → "il mio amico". Con preposición "a" + "il" = "del".', cat: 'grammar', imp: 3 },
-  { orig: 'Ho freddo. Sto freddo.', corr: 'Ho freddo.', expl: '"Avere" se usa para sensaciones físicas: freddo, caldo, fame, sete, sonno, paura, etc. No se usa "stare" ni "essere" para estas.', cat: 'grammar', imp: 3 },
-  { orig: 'Penso che è una buona idea.', corr: 'Penso che sia una buona idea.', expl: 'Dopo "pensare che" in italiano si usa il congiuntivo: "sia" (non "è").', cat: 'conjugation', imp: 3 },
-  { orig: 'Sono nato in 1998.', corr: 'Sono nato nel 1998.', expl: 'Le date con anni usano "nel": nato nel 1998. Confronto spagnolo: "en 1998" — in italiano si articola.', cat: 'grammar', imp: 2 },
-  { orig: 'Il burro è nell\'armadio.', corr: 'Il burro è in frigo.', expl: 'Il burro (mantequilla) si conserva in frigorifero. "Armadio" = armario/ropero. Falso amigo: in spagnolo "burro" = asino.', cat: 'vocabulary', imp: 2 },
-];
-const insertErr = db.prepare(`INSERT OR IGNORE INTO errors(original_text,corrected_text,explanation,category,importance) VALUES(?,?,?,?,?)`);
-sampleErrors.forEach(e => insertErr.run(e.orig, e.corr, e.expl, e.cat, e.imp));
-
-// ── Sample daily stats (last 14 days) ──────────────────────────────────────
-const today = new Date();
-for (let i = 13; i >= 0; i--) {
-  const d = new Date(today);
-  d.setDate(d.getDate() - i);
-  const dateStr = d.toISOString().split('T')[0];
-  const studied = i > 10 ? 0 : (Math.random() > 0.2 ? 1 : 0);
-  if (studied) {
-    const mins = 15 + Math.round(Math.random() * 35);
-    const cards = 10 + Math.round(Math.random() * 20);
-    const acc = 0.6 + Math.random() * 0.35;
-    db.prepare(`INSERT OR IGNORE INTO daily_stats(date,minutes_studied,flashcards_reviewed,accuracy,goal_met) VALUES(?,?,?,?,?)`)
-      .run(dateStr, mins, cards, acc, mins >= 30 ? 1 : 0);
-  }
-}
 
 console.log('✅ Base de datos inicializada con datos de ejemplo.');
 console.log(`   Categorías: ${db.prepare('SELECT COUNT(*) as n FROM vocabulary_categories').get().n}`);
