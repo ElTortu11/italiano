@@ -729,7 +729,6 @@ function wordItemHTML(w) {
     <div class="word-mastery ${masteryClass}"></div>
     <div class="word-it">${w.italian}</div>
     <div class="word-es">${w.spanish}</div>
-    <div class="word-level"></div>
   </div>`;
 }
 
@@ -777,8 +776,6 @@ async function renderVocabulary(el) {
       ${categories.map(c => categoryCardHTML(c)).join('')}
     </div>
 
-    <!-- Word view panel (shown when category selected) -->
-    <div id="word-panel" style="display:none;margin-top:24px"></div>
   `;
 
   el.querySelector('#cat-search').addEventListener('input', e => {
@@ -816,82 +813,52 @@ function categoryCardHTML(c) {
 }
 
 async function openCategory(el, catId) {
-  const panel = document.getElementById('word-panel');
-  panel.style.display = 'block';
-  panel.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
-  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  showModal('Cargando...', `<div class="loading"><div class="spinner"></div></div>`, []);
+  const modal = document.querySelector('#active-modal .modal');
+  if (modal) modal.style.maxWidth = '680px';
 
-  const data = await API.get(`/vocabulary/words?category=${catId}&limit=200`);
+  const [data, cats] = await Promise.all([
+    API.get(`/vocabulary/words?category=${catId}&limit=200`),
+    API.get('/vocabulary/categories'),
+  ]);
   const { words } = data;
-
-  const cats = await API.get('/vocabulary/categories');
   const cat = cats.find(c => c.id === catId);
 
-  panel.innerHTML = `
-    <div class="card">
-      <div class="card-header">
-        <div class="flex items-center gap-3">
-          <span style="font-size:1.5rem">${cat?.icon||'📚'}</span>
-          <div>
-            <div class="card-title">${cat?.name||'Categoría'}</div>
-            <div class="card-subtitle">${words.length} palabras</div>
-          </div>
-        </div>
-        <div class="flex gap-2">
-          <button class="btn btn-primary btn-sm" id="study-cat-btn">Estudiar flashcards</button>
-          <button class="btn btn-ghost btn-sm" id="close-panel-btn">✕</button>
-        </div>
-      </div>
-
-      <div class="mb-3">
-        <input type="search" id="word-filter" placeholder="Filtrar palabras...">
-      </div>
-
-      <div class="word-list" id="cat-word-list">
-        ${words.map(w => wordItemHTML(w)).join('')}
-      </div>
+  const bodyHTML = `
+    <div style="margin-bottom:12px">
+      <input type="search" id="cat-word-filter" placeholder="Filtrar palabras..." style="width:100%">
+    </div>
+    <div class="word-list" id="cat-word-list" style="max-height:55dvh;overflow-y:auto">
+      ${words.map(w => wordItemHTML(w)).join('')}
     </div>`;
 
-  panel.querySelector('#close-panel-btn').addEventListener('click', () => { panel.style.display = 'none'; });
-  panel.querySelector('#study-cat-btn').addEventListener('click', () => {
-    showModal('¿Cómo quieres estudiar?', `
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:4px 0">
-        <div style="text-align:center;padding:24px 16px;border:1.5px solid var(--border);border-radius:12px">
-          <div style="font-size:2.8rem">🃏</div>
-          <div style="font-weight:700;margin-top:10px;font-size:1rem">Clásico</div>
-          <div style="font-size:0.8rem;color:var(--text-muted);margin-top:6px;line-height:1.4">Voltea la tarjeta y autoevalúate</div>
-        </div>
-        <div style="text-align:center;padding:24px 16px;border:1.5px solid var(--border);border-radius:12px">
-          <div style="font-size:2.8rem">✍️</div>
-          <div style="font-weight:700;margin-top:10px;font-size:1rem">Escritura</div>
-          <div style="font-size:0.8rem;color:var(--text-muted);margin-top:6px;line-height:1.4">Ves el español → escribe en italiano con artículo</div>
-        </div>
-      </div>
-    `, [
-      { label: '🃏 Clásico', cls: 'btn-outline', action: () => {
-        fcState.typingMode = false;
-        fcState.pendingCategoryId = catId;
-        closeModal();
-        navigate('flashcards');
-      }},
-      { label: '✍️ Escritura', cls: 'btn-primary', action: () => {
-        fcState.typingMode = true;
-        fcState.pendingCategoryId = catId;
-        closeModal();
-        navigate('flashcards');
-      }},
-    ]);
-  });
+  closeModal();
+  showModal(`${cat?.icon||'📚'} ${cat?.name||'Categoría'} · ${words.length} palabras`, bodyHTML, [
+    { label: '🃏 Clásico', cls: 'btn-outline', action: () => {
+      fcState.typingMode = false;
+      fcState.pendingCategoryId = catId;
+      closeModal();
+      navigate('flashcards');
+    }},
+    { label: '✍️ Escritura', cls: 'btn-primary', action: () => {
+      fcState.typingMode = true;
+      fcState.pendingCategoryId = catId;
+      closeModal();
+      navigate('flashcards');
+    }},
+  ]);
 
-  const filter = panel.querySelector('#word-filter');
-  filter.addEventListener('input', () => {
-    const q = filter.value.toLowerCase();
-    panel.querySelectorAll('.word-item').forEach(item => {
+  const newModal = document.querySelector('#active-modal .modal');
+  if (newModal) newModal.style.maxWidth = '680px';
+
+  document.getElementById('cat-word-filter')?.addEventListener('input', e => {
+    const q = e.target.value.toLowerCase();
+    document.querySelectorAll('#cat-word-list .word-item').forEach(item => {
       item.style.display = !q || item.textContent.toLowerCase().includes(q) ? '' : 'none';
     });
   });
 
-  panel.querySelectorAll('.word-item').forEach(item => {
+  document.querySelectorAll('#cat-word-list .word-item').forEach(item => {
     item.addEventListener('click', () => showWordDetail(parseInt(item.dataset.id)));
   });
 }

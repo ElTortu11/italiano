@@ -162,6 +162,24 @@ function createSchema() {
     CREATE INDEX IF NOT EXISTS idx_sessions_date ON study_sessions(date);
   `);
 
+  // Deduplicate before adding unique indexes (safe to run repeatedly)
+  db.exec(`
+    DELETE FROM flashcards WHERE id NOT IN (
+      SELECT MIN(id) FROM flashcards GROUP BY vocabulary_id
+    );
+    DELETE FROM vocabulary_items WHERE id NOT IN (
+      SELECT MIN(id) FROM vocabulary_items GROUP BY italian, category_id
+    );
+    DELETE FROM vocabulary_categories WHERE id NOT IN (
+      SELECT MIN(id) FROM vocabulary_categories GROUP BY name
+    );
+  `);
+
+  // Unique indexes to prevent future duplicates from re-running seed
+  try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_vocab_cat_name ON vocabulary_categories(name)`); } catch(e) {}
+  try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_vocab_item_unique ON vocabulary_items(italian, category_id)`); } catch(e) {}
+  try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_flashcard_vocab ON flashcards(vocabulary_id)`); } catch(e) {}
+
   // Default settings
   const defaults = [
     ['goal_level', 'B2'],
