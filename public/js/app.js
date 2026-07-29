@@ -342,7 +342,7 @@ function buildSessionPlan(due, newW) {
 // ══════════════════════════════════════════════════════════════════════════════
 // FLASHCARDS
 // ══════════════════════════════════════════════════════════════════════════════
-let fcState = { cards: [], index: 0, flipped: false, reviewed: 0, correct: 0, mode: 'due' };
+let fcState = { cards: [], index: 0, flipped: false, reviewed: 0, correct: 0, mode: 'due', typingMode: false };
 
 async function renderFlashcards(el) {
   el.innerHTML = `
@@ -356,6 +356,14 @@ async function renderFlashcards(el) {
       </div>
     </div>
 
+    <div class="fc-mode-toggle mb-1">
+      <button class="fc-mode-btn ${!fcState.typingMode?'active':''}" data-fcmode="flip">🃏 Clásico</button>
+      <button class="fc-mode-btn ${fcState.typingMode?'active':''}" data-fcmode="type">✍️ Escritura</button>
+    </div>
+    <div class="text-xs text-muted mb-3" id="fc-mode-desc" style="text-align:center">
+      ${fcState.typingMode ? 'Ves el español → escribe el italiano con artículo' : 'Voltea la tarjeta → autoevalúate'}
+    </div>
+
     <div class="tabs">
       <button class="tab-btn active" data-mode="due">Vencidas</button>
       <button class="tab-btn" data-mode="new">Nuevas</button>
@@ -366,6 +374,20 @@ async function renderFlashcards(el) {
       <div class="loading"><div class="spinner"></div></div>
     </div>
   `;
+
+  el.querySelectorAll('.fc-mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      el.querySelectorAll('.fc-mode-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      fcState.typingMode = btn.dataset.fcmode === 'type';
+      const desc = document.getElementById('fc-mode-desc');
+      if (desc) desc.textContent = fcState.typingMode
+        ? 'Ves el español → escribe el italiano con artículo'
+        : 'Voltea la tarjeta → autoevalúate';
+      const activeTab = el.querySelector('.tab-btn.active');
+      loadFlashcards(el, activeTab?.dataset.mode || 'due');
+    });
+  });
 
   el.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -388,7 +410,6 @@ async function loadFlashcards(el, mode) {
     if (mode === 'due') cards = await API.get('/flashcards/due?limit=50');
     else if (mode === 'new') cards = await API.get('/flashcards/new?limit=30');
     else {
-      // show all cards as list
       const data = await API.get('/vocabulary/words?limit=100');
       showWordListView(container, data.words);
       return;
@@ -402,7 +423,7 @@ async function loadFlashcards(el, mode) {
       return;
     }
 
-    fcState = { cards, index: 0, flipped: false, reviewed: 0, correct: 0, mode };
+    fcState = { cards, index: 0, flipped: false, reviewed: 0, correct: 0, mode, typingMode: fcState.typingMode };
     renderFlashcard(container);
   } catch(e) {
     container.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
@@ -413,10 +434,12 @@ function renderFlashcard(container) {
   const { cards, index } = fcState;
   if (index >= cards.length) {
     const acc = fcState.reviewed > 0 ? Math.round((fcState.correct / fcState.reviewed) * 100) : 0;
+    const modeLabel = fcState.typingMode ? 'Modo Escritura' : 'Modo Clásico';
     container.innerHTML = `
       <div class="card" style="text-align:center;padding:40px">
         <div style="font-size:3rem;margin-bottom:16px">🎯</div>
         <div class="section-title mb-2">Sesión completada</div>
+        <div class="text-muted mb-1">${modeLabel}</div>
         <div class="text-muted mb-4">${fcState.reviewed} tarjetas · ${acc}% de aciertos</div>
         <div class="grid-2 mb-4" style="max-width:300px;margin:0 auto">
           <div class="stat-tile"><div class="stat-tile-label">Repasadas</div><div class="stat-tile-value">${fcState.reviewed}</div></div>
@@ -428,9 +451,14 @@ function renderFlashcard(container) {
     return;
   }
 
+  if (fcState.typingMode) {
+    renderFlashcardTyping(container);
+    return;
+  }
+
   const card = cards[index];
-  const progress = Math.round(((index) / cards.length) * 100);
-  const nextReview = card.interval > 0 ? `Intervalo actual: ${card.interval} días` : 'Tarjeta nueva';
+  const progress = Math.round((index / cards.length) * 100);
+  const nextReview = card.interval > 0 ? `Intervalo: ${card.interval} días` : 'Tarjeta nueva';
 
   container.innerHTML = `
     <div class="mb-3 flex items-center justify-between text-sm text-muted">
@@ -486,10 +514,95 @@ function renderFlashcard(container) {
         fcState.index++;
         fcState.flipped = false;
         renderFlashcard(container);
-      } catch(e) {
-        toast('Error al guardar repaso', 'error');
-      }
+      } catch(e) { toast('Error al guardar repaso', 'error'); }
     });
+  });
+}
+
+function renderFlashcardTyping(container) {
+  const { cards, index } = fcState;
+  const card = cards[index];
+  const progress = Math.round((index / cards.length) * 100);
+
+  container.innerHTML = `
+    <div class="mb-3 flex items-center justify-between text-sm text-muted">
+      <span>${index + 1} / ${cards.length}</span>
+      <span>${card.interval > 0 ? 'Intervalo: '+card.interval+' días' : 'Tarjeta nueva'}</span>
+    </div>
+    ${progressBar(progress)}
+    <div style="height:16px"></div>
+
+    <div class="fc-typing-card" id="fc-typing-card">
+      <div class="fc-typing-lang">Español → Italiano</div>
+      ${card.category_icon ? `<div class="fc-typing-cat">${card.category_icon} ${card.category_name||''}</div>` : ''}
+      <div class="fc-typing-word">${card.back}</div>
+      <div class="fc-typing-hint">Escribe con artículo (ej: <em>il cane</em>, <em>la casa</em>, <em>l'uomo</em>)</div>
+      <div class="fc-typing-input-wrap">
+        <input id="fc-type-input" class="fc-typing-input" placeholder="artículo + palabra..."
+          autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <button class="btn btn-primary" id="fc-type-check">Comprobar</button>
+      </div>
+      <div id="fc-type-result" style="display:none"></div>
+      <div id="fc-type-example" style="display:none" class="flashcard-example mt-3"></div>
+      <div class="flex gap-2 justify-center mt-4">
+        <button class="btn btn-outline btn-sm" id="fc-type-skip">Saltar</button>
+        <button class="btn btn-primary" id="fc-type-next" style="display:none">Siguiente →</button>
+      </div>
+    </div>
+  `;
+
+  const input = document.getElementById('fc-type-input');
+  input.focus();
+
+  function normalize(s) { return s.trim().toLowerCase().replace(/\s+/g,' '); }
+
+  async function check() {
+    const typed = input.value.trim();
+    if (!typed) return;
+
+    const correct = card.front;
+    const isOk = normalize(typed) === normalize(correct);
+    const quality = isOk ? 5 : 1;
+
+    input.disabled = true;
+    input.style.borderColor = isOk ? 'var(--accent)' : '#ef4444';
+
+    const resultEl = document.getElementById('fc-type-result');
+    resultEl.style.display = 'block';
+    if (isOk) {
+      resultEl.innerHTML = `<div class="fc-type-feedback correct">✓ ¡Correcto!</div>`;
+    } else {
+      resultEl.innerHTML = `<div class="fc-type-feedback wrong">✗ La respuesta correcta es: <strong>${correct}</strong></div>`;
+    }
+
+    if (card.example_it) {
+      const exEl = document.getElementById('fc-type-example');
+      exEl.style.display = 'block';
+      exEl.innerHTML = `<em>${card.example_it}</em><br><span class="text-muted">${card.example_es||''}</span>`;
+    }
+
+    try {
+      await API.post(`/flashcards/${card.id}/review`, { quality });
+      fcState.reviewed++;
+      if (isOk) fcState.correct++;
+    } catch(e) { toast('Error al guardar', 'error'); }
+
+    document.getElementById('fc-type-check').style.display = 'none';
+    document.getElementById('fc-type-next').style.display = 'inline-flex';
+  }
+
+  document.getElementById('fc-type-check').addEventListener('click', check);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') check(); });
+
+  document.getElementById('fc-type-skip').addEventListener('click', async () => {
+    await API.post(`/flashcards/${card.id}/review`, { quality: 1 }).catch(()=>{});
+    fcState.index++;
+    renderFlashcard(container);
+  });
+
+  document.getElementById('fc-type-next').addEventListener('click', () => {
+    fcState.index++;
+    renderFlashcard(container);
   });
 }
 
