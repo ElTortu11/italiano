@@ -758,7 +758,20 @@ function showAddCategoryModal() {
 // ══════════════════════════════════════════════════════════════════════════════
 // CONJUGATION
 // ══════════════════════════════════════════════════════════════════════════════
-let conjState = { exercise: null, answered: false, streak: 0, correct: 0, total: 0 };
+const ALL_TENSES = ['presente','passato_prossimo','imperfetto','futuro','condizionale'];
+const TENSE_LABELS = {
+  presente: 'Presente', passato_prossimo: 'Passato', imperfetto: 'Imperfetto',
+  futuro: 'Futuro', condizionale: 'Condizionale', congiuntivo: 'Congiuntivo',
+};
+const TENSE_HINTS = {
+  presente: 'Presente Indicativo — ¿Qué hace ahora?',
+  imperfetto: 'Imperfetto — Acción pasada habitual o en curso',
+  futuro: 'Futuro Semplice — ¿Qué hará?',
+  condizionale: 'Condizionale Presente — ¿Qué haría? (vorrei...)',
+  congiuntivo: 'Congiuntivo Presente — Penso che... Spero che...',
+  passato_prossimo: 'Passato Prossimo — Acción pasada completada',
+};
+let conjState = { answered: false, streak: 0, correct: 0, total: 0, selectedTenses: [...ALL_TENSES] };
 
 async function renderConjugation(el) {
   const verbs = await API.get('/conjugation/verbs');
@@ -787,6 +800,15 @@ async function renderConjugation(el) {
     </div>
 
     <div id="conj-tab-content">
+      <div class="card mb-3" style="padding:12px 16px">
+        <div class="text-sm font-medium mb-2" style="color:var(--text-muted)">Tiempos a practicar:</div>
+        <div class="flex flex-wrap gap-2" id="tense-pills">
+          ${ALL_TENSES.map(t => `
+            <button class="tense-pill ${conjState.selectedTenses.includes(t)?'active':''}" data-tense="${t}">
+              ${TENSE_LABELS[t]}
+            </button>`).join('')}
+        </div>
+      </div>
       <div id="conj-exercise-area"></div>
     </div>
   `;
@@ -795,8 +817,24 @@ async function renderConjugation(el) {
     btn.addEventListener('click', () => {
       el.querySelectorAll('[data-tab]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      if (btn.dataset.tab === 'practice') loadConjugationExercise(el);
-      else renderConjugationReference(el, verbs);
+      const isRef = btn.dataset.tab === 'reference';
+      document.getElementById('tense-pills').closest('.card').style.display = isRef ? 'none' : '';
+      if (isRef) renderConjugationReference(el, verbs);
+      else loadConjugationExercise(el);
+    });
+  });
+
+  el.querySelectorAll('.tense-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      const t = pill.dataset.tense;
+      if (conjState.selectedTenses.includes(t)) {
+        if (conjState.selectedTenses.length === 1) return;
+        conjState.selectedTenses = conjState.selectedTenses.filter(x => x !== t);
+        pill.classList.remove('active');
+      } else {
+        conjState.selectedTenses.push(t);
+        pill.classList.add('active');
+      }
     });
   });
 
@@ -808,8 +846,8 @@ async function loadConjugationExercise(el) {
   if (!area) return;
   area.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
   try {
-    const ex = await API.get('/conjugation/exercise');
-    conjState.exercise = ex;
+    const tenses = conjState.selectedTenses.join(',');
+    const ex = await API.get(`/conjugation/exercise?tenses=${tenses}`);
     conjState.answered = false;
     renderExerciseUI(area, ex);
   } catch(e) {
@@ -818,95 +856,91 @@ async function loadConjugationExercise(el) {
 }
 
 function renderExerciseUI(area, ex) {
-  const tenseHints = {
-    presente: 'Presente Indicativo — ¿Qué hace ahora?',
-    imperfetto: 'Imperfetto — Acción pasada habitual o en curso',
-    futuro: 'Futuro Semplice — ¿Qué hará?',
-    condizionale: 'Condizionale Presente — ¿Qué haría? (yo pondría...)',
-    congiuntivo: 'Congiuntivo Presente — Penso che... Spero che...',
-    passato_prossimo: 'Passato Prossimo — Acción pasada completada',
-  };
-
+  const persons = ['io','tu','lui','noi','voi','loro'];
   area.innerHTML = `
     <div class="conj-exercise">
       <div class="conj-prompt">Conjuga en <strong>${ex.tense_display}</strong></div>
       <div class="conj-verb">${ex.verb}</div>
-      <div class="conj-tense">${tenseHints[ex.tense] || ex.tense_display}</div>
+      <div class="conj-tense">${TENSE_HINTS[ex.tense] || ex.tense_display}</div>
 
-      <div class="conj-person">
-        <span class="conj-person-label">${ex.person}</span>
-        <span>___________</span>
-      </div>
-
-      <div class="conj-input-wrap mt-4">
-        <input class="conj-input" id="conj-answer" placeholder="Escribe la forma..." autocomplete="off" autocorrect="off">
-        <button class="btn btn-primary" id="conj-check">Comprobar</button>
-      </div>
-
-      <div id="conj-result" class="conj-result" style="display:none"></div>
-
-      <div id="conj-all-forms" style="display:none;margin-top:16px">
-        <div class="text-sm font-medium text-muted mb-2">Paradigma completo — ${ex.tense_display}</div>
-        <div class="overflow-auto">
-          <table class="conj-table">
-            <tr><th>Persona</th><th>Forma</th></tr>
-            ${Object.entries(ex.all_forms||{}).map(([p,f]) =>
-              `<tr><td>${p}</td><td class="${p===ex.person?'highlight':''}">${f}</td></tr>`
-            ).join('')}
-          </table>
-        </div>
+      <div class="conj-full-grid" id="conj-grid">
+        ${persons.map(p => `
+          <div class="conj-row" data-person="${p}">
+            <span class="conj-pronoun">${p}</span>
+            <input class="conj-input conj-input-person" data-person="${p}"
+              placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+            <span class="conj-row-icon" id="icon-${p}"></span>
+          </div>`).join('')}
       </div>
 
       <div class="flex gap-2 justify-center mt-4">
         <button class="btn btn-outline" id="conj-skip">Saltar</button>
+        <button class="btn btn-primary" id="conj-check">Comprobar</button>
         <button class="btn btn-primary" id="conj-next" style="display:none">Siguiente →</button>
       </div>
     </div>`;
 
-  const input = document.getElementById('conj-answer');
-  const checkBtn = document.getElementById('conj-check');
-  const skipBtn = document.getElementById('conj-skip');
-  const nextBtn = document.getElementById('conj-next');
+  const inputs = area.querySelectorAll('.conj-input-person');
+  inputs[0].focus();
 
-  async function checkAnswer() {
+  inputs.forEach((inp, i) => {
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (i < inputs.length - 1) inputs[i+1].focus();
+        else checkAnswers();
+      }
+    });
+  });
+
+  document.getElementById('conj-check').addEventListener('click', checkAnswers);
+  document.getElementById('conj-skip').addEventListener('click', () => {
+    conjState.streak = 0;
+    loadConjugationExercise(document.getElementById('app-content'));
+  });
+  document.getElementById('conj-next').addEventListener('click', () => {
+    loadConjugationExercise(document.getElementById('app-content'));
+  });
+
+  async function checkAnswers() {
     if (conjState.answered) return;
-    const answer = input.value.trim();
-    if (!answer) return;
     conjState.answered = true;
-    conjState.total++;
+    let correctCount = 0;
 
-    const result = await API.post('/conjugation/check', { verb: ex.verb, tense: ex.tense, person: ex.person, answer });
-    const resultEl = document.getElementById('conj-result');
-    const formsEl = document.getElementById('conj-all-forms');
+    for (const inp of inputs) {
+      const person = inp.dataset.person;
+      const answer = inp.value.trim();
+      const correct = (ex.all_forms || {})[person] || '';
+      const isOk = answer.toLowerCase() === correct.toLowerCase();
+      if (isOk) correctCount++;
 
-    if (result.is_correct) {
-      conjState.correct++;
-      conjState.streak++;
-      resultEl.className = 'conj-result correct';
-      resultEl.textContent = `✓ ¡Correcto! "${result.correct_form}"`;
-    } else {
-      conjState.streak = 0;
-      resultEl.className = 'conj-result wrong';
-      resultEl.innerHTML = `✗ La forma correcta es: <strong>${result.correct_form}</strong>`;
+      inp.disabled = true;
+      inp.style.borderColor = isOk ? 'var(--accent)' : '#ef4444';
+      const icon = document.getElementById('icon-' + person);
+      if (isOk) {
+        icon.textContent = '✓';
+        icon.style.color = 'var(--accent)';
+      } else {
+        icon.innerHTML = `<span style="color:#ef4444">✗</span> <span style="color:var(--text-muted);font-size:0.85em">${correct}</span>`;
+      }
+
+      await API.post('/conjugation/check', { verb: ex.verb, tense: ex.tense, person, answer: answer || '__skip__' });
     }
-    resultEl.style.display = 'block';
-    formsEl.style.display = 'block';
+
+    conjState.total += persons.length;
+    conjState.correct += correctCount;
+    if (correctCount === persons.length) conjState.streak++;
+    else conjState.streak = 0;
 
     const acc = Math.round((conjState.correct / conjState.total) * 100);
-    document.getElementById('conj-streak').textContent = conjState.streak;
-    document.getElementById('conj-acc').textContent = acc + '%';
+    const streakEl = document.getElementById('conj-streak');
+    const accEl = document.getElementById('conj-acc');
+    if (streakEl) streakEl.textContent = conjState.streak;
+    if (accEl) accEl.textContent = acc + '%';
 
-    checkBtn.style.display = 'none';
-    nextBtn.style.display = 'inline-flex';
-    input.disabled = true;
+    document.getElementById('conj-check').style.display = 'none';
+    document.getElementById('conj-next').style.display = 'inline-flex';
   }
-
-  checkBtn.addEventListener('click', checkAnswer);
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') checkAnswer(); });
-  skipBtn.addEventListener('click', () => { conjState.streak = 0; loadConjugationExercise(document.getElementById('app-content')); });
-  nextBtn.addEventListener('click', () => loadConjugationExercise(document.getElementById('app-content')));
-
-  input.focus();
 }
 
 function renderConjugationReference(el, verbs) {

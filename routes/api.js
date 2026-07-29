@@ -556,40 +556,36 @@ router.get('/conjugation/verbs', (req, res) => {
 
 router.get('/conjugation/exercise', (req, res) => {
   const verbs = Object.keys(VERBS);
-  const tenses = ['presente','imperfetto','futuro','condizionale','congiuntivo','passato_prossimo'];
-  const persons = ['io','tu','lui','noi','voi','loro'];
+  const validTenses = ['presente','imperfetto','futuro','condizionale','passato_prossimo','congiuntivo'];
+  const allowedTenses = req.query.tenses
+    ? req.query.tenses.split(',').filter(t => validTenses.includes(t))
+    : ['presente','imperfetto','futuro','condizionale','passato_prossimo'];
+  if (allowedTenses.length === 0) return res.status(400).json({ error: 'no valid tenses selected' });
 
-  // Weight by error rate
   const weakVerbs = db.prepare(`
     SELECT verb, tense, SUM(is_correct)*1.0/COUNT(*) as acc
-    FROM conjugation_attempts GROUP BY verb, tense ORDER BY acc ASC LIMIT 5
-  `).all();
+    FROM conjugation_attempts WHERE tense IN (${allowedTenses.map(()=>'?').join(',')})
+    GROUP BY verb, tense ORDER BY acc ASC LIMIT 5
+  `).all(...allowedTenses);
 
   let verb, tense;
   if (weakVerbs.length > 0 && Math.random() > 0.5) {
     const pick = weakVerbs[Math.floor(Math.random() * weakVerbs.length)];
-    verb = pick.verb;
-    tense = pick.tense;
+    verb = pick.verb; tense = pick.tense;
   } else {
     verb = verbs[Math.floor(Math.random() * verbs.length)];
-    tense = tenses[Math.floor(Math.random() * tenses.length)];
+    tense = allowedTenses[Math.floor(Math.random() * allowedTenses.length)];
   }
 
-  const person = persons[Math.floor(Math.random() * persons.length)];
   const verbData = VERBS[verb];
   if (!verbData || !verbData[tense]) {
-    return res.json({ verb: 'parlare', tense: 'presente', person: 'io', answer: 'parlo' });
+    return res.json({ verb:'parlare', tense:'presente', tense_display:'Presente Indicativo', all_forms: VERBS.parlare.presente });
   }
 
   const tenseName = { presente:'Presente Indicativo', imperfetto:'Imperfetto', futuro:'Futuro Semplice',
     condizionale:'Condizionale Presente', congiuntivo:'Congiuntivo Presente', passato_prossimo:'Passato Prossimo' };
 
-  res.json({
-    verb, tense, person,
-    tense_display: tenseName[tense] || tense,
-    answer: verbData[tense][person],
-    all_forms: verbData[tense],
-  });
+  res.json({ verb, tense, tense_display: tenseName[tense] || tense, all_forms: verbData[tense] });
 });
 
 router.post('/conjugation/check', (req, res) => {
