@@ -162,23 +162,45 @@ function createSchema() {
     CREATE INDEX IF NOT EXISTS idx_sessions_date ON study_sessions(date);
   `);
 
-  // Deduplicate before adding unique indexes (safe to run repeatedly)
+  // Deduplicate — must disable FK enforcement to safely re-point then delete
+  db.exec('PRAGMA foreign_keys = OFF');
   db.exec(`
-    DELETE FROM flashcards WHERE id NOT IN (
-      SELECT MIN(id) FROM flashcards GROUP BY vocabulary_id
-    );
-    DELETE FROM vocabulary_items WHERE id NOT IN (
-      SELECT MIN(id) FROM vocabulary_items GROUP BY italian, category_id
-    );
+    UPDATE vocabulary_items
+    SET category_id = (
+      SELECT MIN(c.id) FROM vocabulary_categories c
+      WHERE c.name = (SELECT name FROM vocabulary_categories WHERE id = vocabulary_items.category_id)
+    )
+    WHERE category_id NOT IN (SELECT MIN(id) FROM vocabulary_categories GROUP BY name);
+
     DELETE FROM vocabulary_categories WHERE id NOT IN (
       SELECT MIN(id) FROM vocabulary_categories GROUP BY name
     );
+
+    UPDATE flashcards
+    SET vocabulary_id = (
+      SELECT MIN(vi.id) FROM vocabulary_items vi
+      WHERE vi.italian = (SELECT italian FROM vocabulary_items WHERE id = flashcards.vocabulary_id)
+        AND vi.category_id = (SELECT category_id FROM vocabulary_items WHERE id = flashcards.vocabulary_id)
+    )
+    WHERE vocabulary_id IS NOT NULL
+      AND vocabulary_id NOT IN (SELECT MIN(id) FROM vocabulary_items GROUP BY italian, category_id);
+
+    DELETE FROM flashcards WHERE id NOT IN (
+      SELECT MIN(id) FROM flashcards GROUP BY vocabulary_id
+    );
+
+    DELETE FROM vocabulary_items WHERE id NOT IN (
+      SELECT MIN(id) FROM vocabulary_items GROUP BY italian, category_id
+    );
+
+    DELETE FROM flashcards WHERE vocabulary_id NOT IN (SELECT id FROM vocabulary_items);
   `);
+  db.exec('PRAGMA foreign_keys = ON');
 
   // Unique indexes to prevent future duplicates from re-running seed
-  try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_vocab_cat_name ON vocabulary_categories(name)`); } catch(e) {}
-  try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_vocab_item_unique ON vocabulary_items(italian, category_id)`); } catch(e) {}
-  try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_flashcard_vocab ON flashcards(vocabulary_id)`); } catch(e) {}
+  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_vocab_cat_name ON vocabulary_categories(name)'); } catch(e) {}
+  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_vocab_item_unique ON vocabulary_items(italian, category_id)'); } catch(e) {}
+  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_flashcard_vocab ON flashcards(vocabulary_id)'); } catch(e) {}
 
   // Default settings
   const defaults = [
