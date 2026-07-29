@@ -1,4 +1,4 @@
-const CACHE = 'italiano-v6';
+const CACHE = 'italiano-v7';
 const PRECACHE = ['/', '/css/app.css', '/js/app.js', '/manifest.json'];
 
 self.addEventListener('install', e => {

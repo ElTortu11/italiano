@@ -692,19 +692,26 @@ function renderFlashcardTyping(container) {
           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
         <button class="btn btn-primary" id="fc-type-check">Comprobar</button>
       </div>
-      <div id="fc-type-result" style="display:none"></div>
-      <div id="fc-type-example" style="display:none" class="flashcard-example mt-3"></div>
-      <div class="flex gap-2 justify-center mt-4">
-        <button class="btn btn-outline btn-sm" id="fc-type-skip">Saltar</button>
-        <button class="btn btn-primary" id="fc-type-next" style="display:none">Siguiente →</button>
-      </div>
+      <div id="fc-type-result" style="display:none;margin-top:12px"></div>
+      <div id="fc-type-example" style="display:none;margin-top:8px;font-size:0.85rem" class="flashcard-example"></div>
     </div>
+
+    <div class="flex gap-2 justify-center mt-3" id="fc-type-actions">
+      <button class="btn btn-outline btn-sm" id="fc-type-skip">Saltar</button>
+      <button class="btn btn-primary" id="fc-type-next" style="display:none">Siguiente → <span style="opacity:.6;font-size:0.8em">→</span></button>
+    </div>
+    <div style="display:none;text-align:center;font-size:0.75rem;color:var(--text-muted);margin-top:6px" id="fc-key-hint"></div>
   `;
 
   const input = document.getElementById('fc-type-input');
   input.focus();
 
   function normalize(s) { return s.trim().toLowerCase().replace(/\s+/g,' '); }
+
+  function goNext() {
+    fcState.index++;
+    renderFlashcard(container);
+  }
 
   async function check() {
     const typed = input.value.trim();
@@ -722,13 +729,13 @@ function renderFlashcardTyping(container) {
     if (isOk) {
       resultEl.innerHTML = `<div class="fc-type-feedback correct">✓ ¡Correcto!</div>`;
     } else {
-      resultEl.innerHTML = `<div class="fc-type-feedback wrong">✗ La respuesta correcta es: <strong>${correct}</strong></div>`;
+      resultEl.innerHTML = `<div class="fc-type-feedback wrong">✗ Risposta: <strong>${correct}</strong></div>`;
     }
 
     if (card.example_it) {
       const exEl = document.getElementById('fc-type-example');
       exEl.style.display = 'block';
-      exEl.innerHTML = `<em>${card.example_it}</em><br><span class="text-muted">${card.example_es||''}</span>`;
+      exEl.innerHTML = `<em>${card.example_it}</em> <span class="text-muted">— ${card.example_es||''}</span>`;
     }
 
     try {
@@ -738,11 +745,23 @@ function renderFlashcardTyping(container) {
     } catch(e) { toast('Error al guardar', 'error'); }
 
     document.getElementById('fc-type-check').style.display = 'none';
-    document.getElementById('fc-type-next').style.display = 'inline-flex';
+    const nextBtn = document.getElementById('fc-type-next');
+    nextBtn.style.display = 'inline-flex';
+    document.getElementById('fc-key-hint').textContent = '→ tecla derecha para siguiente';
+    document.getElementById('fc-key-hint').style.display = 'block';
+
+    // ArrowRight to advance
+    const onKey = (e) => {
+      if (e.key === 'ArrowRight' || e.key === 'Enter') {
+        document.removeEventListener('keydown', onKey);
+        goNext();
+      }
+    };
+    document.addEventListener('keydown', onKey);
   }
 
   document.getElementById('fc-type-check').addEventListener('click', check);
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') check(); });
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); check(); } });
 
   document.getElementById('fc-type-skip').addEventListener('click', async () => {
     await API.post(`/flashcards/${card.id}/review`, { quality: 1 }).catch(()=>{});
@@ -750,10 +769,7 @@ function renderFlashcardTyping(container) {
     renderFlashcard(container);
   });
 
-  document.getElementById('fc-type-next').addEventListener('click', () => {
-    fcState.index++;
-    renderFlashcard(container);
-  });
+  document.getElementById('fc-type-next').addEventListener('click', goNext);
 }
 
 function showWordListView(container, words) {
@@ -1015,6 +1031,8 @@ const TENSE_HINTS = {
   passato_prossimo: 'Passato Prossimo — Acción pasada completada',
 };
 let conjState = { answered: false, streak: 0, correct: 0, total: 0, selectedTenses: [...ALL_TENSES] };
+const DRILL_TENSES = ['presente','passato_prossimo','imperfetto','futuro','condizionale','congiuntivo'];
+let drillState = { phase:'pick', verb:null, translation:'', conjugations:{}, tenses:[...DRILL_TENSES], tenseIndex:0, mistakes:[], reviewIndex:0, score:{correct:0,total:0}, verbList:[] };
 
 async function renderConjugation(el) {
   const verbs = await API.get('/conjugation/verbs');
@@ -1039,6 +1057,7 @@ async function renderConjugation(el) {
 
     <div class="tabs">
       <button class="tab-btn active" data-tab="practice">Práctica</button>
+      <button class="tab-btn" data-tab="drill">Por verbo</button>
       <button class="tab-btn" data-tab="reference">Referencia</button>
     </div>
 
@@ -1060,10 +1079,19 @@ async function renderConjugation(el) {
     btn.addEventListener('click', () => {
       el.querySelectorAll('[data-tab]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      const isRef = btn.dataset.tab === 'reference';
-      document.getElementById('tense-pills').closest('.card').style.display = isRef ? 'none' : '';
-      if (isRef) renderConjugationReference(el, verbs);
-      else loadConjugationExercise(el);
+      const tab = btn.dataset.tab;
+      const pillsCard = document.getElementById('tense-pills').closest('.card');
+      if (tab === 'reference') {
+        pillsCard.style.display = 'none';
+        renderConjugationReference(el, verbs);
+      } else if (tab === 'drill') {
+        pillsCard.style.display = 'none';
+        drillState = { phase:'pick', verb:null, translation:'', conjugations:{}, tenses:[...DRILL_TENSES], tenseIndex:0, mistakes:[], reviewIndex:0, score:{correct:0,total:0}, verbList:verbs };
+        renderDrillTab(document.getElementById('conj-tab-content'), verbs);
+      } else {
+        pillsCard.style.display = '';
+        loadConjugationExercise(el);
+      }
     });
   });
 
@@ -1213,6 +1241,262 @@ function renderExerciseUI(area, ex) {
     if (correctCount < persons.length) document.getElementById('conj-show').style.display = 'inline-flex';
     document.getElementById('conj-next').style.display = 'inline-flex';
   }
+}
+
+// ── Verb drill mode ──────────────────────────────────────────────────────────
+function renderDrillTab(container, verbList) {
+  if (verbList) drillState.verbList = verbList;
+  const area = document.getElementById('conj-exercise-area');
+
+  if (drillState.phase === 'pick') {
+    area.innerHTML = `
+      <div class="card">
+        <div style="font-weight:600;font-size:1.1rem;margin-bottom:16px">Elige un verbo para practicar</div>
+        <div style="margin-bottom:12px">
+          <input id="drill-search" class="input" placeholder="Buscar verbo..." style="margin-bottom:8px;width:100%">
+          <select id="drill-verb-select" class="input" size="8" style="width:100%;height:200px">
+            ${verbList.map(v => `<option value="${v}">${v}</option>`).join('')}
+          </select>
+        </div>
+        <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px">Tiempos:</div>
+        <div class="flex flex-wrap gap-2 mb-3" id="drill-tense-picks">
+          ${DRILL_TENSES.map(t => `<button class="tense-pill ${drillState.tenses.includes(t)?'active':''}" data-t="${t}">${TENSE_LABELS[t]}</button>`).join('')}
+        </div>
+        <button class="btn btn-primary btn-block" id="drill-start">Empezar →</button>
+      </div>
+    `;
+
+    const search = document.getElementById('drill-search');
+    const sel = document.getElementById('drill-verb-select');
+    search.addEventListener('input', () => {
+      const q = search.value.toLowerCase();
+      [...sel.options].forEach(o => { o.style.display = o.value.includes(q) ? '' : 'none'; });
+    });
+
+    document.getElementById('drill-tense-picks').querySelectorAll('.tense-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        const t = pill.dataset.t;
+        if (drillState.tenses.includes(t)) {
+          if (drillState.tenses.length === 1) return;
+          drillState.tenses = drillState.tenses.filter(x => x !== t);
+          pill.classList.remove('active');
+        } else {
+          drillState.tenses.push(t);
+          pill.classList.add('active');
+        }
+      });
+    });
+
+    document.getElementById('drill-start').addEventListener('click', async () => {
+      const verb = sel.value;
+      if (!verb) return toast('Selecciona un verbo', 'error');
+      try {
+        const data = await API.get(`/conjugation/verb-data/${verb}`);
+        drillState.verb = verb;
+        drillState.translation = data.translation;
+        drillState.conjugations = data.conjugations;
+        drillState.tenseIndex = 0;
+        drillState.mistakes = [];
+        drillState.score = { correct: 0, total: 0 };
+        drillState.phase = 'practice';
+        renderDrillTense(area);
+      } catch(e) { toast('Error al cargar verbo', 'error'); }
+    });
+    return;
+  }
+
+  if (drillState.phase === 'practice') { renderDrillTense(area); return; }
+  if (drillState.phase === 'review')   { renderDrillReview(area); return; }
+  if (drillState.phase === 'done')     { renderDrillDone(area); return; }
+}
+
+function renderDrillTense(area) {
+  const activeTenses = drillState.tenses.filter(t => drillState.conjugations[t]);
+  if (drillState.tenseIndex >= activeTenses.length) {
+    if (drillState.mistakes.length > 0) {
+      drillState.phase = 'review';
+      drillState.reviewIndex = 0;
+      renderDrillReview(area);
+    } else {
+      drillState.phase = 'done';
+      renderDrillDone(area);
+    }
+    return;
+  }
+
+  const tense = activeTenses[drillState.tenseIndex];
+  const forms = drillState.conjugations[tense];
+  const progress = `${drillState.tenseIndex + 1} / ${activeTenses.length}`;
+
+  area.innerHTML = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <div style="font-size:0.8rem;color:var(--text-muted)">${progress} — ${drillState.verb} (${drillState.translation})</div>
+        <div style="font-size:0.8rem;color:var(--text-muted)">✓ ${drillState.score.correct}/${drillState.score.total}</div>
+      </div>
+      <div style="font-weight:700;font-size:1.15rem;margin-bottom:4px">${TENSE_LABELS[tense]}</div>
+      <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:16px">${TENSE_HINTS[tense]||''}</div>
+      <div id="drill-forms">
+        ${['io','tu','lui','noi','voi','loro'].map(person => `
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <div style="width:40px;font-size:0.9rem;color:var(--text-muted);flex-shrink:0">${person}</div>
+            <input class="input drill-input" data-person="${person}"
+              placeholder="${person}..."
+              autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+              style="flex:1;padding:8px 12px">
+            <div class="drill-result" data-person="${person}" style="width:28px;text-align:center;font-size:1.1rem"></div>
+          </div>
+        `).join('')}
+      </div>
+      <div style="display:flex;gap-2;margin-top:16px;justify-content:flex-end" id="drill-btns">
+        <button class="btn btn-primary" id="drill-check">Comprobar</button>
+        <button class="btn btn-outline" id="drill-show" style="display:none">Ver respuestas</button>
+        <button class="btn btn-primary" id="drill-next" style="display:none">Siguiente →</button>
+      </div>
+    </div>
+  `;
+
+  const inputs = [...area.querySelectorAll('.drill-input')];
+  inputs[0].focus();
+  inputs.forEach((inp, i) => {
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); i < inputs.length - 1 ? inputs[i+1].focus() : doCheck(); }
+    });
+  });
+
+  function doCheck() {
+    if (area.querySelector('#drill-next').style.display !== 'none') return;
+    let correct = 0;
+    inputs.forEach(inp => {
+      const person = inp.dataset.person;
+      const expected = (forms[person]||'').toLowerCase().trim();
+      const typed = inp.value.toLowerCase().trim();
+      const ok = typed === expected;
+      inp.style.borderColor = ok ? 'var(--accent)' : '#ef4444';
+      inp.disabled = true;
+      area.querySelector(`.drill-result[data-person="${person}"]`).textContent = ok ? '✓' : '✗';
+      drillState.score.total++;
+      if (ok) { drillState.score.correct++; correct++; }
+      else { drillState.mistakes.push({ tense, person, correct: forms[person], typed: inp.value }); }
+    });
+    document.getElementById('drill-check').style.display = 'none';
+    if (correct < inputs.length) document.getElementById('drill-show').style.display = 'inline-flex';
+    document.getElementById('drill-next').style.display = 'inline-flex';
+
+    const onKey = e => { if (e.key === 'ArrowRight' || e.key === 'Enter') { document.removeEventListener('keydown', onKey); goNext(); } };
+    document.addEventListener('keydown', onKey);
+  }
+
+  function goNext() {
+    drillState.tenseIndex++;
+    renderDrillTense(area);
+  }
+
+  document.getElementById('drill-check').addEventListener('click', doCheck);
+  document.getElementById('drill-show').addEventListener('click', () => {
+    inputs.forEach(inp => {
+      if (inp.disabled && inp.style.borderColor.includes('4444')) {
+        const person = inp.dataset.person;
+        inp.value = forms[person] || '';
+        inp.style.borderColor = '#f59e0b';
+      }
+    });
+  });
+  document.getElementById('drill-next').addEventListener('click', goNext);
+}
+
+function renderDrillReview(area) {
+  if (drillState.reviewIndex >= drillState.mistakes.length) {
+    drillState.phase = 'done';
+    renderDrillDone(area);
+    return;
+  }
+
+  const mistake = drillState.mistakes[drillState.reviewIndex];
+  const total = drillState.mistakes.length;
+  area.innerHTML = `
+    <div class="card">
+      <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:4px">Repaso de errores — ${drillState.reviewIndex+1}/${total}</div>
+      <div style="font-weight:700;font-size:1.1rem;margin-bottom:2px">${drillState.verb} — ${TENSE_LABELS[mistake.tense]}</div>
+      <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px">Sujeto: <strong>${mistake.person}</strong></div>
+      <div style="margin-bottom:12px">
+        <input id="drill-retry-input" class="input" placeholder="${mistake.person}..."
+          autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+          style="width:100%;font-size:1.1rem">
+      </div>
+      <div id="drill-retry-result" style="min-height:32px;margin-bottom:12px"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-primary" id="drill-retry-check">Comprobar</button>
+        <button class="btn btn-primary" id="drill-retry-next" style="display:none">Siguiente →</button>
+      </div>
+    </div>
+  `;
+
+  const inp = document.getElementById('drill-retry-input');
+  inp.focus();
+
+  function doRetryCheck() {
+    const typed = inp.value.toLowerCase().trim();
+    const expected = (mistake.correct||'').toLowerCase().trim();
+    const ok = typed === expected;
+    inp.disabled = true;
+    inp.style.borderColor = ok ? 'var(--accent)' : '#ef4444';
+    const res = document.getElementById('drill-retry-result');
+    if (ok) res.innerHTML = `<span style="color:var(--accent);font-weight:600">✓ ¡Correcto!</span>`;
+    else res.innerHTML = `<span style="color:#ef4444">✗ Risposta: <strong>${mistake.correct}</strong></span>`;
+    document.getElementById('drill-retry-check').style.display = 'none';
+    document.getElementById('drill-retry-next').style.display = 'inline-flex';
+    const onKey = e => { if (e.key === 'ArrowRight'||e.key==='Enter') { document.removeEventListener('keydown',onKey); goRetryNext(); } };
+    document.addEventListener('keydown', onKey);
+  }
+
+  function goRetryNext() {
+    drillState.reviewIndex++;
+    renderDrillReview(area);
+  }
+
+  inp.addEventListener('keydown', e => { if (e.key==='Enter') { e.preventDefault(); doRetryCheck(); } });
+  document.getElementById('drill-retry-check').addEventListener('click', doRetryCheck);
+  document.getElementById('drill-retry-next').addEventListener('click', goRetryNext);
+}
+
+function renderDrillDone(area) {
+  const { correct, total } = drillState.score;
+  const pct = total > 0 ? Math.round(correct/total*100) : 0;
+  const emoji = pct >= 90 ? '🎉' : pct >= 70 ? '👍' : '💪';
+  area.innerHTML = `
+    <div class="card" style="text-align:center;padding:32px 24px">
+      <div style="font-size:2.5rem;margin-bottom:8px">${emoji}</div>
+      <div style="font-size:1.3rem;font-weight:700;margin-bottom:4px">${drillState.verb}</div>
+      <div style="font-size:0.9rem;color:var(--text-muted);margin-bottom:20px">${drillState.translation}</div>
+      <div style="font-size:2rem;font-weight:700;color:${pct>=80?'var(--accent)':'#f59e0b'};margin-bottom:4px">${pct}%</div>
+      <div style="font-size:0.9rem;color:var(--text-muted);margin-bottom:24px">${correct} / ${total} correctas</div>
+      ${drillState.mistakes.length > 0 ? `
+        <div style="text-align:left;margin-bottom:20px">
+          <div style="font-weight:600;margin-bottom:8px;font-size:0.9rem">Errores:</div>
+          ${[...new Map(drillState.mistakes.map(m=>[`${m.tense}-${m.person}`,m])).values()].map(m => `
+            <div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:4px;padding:4px 8px;background:var(--bg-secondary);border-radius:6px">
+              <span style="color:var(--text-muted)">${TENSE_LABELS[m.tense]} — ${m.person}</span>
+              <span style="font-weight:600">${m.correct}</span>
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+      <div style="display:flex;gap:8px;justify-content:center">
+        <button class="btn btn-outline" id="drill-again">Repetir verbo</button>
+        <button class="btn btn-primary" id="drill-new">Nuevo verbo</button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('drill-again').addEventListener('click', () => {
+    drillState.tenseIndex = 0; drillState.mistakes = []; drillState.score = {correct:0,total:0}; drillState.phase = 'practice';
+    renderDrillTense(area);
+  });
+  document.getElementById('drill-new').addEventListener('click', () => {
+    drillState.phase = 'pick';
+    renderDrillTab(null, drillState.verbList || []);
+  });
 }
 
 function renderConjugationReference(el, verbs) {

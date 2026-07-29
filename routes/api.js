@@ -412,6 +412,86 @@ router.delete('/errors/:id', (req, res) => {
 });
 
 // ── Conjugation ──────────────────────────────────────────────────────────────
+// ── Conjugation helpers ──────────────────────────────────────────────────────
+const PERSONS = ['io','tu','lui','noi','voi','loro'];
+function t(forms) { return Object.fromEntries(PERSONS.map((p,i) => [p, forms[i]])); }
+function ppA(pp) {
+  return t(['ho','hai','ha','abbiamo','avete','hanno'].map(a => `${a} ${pp}`));
+}
+function ppE(pp) {
+  const base = pp.replace(/o$/,'');
+  return t(['sono','sei','è','siamo','siete','sono'].map((a,i) =>
+    `${a} ${base}${['o/a','o/a','o','i/e','i/e','i/e'][i]}`));
+}
+function regAre(s, pp, aux='avere') {
+  const fs = s+'er';
+  return {
+    presente:     t([s+'o',s+'i',s+'a',s+'iamo',s+'ate',s+'ano']),
+    imperfetto:   t([s+'avo',s+'avi',s+'ava',s+'avamo',s+'avate',s+'avano']),
+    futuro:       t([fs+'ò',fs+'ai',fs+'à',fs+'emo',fs+'ete',fs+'anno']),
+    condizionale: t([fs+'ei',fs+'esti',fs+'ebbe',fs+'emmo',fs+'este',fs+'ebbero']),
+    congiuntivo:  t([s+'i',s+'i',s+'i',s+'iamo',s+'iate',s+'ino']),
+    passato_prossimo: aux==='essere' ? ppE(pp) : ppA(pp),
+  };
+}
+function regAreH(s, sh, pp, aux='avere') { // -care/-gare verbs
+  const fs = sh+'er';
+  return {
+    presente:     t([s+'o',sh+'i',s+'a',sh+'iamo',s+'ate',s+'ano']),
+    imperfetto:   t([s+'avo',s+'avi',s+'ava',s+'avamo',s+'avate',s+'avano']),
+    futuro:       t([fs+'ò',fs+'ai',fs+'à',fs+'emo',fs+'ete',fs+'anno']),
+    condizionale: t([fs+'ei',fs+'esti',fs+'ebbe',fs+'emmo',fs+'este',fs+'ebbero']),
+    congiuntivo:  t([sh+'i',sh+'i',sh+'i',sh+'iamo',sh+'iate',sh+'ino']),
+    passato_prossimo: aux==='essere' ? ppE(pp) : ppA(pp),
+  };
+}
+function regAreI(s, pp, aux='avere') { // -iare verbs keeping 'i' (studiare, iniziare)
+  const fs = s+'er';
+  return {
+    presente:     t([s+'o',s,s+'a',s+'amo',s+'ate',s+'ano']),
+    imperfetto:   t([s+'avo',s+'avi',s+'ava',s+'avamo',s+'avate',s+'avano']),
+    futuro:       t([fs+'ò',fs+'ai',fs+'à',fs+'emo',fs+'ete',fs+'anno']),
+    condizionale: t([fs+'ei',fs+'esti',fs+'ebbe',fs+'emmo',fs+'este',fs+'ebbero']),
+    congiuntivo:  t([s,s,s,s+'amo',s+'ate',s+'no']),
+    passato_prossimo: aux==='essere' ? ppE(pp) : ppA(pp),
+  };
+}
+function regAreCI(sb, pp, aux='avere') { // -ciare/-giare dropping 'i' (lasciare, viaggiare)
+  const si = sb+'i', fs = sb+'er';
+  return {
+    presente:     t([si+'o',si,si+'a',si+'amo',si+'ate',si+'ano']),
+    imperfetto:   t([si+'avo',si+'avi',si+'ava',si+'avamo',si+'avate',si+'avano']),
+    futuro:       t([fs+'ò',fs+'ai',fs+'à',fs+'emo',fs+'ete',fs+'anno']),
+    condizionale: t([fs+'ei',fs+'esti',fs+'ebbe',fs+'emmo',fs+'este',fs+'ebbero']),
+    congiuntivo:  t([si,si,si,si+'amo',si+'ate',si+'no']),
+    passato_prossimo: aux==='essere' ? ppE(pp) : ppA(pp),
+  };
+}
+function regEre(s, pp, aux='avere') {
+  const fs = s+'er';
+  return {
+    presente:     t([s+'o',s+'i',s+'e',s+'iamo',s+'ete',s+'ono']),
+    imperfetto:   t([s+'evo',s+'evi',s+'eva',s+'evamo',s+'evate',s+'evano']),
+    futuro:       t([fs+'ò',fs+'ai',fs+'à',fs+'emo',fs+'ete',fs+'anno']),
+    condizionale: t([fs+'ei',fs+'esti',fs+'ebbe',fs+'emmo',fs+'este',fs+'ebbero']),
+    congiuntivo:  t([s+'a',s+'a',s+'a',s+'iamo',s+'iate',s+'ano']),
+    passato_prossimo: aux==='essere' ? ppE(pp) : ppA(pp),
+  };
+}
+function regIre(s, pp, aux='avere', isc=false) {
+  const fs = s+'ir';
+  return {
+    presente:     isc ? t([s+'isco',s+'isci',s+'isce',s+'iamo',s+'ite',s+'iscono'])
+                      : t([s+'o',s+'i',s+'e',s+'iamo',s+'ite',s+'ono']),
+    imperfetto:   t([s+'ivo',s+'ivi',s+'iva',s+'ivamo',s+'ivate',s+'ivano']),
+    futuro:       t([fs+'ò',fs+'ai',fs+'à',fs+'emo',fs+'ete',fs+'anno']),
+    condizionale: t([fs+'ei',fs+'esti',fs+'ebbe',fs+'emmo',fs+'este',fs+'ebbero']),
+    congiuntivo:  isc ? t([s+'isca',s+'isca',s+'isca',s+'iamo',s+'iate',s+'iscano'])
+                      : t([s+'a',s+'a',s+'a',s+'iamo',s+'iate',s+'ano']),
+    passato_prossimo: aux==='essere' ? ppE(pp) : ppA(pp),
+  };
+}
+
 const VERBS = {
   essere: {
     presente: { io:'sono', tu:'sei', lui:'è', noi:'siamo', voi:'siete', loro:'sono' },
@@ -565,14 +645,346 @@ const VERBS = {
     congiuntivo: { io:'prenda', tu:'prenda', lui:'prenda', noi:'prendiamo', voi:'prendiate', loro:'prendano' },
     passato_prossimo: { io:'ho preso', tu:'hai preso', lui:'ha preso', noi:'abbiamo preso', voi:'avete preso', loro:'hanno preso' },
   },
+  // ── Modal verbs ──────────────────────────────────────────────────────────────
+  dovere: {
+    presente:     t(['devo','devi','deve','dobbiamo','dovete','devono']),
+    imperfetto:   t(['dovevo','dovevi','doveva','dovevamo','dovevate','dovevano']),
+    futuro:       t(['dovrò','dovrai','dovrà','dovremo','dovrete','dovranno']),
+    condizionale: t(['dovrei','dovresti','dovrebbe','dovremmo','dovreste','dovrebbero']),
+    congiuntivo:  t(['debba','debba','debba','dobbiamo','dobbiate','debbano']),
+    passato_prossimo: ppA('dovuto'),
+  },
+  // ── Important irregulars ─────────────────────────────────────────────────────
+  dare: {
+    presente:     t(['do','dai','dà','diamo','date','danno']),
+    imperfetto:   t(['davo','davi','dava','davamo','davate','davano']),
+    futuro:       t(['darò','darai','darà','daremo','darete','daranno']),
+    condizionale: t(['darei','daresti','darebbe','daremmo','dareste','darebbero']),
+    congiuntivo:  t(['dia','dia','dia','diamo','diate','diano']),
+    passato_prossimo: ppA('dato'),
+  },
+  tenere: {
+    presente:     t(['tengo','tieni','tiene','teniamo','tenete','tengono']),
+    imperfetto:   t(['tenevo','tenevi','teneva','tenevamo','tenevate','tenevano']),
+    futuro:       t(['terrò','terrai','terrà','terremo','terrete','terranno']),
+    condizionale: t(['terrei','terresti','terrebbe','terremmo','terreste','terrebbero']),
+    congiuntivo:  t(['tenga','tenga','tenga','teniamo','teniate','tengano']),
+    passato_prossimo: ppA('tenuto'),
+  },
+  vedere: {
+    presente:     t(['vedo','vedi','vede','vediamo','vedete','vedono']),
+    imperfetto:   t(['vedevo','vedevi','vedeva','vedevamo','vedevate','vedevano']),
+    futuro:       t(['vedrò','vedrai','vedrà','vedremo','vedrete','vedranno']),
+    condizionale: t(['vedrei','vedresti','vedrebbe','vedremmo','vedreste','vedrebbero']),
+    congiuntivo:  t(['veda','veda','veda','vediamo','vediate','vedano']),
+    passato_prossimo: ppA('visto'),
+  },
+  vivere: {
+    presente:     t(['vivo','vivi','vive','viviamo','vivete','vivono']),
+    imperfetto:   t(['vivevo','vivevi','viveva','vivevamo','vivevate','vivevano']),
+    futuro:       t(['vivrò','vivrai','vivrà','vivremo','vivrete','vivranno']),
+    condizionale: t(['vivrei','vivresti','vivrebbe','vivremmo','vivreste','vivrebbero']),
+    congiuntivo:  t(['viva','viva','viva','viviamo','viviate','vivano']),
+    passato_prossimo: ppA('vissuto'),
+  },
+  scegliere: {
+    presente:     t(['scelgo','scegli','sceglie','scegliamo','scegliete','scelgono']),
+    imperfetto:   t(['sceglievo','sceglievi','sceglieva','scegliavamo','scegliavate','sceglievano']),
+    futuro:       t(['sceglierò','sceglierai','sceglierà','sceglieremo','sceglierete','sceglieranno']),
+    condizionale: t(['sceglierei','sceglieresti','sceglierebbe','sceglieremmo','scegliereste','sceglierebbero']),
+    congiuntivo:  t(['scelga','scelga','scelga','scegliamo','scegliate','scelgano']),
+    passato_prossimo: ppA('scelto'),
+  },
+  mettere: {
+    presente:     t(['metto','metti','mette','mettiamo','mettete','mettono']),
+    imperfetto:   t(['mettevo','mettevi','metteva','mettevamo','mettevate','mettevano']),
+    futuro:       t(['metterò','metterai','metterà','metteremo','metterete','metteranno']),
+    condizionale: t(['metterei','metteresti','metterebbe','metteremmo','mettereste','metterebbero']),
+    congiuntivo:  t(['metta','metta','metta','mettiamo','mettiate','mettano']),
+    passato_prossimo: ppA('messo'),
+  },
+  chiedere: {
+    presente:     t(['chiedo','chiedi','chiede','chiediamo','chiedete','chiedono']),
+    imperfetto:   t(['chiedevo','chiedevi','chiedeva','chiedevamo','chiedevate','chiedevano']),
+    futuro:       t(['chiederò','chiederai','chiederà','chiederemo','chiederete','chiederanno']),
+    condizionale: t(['chiederei','chiederesti','chiederebbe','chiederemmo','chiedereste','chiederebbero']),
+    congiuntivo:  t(['chieda','chieda','chieda','chiediamo','chiediate','chiedano']),
+    passato_prossimo: ppA('chiesto'),
+  },
+  rispondere: {
+    presente:     t(['rispondo','rispondi','risponde','rispondiamo','rispondete','rispondono']),
+    imperfetto:   t(['rispondevo','rispondevi','rispondeva','rispondevamo','rispondevate','rispondevano']),
+    futuro:       t(['risponderò','risponderai','risponderà','risponderemo','risponderete','risponderanno']),
+    condizionale: t(['risponderei','risponderesti','risponderebbe','risponderemmo','rispondereste','risponderebbero']),
+    congiuntivo:  t(['risponda','risponda','risponda','rispondiamo','rispondiate','rispondano']),
+    passato_prossimo: ppA('risposto'),
+  },
+  decidere: {
+    presente:     t(['decido','decidi','decide','decidiamo','decidete','decidono']),
+    imperfetto:   t(['decidevo','decidevi','decideva','decidevamo','decidevate','decidevano']),
+    futuro:       t(['deciderò','deciderai','deciderà','decideremo','deciderete','decideranno']),
+    condizionale: t(['deciderei','decideresti','deciderebbe','decideremmo','decidereste','deciderebbero']),
+    congiuntivo:  t(['decida','decida','decida','decidiamo','decidiate','decidano']),
+    passato_prossimo: ppA('deciso'),
+  },
+  conoscere: {
+    presente:     t(['conosco','conosci','conosce','conosciamo','conoscete','conoscono']),
+    imperfetto:   t(['conoscevo','conoscevi','conosceva','conoscevamo','conoscevate','conoscevano']),
+    futuro:       t(['conoscerò','conoscerai','conoscerà','conosceremo','conoscerete','conosceranno']),
+    condizionale: t(['conoscerei','conosceresti','conoscerebbe','conosceremmo','conoscereste','conoscerebbero']),
+    congiuntivo:  t(['conosca','conosca','conosca','conosciamo','conosciate','conoscano']),
+    passato_prossimo: ppA('conosciuto'),
+  },
+  correre: {
+    presente:     t(['corro','corri','corre','corriamo','correte','corrono']),
+    imperfetto:   t(['correvo','correvi','correva','correvamo','correvate','correvano']),
+    futuro:       t(['correrò','correrai','correrà','correremo','correrete','correranno']),
+    condizionale: t(['correrei','correresti','correrebbe','correremmo','correreste','correrebbero']),
+    congiuntivo:  t(['corra','corra','corra','corriamo','corriate','corrano']),
+    passato_prossimo: ppA('corso'),
+  },
+  perdere: {
+    presente:     t(['perdo','perdi','perde','perdiamo','perdete','perdono']),
+    imperfetto:   t(['perdevo','perdevi','perdeva','perdevamo','perdevate','perdevano']),
+    futuro:       t(['perderò','perderai','perderà','perderemo','perderete','perderanno']),
+    condizionale: t(['perderei','perderesti','perderebbe','perderemmo','perdereste','perderebbero']),
+    congiuntivo:  t(['perda','perda','perda','perdiamo','perdiate','perdano']),
+    passato_prossimo: ppA('perso'),
+  },
+  spendere: {
+    presente:     t(['spendo','spendi','spende','spendiamo','spendete','spendono']),
+    imperfetto:   t(['spendevo','spendevi','spendeva','spendevamo','spendevate','spendevano']),
+    futuro:       t(['spenderò','spenderai','spenderà','spenderemo','spenderete','spenderanno']),
+    condizionale: t(['spenderei','spenderesti','spenderebbe','spenderemmo','spendereste','spenderebbero']),
+    congiuntivo:  t(['spenda','spenda','spenda','spendiamo','spendiate','spendano']),
+    passato_prossimo: ppA('speso'),
+  },
+  vincere: {
+    presente:     t(['vinco','vinci','vince','vinciamo','vincete','vincono']),
+    imperfetto:   t(['vincevo','vincevi','vinceva','vincevamo','vincevate','vincevano']),
+    futuro:       t(['vincerò','vincerai','vincerà','vinceremo','vincerete','vinceranno']),
+    condizionale: t(['vincerei','vinceresti','vincerebbe','vinceremmo','vincereste','vincerebbero']),
+    congiuntivo:  t(['vinca','vinca','vinca','vinciamo','vinciate','vincano']),
+    passato_prossimo: ppA('vinto'),
+  },
+  rimanere: {
+    presente:     t(['rimango','rimani','rimane','rimaniamo','rimanete','rimangono']),
+    imperfetto:   t(['rimanevo','rimanevi','rimaneva','rimenevamo','rimanevate','rimanevano']),
+    futuro:       t(['rimarrò','rimarrai','rimarrà','rimarremo','rimarrete','rimarranno']),
+    condizionale: t(['rimarrei','rimarresti','rimarrebbe','rimarremmo','rimarreste','rimarrebbero']),
+    congiuntivo:  t(['rimanga','rimanga','rimanga','rimaniamo','rimaniate','rimangano']),
+    passato_prossimo: ppE('rimasto'),
+  },
+  salire: {
+    presente:     t(['salgo','sali','sale','saliamo','salite','salgono']),
+    imperfetto:   t(['salivo','salivi','saliva','salivamo','salivate','salivano']),
+    futuro:       t(['salirò','salirai','salirà','saliremo','salirete','saliranno']),
+    condizionale: t(['salirei','saliresti','salirebbe','saliremmo','salireste','salirebbero']),
+    congiuntivo:  t(['salga','salga','salga','saliamo','saliate','salgano']),
+    passato_prossimo: ppE('salito'),
+  },
+  piacere: {
+    presente:     t(['piaccio','piaci','piace','piacciamo','piacete','piacciono']),
+    imperfetto:   t(['piacevo','piacevi','piaceva','piacevamo','piacevate','piacevano']),
+    futuro:       t(['piacerò','piacerai','piacerà','piaceremo','piacerete','piaceranno']),
+    condizionale: t(['piacerei','piaceresti','piacerebbe','piaceremmo','piacereste','piacerebbero']),
+    congiuntivo:  t(['piaccia','piaccia','piaccia','piacciamo','piacciate','piacciano']),
+    passato_prossimo: ppE('piaciuto'),
+  },
+  ridere: {
+    presente:     t(['rido','ridi','ride','ridiamo','ridete','ridono']),
+    imperfetto:   t(['ridevo','ridevi','rideva','ridevamo','ridevate','ridevano']),
+    futuro:       t(['riderò','riderai','riderà','rideremo','riderete','rideranno']),
+    condizionale: t(['riderei','rideresti','riderebbe','rideremmo','ridereste','riderebbero']),
+    congiuntivo:  t(['rida','rida','rida','ridiamo','ridiate','ridano']),
+    passato_prossimo: ppA('riso'),
+  },
+  piangere: {
+    presente:     t(['piango','piangi','piange','piangiamo','piangete','piangono']),
+    imperfetto:   t(['piangevo','piangevi','piangeva','piangevamo','piangevate','piangevano']),
+    futuro:       t(['piangerò','piangerai','piangerà','piangeremo','piangerete','piangeranno']),
+    condizionale: t(['piangerei','piangeresti','piangerebbe','piangeremmo','piangereste','piangerebbero']),
+    congiuntivo:  t(['pianga','pianga','pianga','piangiamo','piangiate','piangano']),
+    passato_prossimo: ppA('pianto'),
+  },
+  togliere: {
+    presente:     t(['tolgo','togli','toglie','togliamo','togliete','tolgono']),
+    imperfetto:   t(['toglievo','toglievi','toglieva','toglievamo','toglievate','toglievano']),
+    futuro:       t(['toglierò','toglierai','toglierà','toglieremo','toglierete','toglieranno']),
+    condizionale: t(['toglierei','toglieresti','toglierebbe','toglieremmo','togliereste','toglierebbero']),
+    congiuntivo:  t(['tolga','tolga','tolga','togliamo','togliate','tolgano']),
+    passato_prossimo: ppA('tolto'),
+  },
+  offrire: {
+    presente:     t(['offro','offri','offre','offriamo','offrite','offrono']),
+    imperfetto:   t(['offrivo','offrivi','offriva','offrivamo','offrivate','offrivano']),
+    futuro:       t(['offrirò','offrirai','offrirà','offriremo','offrirete','offriranno']),
+    condizionale: t(['offrirei','offriresti','offrirebbe','offriremmo','offrireste','offrirebbero']),
+    congiuntivo:  t(['offra','offra','offra','offriamo','offriate','offrano']),
+    passato_prossimo: ppA('offerto'),
+  },
+  aprire: {
+    presente:     t(['apro','apri','apre','apriamo','aprite','aprono']),
+    imperfetto:   t(['aprivo','aprivi','apriva','aprivamo','aprivate','aprivano']),
+    futuro:       t(['aprirò','aprirai','aprirà','apriremo','aprirete','apriranno']),
+    condizionale: t(['aprirei','apriresti','aprirebbe','apriremmo','aprireste','aprirebbero']),
+    congiuntivo:  t(['apra','apra','apra','apriamo','apriate','aprano']),
+    passato_prossimo: ppA('aperto'),
+  },
+  sedere: {
+    presente:     t(['siedo','siedi','siede','sediamo','sedete','siedono']),
+    imperfetto:   t(['sedevo','sedevi','sedeva','sedevamo','sedevate','sedevano']),
+    futuro:       t(['sederò','sederai','sederà','sederemo','sederete','sederanno']),
+    condizionale: t(['sederei','sederesti','sederebbe','sederemmo','sedereste','sederebbero']),
+    congiuntivo:  t(['sieda','sieda','sieda','sediamo','sediate','siedano']),
+    passato_prossimo: ppE('seduto'),
+  },
+  morire: {
+    presente:     t(['muoio','muori','muore','moriamo','morite','muoiono']),
+    imperfetto:   t(['morivo','morivi','moriva','morivamo','morivate','morivano']),
+    futuro:       t(['morirò','morirai','morirà','moriremo','morirete','moriranno']),
+    condizionale: t(['morirei','moriresti','morirebbe','moriremmo','morireste','morirebbero']),
+    congiuntivo:  t(['muoia','muoia','muoia','moriamo','moriate','muoiano']),
+    passato_prossimo: ppE('morto'),
+  },
+  nascere: {
+    presente:     t(['nasco','nasci','nasce','nasciamo','nascete','nascono']),
+    imperfetto:   t(['nascevo','nascevi','nasceva','nascevamo','nascevate','nascevano']),
+    futuro:       t(['nascerò','nascerai','nascerà','nasceremo','nascerete','nasceranno']),
+    condizionale: t(['nascerei','nasceresti','nascerebbe','nasceremmo','nascereste','nascerebbero']),
+    congiuntivo:  t(['nasca','nasca','nasca','nasciamo','nasciate','nascano']),
+    passato_prossimo: ppE('nato'),
+  },
+  crescere: {
+    presente:     t(['cresco','cresci','cresce','cresciamo','crescete','crescono']),
+    imperfetto:   t(['crescevo','crescevi','cresceva','crescevamo','crescevate','crescevano']),
+    futuro:       t(['crescerò','crescerai','crescerà','cresceremo','crescerete','cresceranno']),
+    condizionale: t(['crescerei','cresceresti','crescerebbe','cresceremmo','crescereste','crescerebbero']),
+    congiuntivo:  t(['cresca','cresca','cresca','cresciamo','cresciate','crescano']),
+    passato_prossimo: ppE('cresciuto'),
+  },
+  sorridere: {
+    presente:     t(['sorrido','sorridi','sorride','sorridiamo','sorridete','sorridono']),
+    imperfetto:   t(['sorridevo','sorridevi','sorrideva','sorridevamo','sorridevate','sorridevano']),
+    futuro:       t(['sorriderò','sorriderai','sorriderà','sorrideremo','sorriderete','sorrideranno']),
+    condizionale: t(['sorriderei','sorrideresti','sorriderebbe','sorrideremmo','sorridereste','sorriderebbero']),
+    congiuntivo:  t(['sorrida','sorrida','sorrida','sorridiamo','sorridiate','sorridano']),
+    passato_prossimo: ppA('sorriso'),
+  },
+  risolvere: {
+    presente:     t(['risolvo','risolvi','risolve','risolviamo','risolvete','risolvono']),
+    imperfetto:   t(['risolvevo','risolvevi','risolveva','risolvevamo','risolvevate','risolvevano']),
+    futuro:       t(['risolverò','risolverai','risolverà','risolveremo','risolverete','risolveranno']),
+    condizionale: t(['risolverei','risolveresti','risolverebbe','risolveremmo','risolvereste','risolverebbero']),
+    congiuntivo:  t(['risolva','risolva','risolva','risolviamo','risolviate','risolvano']),
+    passato_prossimo: ppA('risolto'),
+  },
+  accendere: {
+    presente:     t(['accendo','accendi','accende','accendiamo','accendete','accendono']),
+    imperfetto:   t(['accendevo','accendevi','accendeva','accendevamo','accendevate','accendevano']),
+    futuro:       t(['accenderò','accenderai','accenderà','accenderemo','accenderete','accenderanno']),
+    condizionale: t(['accenderei','accenderesti','accenderebbe','accenderemmo','accendereste','accenderebbero']),
+    congiuntivo:  t(['accenda','accenda','accenda','accendiamo','accendiate','accendano']),
+    passato_prossimo: ppA('acceso'),
+  },
+  cominciare: {
+    presente:     t(['comincio','cominci','comincia','cominciamo','cominciate','cominciano']),
+    imperfetto:   t(['cominciavo','cominciavi','cominciava','cominciavamo','cominciavate','cominciavano']),
+    futuro:       t(['comincerò','comincerai','comincerà','cominceremo','comincerete','cominceranno']),
+    condizionale: t(['comincerei','cominceresti','comincerebbe','cominceremmo','comincereste','comincerebbero']),
+    congiuntivo:  t(['cominci','cominci','cominci','cominciamo','cominciate','comincino']),
+    passato_prossimo: ppA('cominciato'),
+  },
+  // ── Regular -ARE (avere) ─────────────────────────────────────────────────────
+  aspettare:   regAre('aspett','aspettato'),
+  aiutare:     regAre('aiut','aiutato'),
+  chiamare:    regAre('chiam','chiamato'),
+  comprare:    regAre('compr','comprato'),
+  cucinare:    regAre('cucin','cucinato'),
+  guardare:    regAre('guard','guardato'),
+  imparare:    regAre('impar','imparato'),
+  incontrare:  regAre('incontr','incontrato'),
+  lavorare:    regAre('lavor','lavorato'),
+  passare:     regAre('pass','passato'),
+  pensare:     regAre('pens','pensato'),
+  portare:     regAre('port','portato'),
+  provare:     regAre('prov','provato'),
+  ricordare:   regAre('ricord','ricordato'),
+  salutare:    regAre('salut','salutato'),
+  trovare:     regAre('trov','trovato'),
+  usare:       regAre('us','usato'),
+  camminare:   regAre('cammin','camminato'),
+  cantare:     regAre('cant','cantato'),
+  continuare:  regAre('continu','continuato'),
+  fermare:     regAre('ferm','fermato'),
+  interessare: regAre('interess','interessato'),
+  lavare:      regAre('lav','lavato'),
+  nuotare:     regAre('nuot','nuotato'),
+  preparare:   regAre('prepar','preparato'),
+  suonare:     regAre('suon','suonato'),
+  // ── Regular -ARE (essere) ────────────────────────────────────────────────────
+  diventare:   regAre('divent','diventato','essere'),
+  entrare:     regAre('entr','entrato','essere'),
+  tornare:     regAre('torn','tornato','essere'),
+  restare:     regAre('rest','restato','essere'),
+  sembrare:    regAre('sembr','sembrato','essere'),
+  arrivare:    regAre('arriv','arrivato','essere'),
+  // ── -care/-gare verbs ────────────────────────────────────────────────────────
+  giocare:     regAreH('gioc','gioch','giocato'),
+  cercare:     regAreH('cerc','cerch','cercato'),
+  pagare:      regAreH('pag','pagh','pagato'),
+  spiegare:    regAreH('spieg','spiegh','spiegato'),
+  mancare:     regAreH('manc','manch','mancato'),
+  // ── -iare verbs (keep i) ─────────────────────────────────────────────────────
+  studiare:    regAreI('studi','studiato'),
+  iniziare:    regAreI('inizi','iniziato'),
+  // ── -ciare/-giare verbs (drop i) ─────────────────────────────────────────────
+  lasciare:    regAreCI('lasc','lasciato'),
+  viaggiare:   regAreCI('viagg','viaggiato'),
+  // ── Regular -ERE ─────────────────────────────────────────────────────────────
+  credere:     regEre('cred','creduto'),
+  ricevere:    regEre('ricev','ricevuto'),
+  // ── Regular -IRE ─────────────────────────────────────────────────────────────
+  partire:     regIre('part','partito','essere'),
+  sentire:     regIre('sent','sentito'),
+  seguire:     regIre('segu','seguito'),
+  // ── Regular -IRE (ISC) ───────────────────────────────────────────────────────
+  finire:      regIre('fin','finito','avere',true),
+  preferire:   regIre('prefer','preferito','avere',true),
+  spedire:     regIre('sped','spedito','avere',true),
+  pulire:      regIre('pul','pulito','avere',true),
 };
 
 const VERB_ES = {
   essere:'ser / estar', avere:'tener / haber', fare:'hacer', andare:'ir',
-  venire:'venir', potere:'poder', volere:'querer', dovere:'deber',
-  sapere:'saber', parlare:'hablar', dire:'decir', stare:'estar (bien/mal)',
+  venire:'venir', potere:'poder', volere:'querer', sapere:'saber',
+  parlare:'hablar', capire:'entender / comprender', dire:'decir', stare:'estar (bien/mal)',
   uscire:'salir', leggere:'leer', scrivere:'escribir', mangiare:'comer',
   bere:'beber', dormire:'dormir', prendere:'tomar / coger',
+  dovere:'deber / tener que', dare:'dar', tenere:'tener / sujetar',
+  vedere:'ver', vivere:'vivir', scegliere:'elegir / escoger', mettere:'poner',
+  chiedere:'pedir / preguntar', rispondere:'responder', decidere:'decidir',
+  conoscere:'conocer', correre:'correr', perdere:'perder', spendere:'gastar',
+  vincere:'ganar / vencer', rimanere:'quedarse', salire:'subir', piacere:'gustar',
+  ridere:'reír', piangere:'llorar', togliere:'quitar / sacar', offrire:'ofrecer',
+  aprire:'abrir', sedere:'sentarse', morire:'morir', nascere:'nacer',
+  crescere:'crecer', sorridere:'sonreír', risolvere:'resolver', accendere:'encender',
+  cominciare:'empezar / comenzar', aspettare:'esperar', aiutare:'ayudar',
+  chiamare:'llamar', comprare:'comprar', cucinare:'cocinar', guardare:'mirar / ver',
+  imparare:'aprender', incontrare:'encontrar / conocer', lavorare:'trabajar',
+  passare:'pasar', pensare:'pensar', portare:'llevar', provare:'intentar / probar',
+  ricordare:'recordar', salutare:'saludar', trovare:'encontrar / hallar',
+  usare:'usar / utilizar', camminare:'caminar', cantare:'cantar',
+  continuare:'continuar', fermare:'parar / detener', interessare:'interesar',
+  lavare:'lavar', nuotare:'nadar', preparare:'preparar', suonare:'tocar (instrumento)',
+  diventare:'convertirse en / hacerse', entrare:'entrar', tornare:'volver / regresar',
+  restare:'quedarse', sembrare:'parecer', arrivare:'llegar',
+  giocare:'jugar', cercare:'buscar', pagare:'pagar', spiegare:'explicar',
+  mancare:'faltar / echar de menos', studiare:'estudiar', iniziare:'empezar / iniciar',
+  lasciare:'dejar', viaggiare:'viajar', credere:'creer', ricevere:'recibir',
+  partire:'salir / partir', sentire:'sentir / oír', seguire:'seguir',
+  finire:'terminar / acabar', preferire:'preferir', spedire:'enviar / mandar',
+  pulire:'limpiar',
 };
 
 router.get('/conjugation/verbs', (req, res) => {
@@ -586,6 +998,12 @@ router.get('/conjugation/verb-flashcards', (req, res) => {
     presente: VERBS[verb].presente,
   }));
   res.json(cards);
+});
+
+router.get('/conjugation/verb-data/:verb', (req, res) => {
+  const verb = req.params.verb;
+  if (!VERBS[verb]) return res.status(404).json({ error: 'unknown verb' });
+  res.json({ verb, translation: VERB_ES[verb] || verb, conjugations: VERBS[verb] });
 });
 
 router.get('/conjugation/stats', (req, res) => {
