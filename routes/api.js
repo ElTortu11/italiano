@@ -281,6 +281,23 @@ router.delete('/flashcards/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+router.get('/flashcards/mastery', (req, res) => {
+  const cards = db.prepare(`
+    SELECT f.id, f.front, f.back, f.correct_reviews, f.total_reviews, f.repetitions,
+      vi.italian, vi.spanish, vi.article,
+      vc.name as category_name, vc.icon as category_icon
+    FROM flashcards f
+    LEFT JOIN vocabulary_items vi ON f.vocabulary_id = vi.id
+    LEFT JOIN vocabulary_categories vc ON vi.category_id = vc.id
+    ORDER BY f.correct_reviews ASC, f.total_reviews DESC
+  `).all();
+  res.json({
+    nonLaSo: cards.filter(c => (c.correct_reviews || 0) < 3),
+    inCorso: cards.filter(c => (c.correct_reviews || 0) >= 3 && (c.correct_reviews || 0) < 10),
+    dominata: cards.filter(c => (c.correct_reviews || 0) >= 10),
+  });
+});
+
 // ── Daily Session ────────────────────────────────────────────────────────────
 router.get('/session/today', (req, res) => {
   const todayStr = today();
@@ -550,8 +567,52 @@ const VERBS = {
   },
 };
 
+const VERB_ES = {
+  essere:'ser / estar', avere:'tener / haber', fare:'hacer', andare:'ir',
+  venire:'venir', potere:'poder', volere:'querer', dovere:'deber',
+  sapere:'saber', parlare:'hablar', dire:'decir', stare:'estar (bien/mal)',
+  uscire:'salir', leggere:'leer', scrivere:'escribir', mangiare:'comer',
+  bere:'beber', dormire:'dormir', prendere:'tomar / coger',
+};
+
 router.get('/conjugation/verbs', (req, res) => {
   res.json(Object.keys(VERBS));
+});
+
+router.get('/conjugation/verb-flashcards', (req, res) => {
+  const cards = Object.keys(VERBS).map(verb => ({
+    verb,
+    translation: VERB_ES[verb] || verb,
+    presente: VERBS[verb].presente,
+  }));
+  res.json(cards);
+});
+
+router.get('/conjugation/stats', (req, res) => {
+  const rows = db.prepare(`
+    SELECT verb, tense,
+      COUNT(*) as total,
+      SUM(is_correct) as correct
+    FROM conjugation_attempts
+    GROUP BY verb, tense
+    ORDER BY verb, tense
+  `).all();
+
+  const byVerb = {};
+  rows.forEach(r => {
+    if (!byVerb[r.verb]) byVerb[r.verb] = { verb: r.verb, tenses: [], total: 0, correct: 0 };
+    const acc = Math.round(r.correct * 100 / r.total);
+    byVerb[r.verb].tenses.push({ tense: r.tense, total: r.total, correct: r.correct, accuracy: acc });
+    byVerb[r.verb].total += r.total;
+    byVerb[r.verb].correct += r.correct;
+  });
+
+  const result = Object.values(byVerb).map(v => ({
+    ...v,
+    accuracy: Math.round(v.correct * 100 / v.total),
+  })).sort((a, b) => a.accuracy - b.accuracy);
+
+  res.json(result);
 });
 
 router.get('/conjugation/exercise', (req, res) => {

@@ -469,6 +469,7 @@ async function renderFlashcards(el) {
       <button class="tab-btn active" data-mode="due">Vencidas</button>
       <button class="tab-btn" data-mode="new">Nuevas</button>
       <button class="tab-btn" data-mode="all">Todas</button>
+      <button class="tab-btn" data-mode="verbi">Verbi</button>
     </div>
 
     <div id="fc-container">
@@ -508,7 +509,11 @@ async function loadFlashcards(el, mode, catId = null) {
     const catParam = catId ? `&category=${catId}` : '';
     if (mode === 'due') cards = await API.get(`/flashcards/due?limit=50${catParam}`);
     else if (mode === 'new') cards = await API.get(`/flashcards/new?limit=30${catParam}`);
-    else {
+    else if (mode === 'verbi') {
+      const verbs = await API.get('/conjugation/verb-flashcards');
+      renderVerbFlashcards(container, verbs);
+      return;
+    } else {
       const data = await API.get('/vocabulary/words?limit=100');
       showWordListView(container, data.words);
       return;
@@ -527,6 +532,52 @@ async function loadFlashcards(el, mode, catId = null) {
   } catch(e) {
     container.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
   }
+}
+
+function renderVerbFlashcards(container, verbs) {
+  let idx = 0, flipped = false;
+  function render() {
+    const v = verbs[idx];
+    const formsHTML = Object.entries(v.presente).map(([p, f]) =>
+      `<div style="display:flex;gap:12px;justify-content:center"><span style="color:var(--text-muted);width:32px;text-align:right">${p}</span><strong>${f}</strong></div>`
+    ).join('');
+    container.innerHTML = `
+      <div class="mb-3 flex items-center justify-between text-sm text-muted">
+        <span>${idx + 1} / ${verbs.length}</span>
+        <span style="color:var(--text-muted);font-size:0.8rem">Verbi in infinito</span>
+      </div>
+      ${progressBar(Math.round(idx / verbs.length * 100))}
+      <div style="height:16px"></div>
+      <div class="flashcard-scene" id="fc-scene">
+        <div class="flashcard" id="fc-card">
+          <div class="flashcard-face flashcard-front">
+            <div style="font-size:1rem;opacity:0.5;margin-bottom:8px">⚡ Verbo</div>
+            <div class="flashcard-word">${v.verb}</div>
+            <div class="flashcard-tap-hint">Tocca per vedere</div>
+          </div>
+          <div class="flashcard-face flashcard-back">
+            <div class="flashcard-word" style="color:var(--accent);margin-bottom:16px">${v.translation}</div>
+            <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:8px">Presente indicativo</div>
+            <div style="display:flex;flex-direction:column;gap:6px;font-size:0.9rem">${formsHTML}</div>
+          </div>
+        </div>
+      </div>
+      <div class="flex gap-2 justify-center mt-4">
+        <button class="btn btn-outline" id="vf-prev" ${idx===0?'disabled':''}>← Anterior</button>
+        <button class="btn btn-primary" id="vf-next">${idx < verbs.length-1 ? 'Siguiente →' : 'Terminare ✓'}</button>
+      </div>`;
+    document.getElementById('fc-card').addEventListener('click', () => {
+      if (!flipped) { document.getElementById('fc-card').classList.add('flipped'); flipped = true; }
+    });
+    document.getElementById('vf-next').addEventListener('click', () => {
+      if (idx < verbs.length - 1) { idx++; flipped = false; render(); }
+      else container.innerHTML = `<div class="card" style="text-align:center;padding:40px"><div style="font-size:3rem">🎉</div><div class="section-title mt-3">Tutti i verbi completati!</div></div>`;
+    });
+    document.getElementById('vf-prev').addEventListener('click', () => {
+      if (idx > 0) { idx--; flipped = false; render(); }
+    });
+  }
+  render();
 }
 
 function renderFlashcard(container) {
@@ -1628,6 +1679,8 @@ async function renderErrors(el) {
       <button class="tab-btn active" data-etab="pending">Pendientes</button>
       <button class="tab-btn" data-etab="all">Todos</button>
       <button class="tab-btn" data-etab="mastered">Corregidos</button>
+      <button class="tab-btn" data-etab="verbi">Verbi</button>
+      <button class="tab-btn" data-etab="parole">Parole</button>
     </div>
 
     <div id="error-list"></div>
@@ -1688,11 +1741,74 @@ async function renderErrors(el) {
     });
   }
 
+  const TENSE_IT = { presente:'Presente', imperfetto:'Imperfetto', futuro:'Futuro', condizionale:'Condizionale', congiuntivo:'Congiuntivo', passato_prossimo:'Passato Prossimo' };
+
+  async function renderVerbStats() {
+    const list = document.getElementById('error-list');
+    const stats = await API.get('/conjugation/stats');
+    if (!stats.length) {
+      list.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🎯</div><div class="empty-state-title">Ancora nessun tentativo</div><div class="empty-state-sub">Pratica le conjugazioni per vedere le tue statistiche</div></div>`;
+      return;
+    }
+    list.innerHTML = stats.map(v => {
+      const pct = v.accuracy;
+      const color = pct >= 80 ? 'var(--accent)' : pct >= 50 ? 'var(--orange)' : '#ef4444';
+      const tenseBars = v.tenses.map(t => {
+        const tc = t.accuracy >= 80 ? 'var(--accent)' : t.accuracy >= 50 ? 'var(--orange)' : '#ef4444';
+        return `<div style="display:flex;align-items:center;gap:8px;font-size:0.8rem">
+          <span style="width:110px;color:var(--text-muted)">${TENSE_IT[t.tense]||t.tense}</span>
+          <div style="flex:1;height:6px;background:var(--border);border-radius:3px">
+            <div style="width:${t.accuracy}%;height:100%;background:${tc};border-radius:3px"></div>
+          </div>
+          <span style="width:36px;text-align:right;color:${tc}">${t.accuracy}%</span>
+          <span style="color:var(--text-muted)">${t.correct}/${t.total}</span>
+        </div>`;
+      }).join('');
+      return `<div class="card mb-3">
+        <div class="flex items-center justify-between mb-2">
+          <div style="font-weight:700;font-size:1.05rem">⚡ ${v.verb}</div>
+          <div style="font-weight:700;color:${color};font-size:1.1rem">${pct}%</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">${tenseBars}</div>
+      </div>`;
+    }).join('');
+  }
+
+  async function renderParoleMastery() {
+    const list = document.getElementById('error-list');
+    const data = await API.get('/flashcards/mastery');
+    const cols = [
+      { key:'nonLaSo', label:'Non la so', icon:'🔴', desc:'0–2 corrette' },
+      { key:'inCorso', label:'In corso', icon:'🟡', desc:'3–9 corrette' },
+      { key:'dominata', label:'Dominata', icon:'🟢', desc:'10+ corrette' },
+    ];
+    list.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px">
+      ${cols.map(col => {
+        const words = data[col.key] || [];
+        const wordRows = words.slice(0,30).map(w =>
+          `<div class="word-item" style="padding:8px 12px">
+            <div class="word-it" style="font-size:0.85rem">${w.front||w.italian}</div>
+            <div class="word-es" style="font-size:0.8rem">${w.back||w.spanish}</div>
+            <span style="font-size:0.7rem;color:var(--text-muted);flex-shrink:0">${w.correct_reviews||0}✓</span>
+          </div>`
+        ).join('');
+        return `<div class="card">
+          <div style="font-weight:700;margin-bottom:4px">${col.icon} ${col.label}</div>
+          <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:12px">${col.desc} · ${words.length} parole</div>
+          ${words.length ? `<div class="word-list">${wordRows}</div>${words.length>30?`<div class="text-xs text-muted mt-2">+${words.length-30} más</div>`:''}` : '<div class="text-sm text-muted">Nessuna parola</div>'}
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
   el.querySelectorAll('[data-etab]').forEach(btn => {
     btn.addEventListener('click', () => {
       el.querySelectorAll('[data-etab]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      renderErrorList(btn.dataset.etab);
+      const tab = btn.dataset.etab;
+      if (tab === 'verbi') renderVerbStats();
+      else if (tab === 'parole') renderParoleMastery();
+      else renderErrorList(tab);
     });
   });
 
