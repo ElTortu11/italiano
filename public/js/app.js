@@ -73,8 +73,84 @@ const ROUTES = {
 
 let currentRoute = 'dashboard';
 
+// ── Study timer ───────────────────────────────────────────────────────────────
+const STUDY_ROUTES = new Set(['session','flashcards','conjugation','writing']);
+const studyTimer = {
+  sessionStart: null,
+  lastFlush: null,
+  _interval: null,
+  totalSeconds: 0,
+
+  async init() {
+    try {
+      const s = await API.get('/dashboard/stats');
+      this.totalSeconds = Math.round((s.todayMinutes || 0) * 60);
+    } catch(e) {}
+  },
+
+  start() {
+    if (this._interval) return;
+    this.sessionStart = Date.now();
+    this.lastFlush = Date.now();
+    this._interval = setInterval(() => this._tick(), 1000);
+    this._updateDisplay(true);
+  },
+
+  stop() {
+    if (!this._interval) return;
+    this._flush();
+    clearInterval(this._interval);
+    this._interval = null;
+    this.sessionStart = null;
+    this._updateDisplay(false);
+  },
+
+  _sinceFlush() {
+    return this.lastFlush ? Math.floor((Date.now() - this.lastFlush) / 1000) : 0;
+  },
+
+  _elapsed() {
+    return this.sessionStart ? Math.floor((Date.now() - this.sessionStart) / 1000) : 0;
+  },
+
+  _tick() {
+    this._updateDisplay(true);
+    if (this._sinceFlush() >= 300) this._flush();
+  },
+
+  _updateDisplay(visible) {
+    const wrap = document.getElementById('study-timer');
+    const el   = document.getElementById('timer-display');
+    if (!wrap || !el) return;
+    wrap.style.display = visible ? 'flex' : 'none';
+    if (visible) {
+      const total = this.totalSeconds + this._elapsed();
+      const m = Math.floor(total / 60);
+      const s = total % 60;
+      el.textContent = `${m}:${String(s).padStart(2,'0')}`;
+    }
+  },
+
+  _flush() {
+    const secs = this._sinceFlush();
+    if (secs < 5) return;
+    this.totalSeconds += secs;
+    this.lastFlush = Date.now();
+    API.post('/stats/heartbeat', { seconds: secs }).catch(() => {});
+  },
+};
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) studyTimer._flush();
+});
+window.addEventListener('beforeunload', () => studyTimer._flush());
+
 function navigate(route) {
   if (!ROUTES[route]) route = 'dashboard';
+
+  if (STUDY_ROUTES.has(currentRoute) && !STUDY_ROUTES.has(route)) studyTimer.stop();
+  if (!STUDY_ROUTES.has(currentRoute) && STUDY_ROUTES.has(route)) studyTimer.start();
+
   currentRoute = route;
   document.getElementById('topbar-title').textContent = ROUTES[route].title;
 
@@ -1982,6 +2058,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.querySelectorAll('[data-route]').forEach(el => {
     el.addEventListener('click', () => navigate(el.dataset.route));
   });
+
+  // Init study timer (loads today's saved time)
+  studyTimer.init();
 
   // Load dashboard stats for topbar
   try {

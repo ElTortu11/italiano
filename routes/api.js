@@ -599,6 +599,20 @@ router.post('/conjugation/check', (req, res) => {
   res.json({ is_correct, correct_form, all_forms: verbData[tense] });
 });
 
+// ── Study time heartbeat ─────────────────────────────────────────────────────
+router.post('/stats/heartbeat', (req, res) => {
+  const { seconds = 0 } = req.body;
+  if (seconds < 5) return res.json({ ok: true });
+  const mins = seconds / 60;
+  const goal = parseInt(db.prepare("SELECT value FROM settings WHERE key='daily_minutes'").get()?.value || 30);
+  db.prepare(`INSERT INTO daily_stats(date, minutes_studied, goal_met) VALUES(?, ?, 0)
+    ON CONFLICT(date) DO UPDATE SET
+    minutes_studied = minutes_studied + ?,
+    goal_met = CASE WHEN minutes_studied + ? >= ? THEN 1 ELSE 0 END`)
+    .run(today(), mins, mins, mins, goal);
+  res.json({ ok: true });
+});
+
 // ── Writing ──────────────────────────────────────────────────────────────────
 router.get('/writing/prompts', (req, res) => {
   res.json(db.prepare('SELECT * FROM writing_exercises WHERE user_text IS NULL ORDER BY RANDOM() LIMIT 5').all());
