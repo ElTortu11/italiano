@@ -2,6 +2,12 @@ require('dotenv').config();
 const db = require('./db');
 const { createSchema } = require('./schema');
 
+// Drop and recreate vocabulary tables so seed is always idempotent
+db.exec(`
+  DROP TABLE IF EXISTS flashcards;
+  DROP TABLE IF EXISTS vocabulary_items;
+  DROP TABLE IF EXISTS vocabulary_categories;
+`);
 createSchema();
 
 // ── Categories ─────────────────────────────────────────────────────────────
