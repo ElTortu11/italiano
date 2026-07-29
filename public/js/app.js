@@ -418,7 +418,7 @@ function buildSessionPlan(due, newW) {
 // ══════════════════════════════════════════════════════════════════════════════
 // FLASHCARDS
 // ══════════════════════════════════════════════════════════════════════════════
-let fcState = { cards: [], index: 0, flipped: false, reviewed: 0, correct: 0, mode: 'due', typingMode: false };
+let fcState = { cards: [], index: 0, flipped: false, reviewed: 0, correct: 0, mode: 'due', typingMode: false, pendingCategoryId: null, pendingCategoryName: '' };
 
 function showModeModal(el, tab) {
   showModal('¿Cómo quieres estudiar?', `
@@ -490,17 +490,24 @@ async function renderFlashcards(el) {
   el.querySelector('#fc-mode-change').addEventListener('click', () => showModeModal(el, currentTab));
   el.querySelector('#fc-add-btn').addEventListener('click', () => showAddCardModal());
 
-  showModeModal(el, currentTab);
+  const pendingCat = fcState.pendingCategoryId || null;
+  if (pendingCat) {
+    fcState.pendingCategoryId = null;
+    loadFlashcards(el, 'due', pendingCat);
+  } else {
+    showModeModal(el, currentTab);
+  }
 }
 
-async function loadFlashcards(el, mode) {
+async function loadFlashcards(el, mode, catId = null) {
   const container = document.getElementById('fc-container');
   container.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
 
   try {
     let cards;
-    if (mode === 'due') cards = await API.get('/flashcards/due?limit=50');
-    else if (mode === 'new') cards = await API.get('/flashcards/new?limit=30');
+    const catParam = catId ? `&category=${catId}` : '';
+    if (mode === 'due') cards = await API.get(`/flashcards/due?limit=50${catParam}`);
+    else if (mode === 'new') cards = await API.get(`/flashcards/new?limit=30${catParam}`);
     else {
       const data = await API.get('/vocabulary/words?limit=100');
       showWordListView(container, data.words);
@@ -515,7 +522,7 @@ async function loadFlashcards(el, mode) {
       return;
     }
 
-    fcState = { cards, index: 0, flipped: false, reviewed: 0, correct: 0, mode, typingMode: fcState.typingMode };
+    fcState = { cards, index: 0, flipped: false, reviewed: 0, correct: 0, mode, typingMode: fcState.typingMode, pendingCategoryId: null, pendingCategoryName: '' };
     renderFlashcard(container);
   } catch(e) {
     container.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
@@ -836,12 +843,8 @@ async function openCategory(el, catId) {
         </div>
       </div>
 
-      <div class="mb-3 flex gap-2 flex-wrap">
-        <input type="search" id="word-filter" placeholder="Filtrar..." style="max-width:220px">
-        <select id="level-filter" style="max-width:120px">
-          <option value="">Todos los niveles</option>
-          <option>A1</option><option>A2</option><option>B1</option><option>B2</option><option>C1</option>
-        </select>
+      <div class="mb-3">
+        <input type="search" id="word-filter" placeholder="Filtrar palabras...">
       </div>
 
       <div class="word-list" id="cat-word-list">
@@ -851,24 +854,42 @@ async function openCategory(el, catId) {
 
   panel.querySelector('#close-panel-btn').addEventListener('click', () => { panel.style.display = 'none'; });
   panel.querySelector('#study-cat-btn').addEventListener('click', () => {
-    navigate('flashcards');
-    setTimeout(() => {
-      document.querySelector('[data-mode="due"]')?.click();
-    }, 300);
+    showModal('¿Cómo quieres estudiar?', `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:4px 0">
+        <div style="text-align:center;padding:24px 16px;border:1.5px solid var(--border);border-radius:12px">
+          <div style="font-size:2.8rem">🃏</div>
+          <div style="font-weight:700;margin-top:10px;font-size:1rem">Clásico</div>
+          <div style="font-size:0.8rem;color:var(--text-muted);margin-top:6px;line-height:1.4">Voltea la tarjeta y autoevalúate</div>
+        </div>
+        <div style="text-align:center;padding:24px 16px;border:1.5px solid var(--border);border-radius:12px">
+          <div style="font-size:2.8rem">✍️</div>
+          <div style="font-weight:700;margin-top:10px;font-size:1rem">Escritura</div>
+          <div style="font-size:0.8rem;color:var(--text-muted);margin-top:6px;line-height:1.4">Ves el español → escribe en italiano con artículo</div>
+        </div>
+      </div>
+    `, [
+      { label: '🃏 Clásico', cls: 'btn-outline', action: () => {
+        fcState.typingMode = false;
+        fcState.pendingCategoryId = catId;
+        closeModal();
+        navigate('flashcards');
+      }},
+      { label: '✍️ Escritura', cls: 'btn-primary', action: () => {
+        fcState.typingMode = true;
+        fcState.pendingCategoryId = catId;
+        closeModal();
+        navigate('flashcards');
+      }},
+    ]);
   });
 
   const filter = panel.querySelector('#word-filter');
-  const levelFilter = panel.querySelector('#level-filter');
-  function applyFilter() {
+  filter.addEventListener('input', () => {
     const q = filter.value.toLowerCase();
-    const lv = levelFilter.value;
     panel.querySelectorAll('.word-item').forEach(item => {
-      const txt = item.textContent.toLowerCase();
-      item.style.display = (!q || txt.includes(q)) && (!lv || item.innerHTML.includes(lv)) ? '' : 'none';
+      item.style.display = !q || item.textContent.toLowerCase().includes(q) ? '' : 'none';
     });
-  }
-  filter.addEventListener('input', applyFilter);
-  levelFilter.addEventListener('change', applyFilter);
+  });
 
   panel.querySelectorAll('.word-item').forEach(item => {
     item.addEventListener('click', () => showWordDetail(parseInt(item.dataset.id)));
