@@ -420,6 +420,36 @@ function buildSessionPlan(due, newW) {
 // ══════════════════════════════════════════════════════════════════════════════
 let fcState = { cards: [], index: 0, flipped: false, reviewed: 0, correct: 0, mode: 'due', typingMode: false };
 
+function showModeModal(el, tab) {
+  showModal('¿Cómo quieres estudiar?', `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:4px 0">
+      <div style="text-align:center;padding:24px 16px;border:1.5px solid var(--border);border-radius:12px">
+        <div style="font-size:2.8rem">🃏</div>
+        <div style="font-weight:700;margin-top:10px;font-size:1rem">Clásico</div>
+        <div style="font-size:0.8rem;color:var(--text-muted);margin-top:6px;line-height:1.4">Voltea la tarjeta y autoevalúate</div>
+      </div>
+      <div style="text-align:center;padding:24px 16px;border:1.5px solid var(--border);border-radius:12px">
+        <div style="font-size:2.8rem">✍️</div>
+        <div style="font-weight:700;margin-top:10px;font-size:1rem">Escritura</div>
+        <div style="font-size:0.8rem;color:var(--text-muted);margin-top:6px;line-height:1.4">Ves el español → escribe en italiano con artículo</div>
+      </div>
+    </div>
+  `, [
+    { label: '🃏 Clásico', cls: 'btn-outline', action: () => {
+      fcState.typingMode = false;
+      closeModal();
+      loadFlashcards(el, tab);
+      document.getElementById('fc-mode-label') && (document.getElementById('fc-mode-label').textContent = '🃏 Clásico');
+    }},
+    { label: '✍️ Escritura', cls: 'btn-primary', action: () => {
+      fcState.typingMode = true;
+      closeModal();
+      loadFlashcards(el, tab);
+      document.getElementById('fc-mode-label') && (document.getElementById('fc-mode-label').textContent = '✍️ Escritura');
+    }},
+  ]);
+}
+
 async function renderFlashcards(el) {
   el.innerHTML = `
     <div class="section-header">
@@ -428,16 +458,11 @@ async function renderFlashcards(el) {
         <div class="section-sub">Repetición espaciada SM-2</div>
       </div>
       <div class="flex gap-2">
+        <button class="btn btn-outline btn-sm" id="fc-mode-change">
+          <span id="fc-mode-label">${fcState.typingMode ? '✍️ Escritura' : '🃏 Clásico'}</span> ▾
+        </button>
         <button class="btn btn-outline btn-sm" id="fc-add-btn">+ Nueva tarjeta</button>
       </div>
-    </div>
-
-    <div class="fc-mode-toggle mb-1">
-      <button class="fc-mode-btn ${!fcState.typingMode?'active':''}" data-fcmode="flip">🃏 Clásico</button>
-      <button class="fc-mode-btn ${fcState.typingMode?'active':''}" data-fcmode="type">✍️ Escritura</button>
-    </div>
-    <div class="text-xs text-muted mb-3" id="fc-mode-desc" style="text-align:center">
-      ${fcState.typingMode ? 'Ves el español → escribe el italiano con artículo' : 'Voltea la tarjeta → autoevalúate'}
     </div>
 
     <div class="tabs">
@@ -451,30 +476,21 @@ async function renderFlashcards(el) {
     </div>
   `;
 
-  el.querySelectorAll('.fc-mode-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      el.querySelectorAll('.fc-mode-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      fcState.typingMode = btn.dataset.fcmode === 'type';
-      const desc = document.getElementById('fc-mode-desc');
-      if (desc) desc.textContent = fcState.typingMode
-        ? 'Ves el español → escribe el italiano con artículo'
-        : 'Voltea la tarjeta → autoevalúate';
-      const activeTab = el.querySelector('.tab-btn.active');
-      loadFlashcards(el, activeTab?.dataset.mode || 'due');
-    });
-  });
+  let currentTab = 'due';
 
   el.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       el.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      loadFlashcards(el, btn.dataset.mode);
+      currentTab = btn.dataset.mode;
+      loadFlashcards(el, currentTab);
     });
   });
 
+  el.querySelector('#fc-mode-change').addEventListener('click', () => showModeModal(el, currentTab));
   el.querySelector('#fc-add-btn').addEventListener('click', () => showAddCardModal());
-  loadFlashcards(el, 'due');
+
+  showModeModal(el, currentTab);
 }
 
 async function loadFlashcards(el, mode) {
@@ -706,7 +722,7 @@ function wordItemHTML(w) {
     <div class="word-mastery ${masteryClass}"></div>
     <div class="word-it">${w.italian}</div>
     <div class="word-es">${w.spanish}</div>
-    <div class="word-level">${cefrBadge(w.cefr_level||'B1')}</div>
+    <div class="word-level"></div>
   </div>`;
 }
 
@@ -865,7 +881,6 @@ async function showWordDetail(id) {
   showModal(w.italian, `
     <div class="mb-3">
       <div class="flex gap-2 flex-wrap mb-2">
-        ${cefrBadge(w.cefr_level||'B1')}
         ${w.word_type ? `<span class="badge badge-gray">${w.word_type}</span>` : ''}
         ${w.register && w.register!=='neutral' ? `<span class="badge badge-orange">${w.register}</span>` : ''}
       </div>
