@@ -1065,9 +1065,11 @@ function renderExerciseUI(area, ex) {
           </div>`).join('')}
       </div>
 
-      <div class="flex gap-2 justify-center mt-4">
+      <div class="flex gap-2 justify-center mt-4" id="conj-btn-row">
         <button class="btn btn-outline" id="conj-skip">Saltar</button>
         <button class="btn btn-primary" id="conj-check">Comprobar</button>
+        <button class="btn btn-outline" id="conj-retry" style="display:none">Riprova</button>
+        <button class="btn btn-outline" id="conj-show" style="display:none">Mostra le risposte</button>
         <button class="btn btn-primary" id="conj-next" style="display:none">Siguiente →</button>
       </div>
     </div>`;
@@ -1093,6 +1095,32 @@ function renderExerciseUI(area, ex) {
   document.getElementById('conj-next').addEventListener('click', () => {
     loadConjugationExercise(document.getElementById('app-content'));
   });
+  document.getElementById('conj-retry').addEventListener('click', () => {
+    inputs.forEach(inp => {
+      inp.disabled = false;
+      inp.value = '';
+      inp.style.borderColor = '';
+    });
+    persons.forEach(p => { document.getElementById('icon-' + p).textContent = ''; });
+    document.getElementById('conj-check').style.display = 'inline-flex';
+    document.getElementById('conj-retry').style.display = 'none';
+    document.getElementById('conj-show').style.display = 'none';
+    document.getElementById('conj-next').style.display = 'none';
+    conjState.answered = false;
+    inputs[0].focus();
+  });
+  document.getElementById('conj-show').addEventListener('click', () => {
+    inputs.forEach(inp => {
+      const person = inp.dataset.person;
+      const correct = (ex.all_forms || {})[person] || '';
+      const isOk = inp.value.trim().toLowerCase() === correct.toLowerCase();
+      if (!isOk) {
+        const icon = document.getElementById('icon-' + person);
+        icon.innerHTML = `<span style="color:#ef4444">✗</span> <span style="color:var(--text-muted);font-size:0.85em">${correct}</span>`;
+      }
+    });
+    document.getElementById('conj-show').style.display = 'none';
+  });
 
   async function checkAnswers() {
     if (conjState.answered) return;
@@ -1112,8 +1140,6 @@ function renderExerciseUI(area, ex) {
       if (isOk) {
         icon.textContent = '✓';
         icon.style.color = 'var(--accent)';
-      } else {
-        icon.innerHTML = `<span style="color:#ef4444">✗</span> <span style="color:var(--text-muted);font-size:0.85em">${correct}</span>`;
       }
 
       await API.post('/conjugation/check', { verb: ex.verb, tense: ex.tense, person, answer: answer || '__skip__' });
@@ -1131,6 +1157,9 @@ function renderExerciseUI(area, ex) {
     if (accEl) accEl.textContent = acc + '%';
 
     document.getElementById('conj-check').style.display = 'none';
+    document.getElementById('conj-skip').style.display = 'none';
+    document.getElementById('conj-retry').style.display = 'inline-flex';
+    if (correctCount < persons.length) document.getElementById('conj-show').style.display = 'inline-flex';
     document.getElementById('conj-next').style.display = 'inline-flex';
   }
 }
