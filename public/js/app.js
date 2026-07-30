@@ -1047,7 +1047,7 @@ const TENSE_HINTS = {
 };
 let conjState = { answered: false, streak: 0, correct: 0, total: 0, selectedTenses: [...ALL_TENSES] };
 const DRILL_TENSES = ['presente','passato_prossimo','imperfetto','futuro','condizionale','congiuntivo'];
-let drillState = { phase:'pick', verb:null, translation:'', conjugations:{}, tenses:[...DRILL_TENSES], tenseIndex:0, mistakes:[], reviewIndex:0, score:{correct:0,total:0}, tenseScores:[], verbList:[] };
+let drillState = { phase:'pick', verb:null, translation:'', conjugations:{}, tenses:[...DRILL_TENSES], tenseIndex:0, highWater:-1, mistakes:[], reviewIndex:0, score:{correct:0,total:0}, tenseScores:[], verbList:[] };
 
 async function renderConjugation(el) {
   const verbs = await API.get('/conjugation/verbs');
@@ -1102,7 +1102,7 @@ async function renderConjugation(el) {
         renderConjugationReference(el, verbs);
       } else if (tab === 'drill') {
         pillsCard.style.display = 'none';
-        drillState = { phase:'pick', verb:null, translation:'', conjugations:{}, tenses:[...DRILL_TENSES], tenseIndex:0, mistakes:[], reviewIndex:0, score:{correct:0,total:0}, tenseScores:[], verbList:verbs };
+        drillState = { phase:'pick', verb:null, translation:'', conjugations:{}, tenses:[...DRILL_TENSES], tenseIndex:0, highWater:-1, mistakes:[], reviewIndex:0, score:{correct:0,total:0}, tenseScores:[], verbList:verbs };
         renderDrillTab(document.getElementById('conj-tab-content'), verbs);
       } else if (tab === 'scores') {
         pillsCard.style.display = 'none';
@@ -1341,8 +1341,10 @@ function renderDrillTab(container, verbList) {
             drillState.translation = data.translation;
             drillState.conjugations = data.conjugations;
             drillState.tenseIndex = 0;
+            drillState.highWater = -1;
             drillState.mistakes = [];
             drillState.score = { correct: 0, total: 0 };
+            drillState.tenseScores = [];
             drillState.phase = 'practice';
             renderDrillTense(area);
           } catch(e) { toast('Errore nel caricamento del verbo', 'error'); }
@@ -1377,11 +1379,18 @@ function renderDrillTense(area) {
   const tense = activeTenses[drillState.tenseIndex];
   const forms = drillState.conjugations[tense];
   const progress = `${drillState.tenseIndex + 1} / ${activeTenses.length}`;
+  const alreadyScored = drillState.tenseScores.some(s => s.tense === tense);
+  const canGoBack = drillState.tenseIndex > 0;
+  const canGoFwd = drillState.highWater >= drillState.tenseIndex;
 
   area.innerHTML = `
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <div style="font-size:0.8rem;color:var(--text-muted)">${progress} — ${drillState.verb} (${drillState.translation})</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <button type="button" id="drill-prev" class="btn btn-outline" style="padding:2px 10px;font-size:0.9rem;${canGoBack?'':'visibility:hidden'}">←</button>
+          <div style="font-size:0.8rem;color:var(--text-muted)">${progress} — ${drillState.verb} (${drillState.translation})</div>
+          <button type="button" id="drill-nav-fwd" class="btn btn-outline" style="padding:2px 10px;font-size:0.9rem;${canGoFwd?'':'visibility:hidden'}">→</button>
+        </div>
         <div style="font-size:0.8rem;color:var(--text-muted)" id="drill-score-display">✓ ${drillState.score.correct}/${drillState.score.total}</div>
       </div>
       <div style="font-weight:700;font-size:1.15rem;margin-bottom:4px">${TENSE_LABELS[tense]}</div>
@@ -1401,10 +1410,10 @@ function renderDrillTense(area) {
         `; }).join('')}
       </div>
       <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;flex-wrap:wrap" id="drill-btns">
-        <button class="btn btn-primary" id="drill-check">Controlla</button>
-        <button class="btn btn-outline" id="drill-show" style="display:none">Mostra risposte</button>
-        <button class="btn btn-outline" id="drill-retry" style="display:none">Riprova</button>
-        <button class="btn btn-primary" id="drill-next" style="display:none">Avanti →</button>
+        <button type="button" class="btn btn-primary" id="drill-check">Controlla</button>
+        <button type="button" class="btn btn-outline" id="drill-show" style="display:none">Mostra risposte</button>
+        <button type="button" class="btn btn-outline" id="drill-retry" style="display:none">Riprova</button>
+        <button type="button" class="btn btn-primary" id="drill-next" style="display:none">Avanti →</button>
       </div>
     </div>
   `;
@@ -1412,7 +1421,7 @@ function renderDrillTense(area) {
   const inputs = [...area.querySelectorAll('.drill-input')];
   inputs[0].focus();
 
-  let isLocked = false;
+  let isLocked = alreadyScored;
   let pendingKey = null;
 
   inputs.forEach((inp, i) => {
@@ -1458,7 +1467,15 @@ function renderDrillTense(area) {
   }
 
   function goNext() {
+    if (pendingKey) { document.removeEventListener('keydown', pendingKey); pendingKey = null; }
+    drillState.highWater = Math.max(drillState.highWater, drillState.tenseIndex);
     drillState.tenseIndex++;
+    renderDrillTense(area);
+  }
+
+  function goPrev() {
+    if (pendingKey) { document.removeEventListener('keydown', pendingKey); pendingKey = null; }
+    drillState.tenseIndex--;
     renderDrillTense(area);
   }
 
@@ -1489,6 +1506,8 @@ function renderDrillTense(area) {
     inputs[0].focus();
   });
   document.getElementById('drill-next').addEventListener('click', goNext);
+  if (canGoBack) document.getElementById('drill-prev').addEventListener('click', goPrev);
+  if (canGoFwd) document.getElementById('drill-nav-fwd').addEventListener('click', goNext);
 }
 
 function renderDrillReview(area) {
@@ -1579,7 +1598,7 @@ function renderDrillDone(area) {
   `;
 
   document.getElementById('drill-again').addEventListener('click', () => {
-    drillState.tenseIndex = 0; drillState.mistakes = []; drillState.score = {correct:0,total:0}; drillState.phase = 'practice';
+    drillState.tenseIndex = 0; drillState.highWater = -1; drillState.mistakes = []; drillState.score = {correct:0,total:0}; drillState.tenseScores = []; drillState.phase = 'practice';
     renderDrillTense(area);
   });
   document.getElementById('drill-new').addEventListener('click', () => {
