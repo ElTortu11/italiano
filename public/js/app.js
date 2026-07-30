@@ -1022,6 +1022,21 @@ const TENSE_LABELS = {
   presente: 'Presente', passato_prossimo: 'Passato', imperfetto: 'Imperfetto',
   futuro: 'Futuro', condizionale: 'Condizionale', congiuntivo: 'Congiuntivo',
 };
+function expandForms(form) {
+  if (!form || !form.includes('/')) return [form.toLowerCase().trim()];
+  const parts = form.split(' ');
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (parts[i].includes('/')) {
+      const [base, sfx] = parts[i].split('/');
+      const stem = base.slice(0, base.length - sfx.length);
+      const a1 = [...parts]; a1[i] = base;
+      const a2 = [...parts]; a2[i] = stem + sfx;
+      return [a1.join(' ').toLowerCase(), a2.join(' ').toLowerCase()];
+    }
+  }
+  return [form.toLowerCase().trim()];
+}
+
 const TENSE_HINTS = {
   presente: 'Presente Indicativo — Cosa fa adesso?',
   imperfetto: 'Imperfetto — Azione passata abituale o in corso',
@@ -1372,16 +1387,18 @@ function renderDrillTense(area) {
       <div style="font-weight:700;font-size:1.15rem;margin-bottom:4px">${TENSE_LABELS[tense]}</div>
       <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:16px">${TENSE_HINTS[tense]||''}</div>
       <div id="drill-forms">
-        ${['io','tu','lui','noi','voi','loro'].map(person => `
+        ${['io','tu','lui','noi','voi','loro'].map(person => {
+          const label = person === 'lui' && (forms[person]||'').includes('/') ? 'lui/lei' : person;
+          return `
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-            <div style="width:40px;font-size:0.9rem;color:var(--text-muted);flex-shrink:0">${person}</div>
+            <div style="width:52px;font-size:0.9rem;color:var(--text-muted);flex-shrink:0">${label}</div>
             <input class="input drill-input" data-person="${person}"
-              placeholder="${person}..."
+              placeholder="${label}..."
               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
               style="flex:1;padding:8px 12px">
             <div class="drill-result" data-person="${person}" style="width:28px;text-align:center;font-size:1.1rem"></div>
           </div>
-        `).join('')}
+        `; }).join('')}
       </div>
       <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;flex-wrap:wrap" id="drill-btns">
         <button class="btn btn-primary" id="drill-check">Controlla</button>
@@ -1409,9 +1426,8 @@ function renderDrillTense(area) {
     let correct = 0;
     inputs.forEach(inp => {
       const person = inp.dataset.person;
-      const expected = (forms[person]||'').toLowerCase().trim();
       const typed = inp.value.toLowerCase().trim();
-      const ok = typed === expected;
+      const ok = expandForms(forms[person]||'').includes(typed);
       inp.style.borderColor = ok ? 'var(--accent)' : '#ef4444';
       inp.disabled = true;
       area.querySelector(`.drill-result[data-person="${person}"]`).textContent = ok ? '✓' : '✗';

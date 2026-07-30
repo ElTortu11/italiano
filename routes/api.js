@@ -420,7 +420,21 @@ function ppA(pp) {
 }
 function ppE(pp) {
   const base = pp.replace(/o$/,'');
-  return t([`sono ${base}o`,`sei ${base}o`,`è ${base}o`,`siamo ${base}i`,`siete ${base}i`,`sono ${base}i`]);
+  return t([`sono ${base}o/a`,`sei ${base}o/a`,`è ${base}o/a`,`siamo ${base}i/e`,`siete ${base}i/e`,`sono ${base}i/e`]);
+}
+function expandForms(form) {
+  if (!form || !form.includes('/')) return [form.toLowerCase().trim()];
+  const parts = form.split(' ');
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (parts[i].includes('/')) {
+      const [base, sfx] = parts[i].split('/');
+      const stem = base.slice(0, base.length - sfx.length);
+      const a1 = [...parts]; a1[i] = base;
+      const a2 = [...parts]; a2[i] = stem + sfx;
+      return [a1.join(' ').toLowerCase(), a2.join(' ').toLowerCase()];
+    }
+  }
+  return [form.toLowerCase().trim()];
 }
 function regAre(s, pp, aux='avere') {
   const fs = s+'er';
@@ -498,7 +512,7 @@ const VERBS = {
     futuro: { io:'sarò', tu:'sarai', lui:'sarà', noi:'saremo', voi:'sarete', loro:'saranno' },
     condizionale: { io:'sarei', tu:'saresti', lui:'sarebbe', noi:'saremmo', voi:'sareste', loro:'sarebbero' },
     congiuntivo: { io:'sia', tu:'sia', lui:'sia', noi:'siamo', voi:'siate', loro:'siano' },
-    passato_prossimo: { io:'sono stato', tu:'sei stato', lui:'è stato', noi:'siamo stati', voi:'siete stati', loro:'sono stati' },
+    passato_prossimo: { io:'sono stato/a', tu:'sei stato/a', lui:'è stato/a', noi:'siamo stati/e', voi:'siete stati/e', loro:'sono stati/e' },
   },
   avere: {
     presente: { io:'ho', tu:'hai', lui:'ha', noi:'abbiamo', voi:'avete', loro:'hanno' },
@@ -522,7 +536,7 @@ const VERBS = {
     futuro: { io:'andrò', tu:'andrai', lui:'andrà', noi:'andremo', voi:'andrete', loro:'andranno' },
     condizionale: { io:'andrei', tu:'andresti', lui:'andrebbe', noi:'andremmo', voi:'andreste', loro:'andrebbero' },
     congiuntivo: { io:'vada', tu:'vada', lui:'vada', noi:'andiamo', voi:'andiate', loro:'vadano' },
-    passato_prossimo: { io:'sono andato', tu:'sei andato', lui:'è andato', noi:'siamo andati', voi:'siete andati', loro:'sono andati' },
+    passato_prossimo: { io:'sono andato/a', tu:'sei andato/a', lui:'è andato/a', noi:'siamo andati/e', voi:'siete andati/e', loro:'sono andati/e' },
   },
   venire: {
     presente: { io:'vengo', tu:'vieni', lui:'viene', noi:'veniamo', voi:'venite', loro:'vengono' },
@@ -530,7 +544,7 @@ const VERBS = {
     futuro: { io:'verrò', tu:'verrai', lui:'verrà', noi:'verremo', voi:'verrete', loro:'verranno' },
     condizionale: { io:'verrei', tu:'verresti', lui:'verrebbe', noi:'verremmo', voi:'verreste', loro:'verrebbero' },
     congiuntivo: { io:'venga', tu:'venga', lui:'venga', noi:'veniamo', voi:'veniate', loro:'vengano' },
-    passato_prossimo: { io:'sono venuto', tu:'sei venuto', lui:'è venuto', noi:'siamo venuti', voi:'siete venuti', loro:'sono venuti' },
+    passato_prossimo: { io:'sono venuto/a', tu:'sei venuto/a', lui:'è venuto/a', noi:'siamo venuti/e', voi:'siete venuti/e', loro:'sono venuti/e' },
   },
   potere: {
     presente: { io:'posso', tu:'puoi', lui:'può', noi:'possiamo', voi:'potete', loro:'possono' },
@@ -586,7 +600,7 @@ const VERBS = {
     futuro: { io:'starò', tu:'starai', lui:'starà', noi:'staremo', voi:'starete', loro:'staranno' },
     condizionale: { io:'starei', tu:'staresti', lui:'starebbe', noi:'staremmo', voi:'stareste', loro:'starebbero' },
     congiuntivo: { io:'stia', tu:'stia', lui:'stia', noi:'stiamo', voi:'stiate', loro:'stiano' },
-    passato_prossimo: { io:'sono stato', tu:'sei stato', lui:'è stato', noi:'siamo stati', voi:'siete stati', loro:'sono stati' },
+    passato_prossimo: { io:'sono stato/a', tu:'sei stato/a', lui:'è stato/a', noi:'siamo stati/e', voi:'siete stati/e', loro:'sono stati/e' },
   },
   uscire: {
     presente: { io:'esco', tu:'esci', lui:'esce', noi:'usciamo', voi:'uscite', loro:'escono' },
@@ -594,7 +608,7 @@ const VERBS = {
     futuro: { io:'uscirò', tu:'uscirai', lui:'uscirà', noi:'usciremo', voi:'uscirete', loro:'usciranno' },
     condizionale: { io:'uscirei', tu:'usciresti', lui:'uscirebbe', noi:'usciremmo', voi:'uscireste', loro:'uscirebbero' },
     congiuntivo: { io:'esca', tu:'esca', lui:'esca', noi:'usciamo', voi:'usciate', loro:'escano' },
-    passato_prossimo: { io:'sono uscito', tu:'sei uscito', lui:'è uscito', noi:'siamo usciti', voi:'siete usciti', loro:'sono usciti' },
+    passato_prossimo: { io:'sono uscito/a', tu:'sei uscito/a', lui:'è uscito/a', noi:'siamo usciti/e', voi:'siete usciti/e', loro:'sono usciti/e' },
   },
   leggere: {
     presente: { io:'leggo', tu:'leggi', lui:'legge', noi:'leggiamo', voi:'leggete', loro:'leggono' },
@@ -688,7 +702,7 @@ const VERBS = {
   },
   scegliere: {
     presente:     t(['scelgo','scegli','sceglie','scegliamo','scegliete','scelgono']),
-    imperfetto:   t(['sceglievo','sceglievi','sceglieva','scegliavamo','scegliavate','sceglievano']),
+    imperfetto:   t(['sceglievo','sceglievi','sceglieva','sceglievamo','sceglievate','sceglievano']),
     futuro:       t(['sceglierò','sceglierai','sceglierà','sceglieremo','sceglierete','sceglieranno']),
     condizionale: t(['sceglierei','sceglieresti','sceglierebbe','sceglieremmo','scegliereste','sceglierebbero']),
     congiuntivo:  t(['scelga','scelga','scelga','scegliamo','scegliate','scelgano']),
@@ -1075,7 +1089,7 @@ router.post('/conjugation/check', (req, res) => {
   const verbData = VERBS[verb];
   if (!verbData || !verbData[tense]) return res.status(400).json({ error: 'invalid verb/tense' });
   const correct_form = verbData[tense][person];
-  const is_correct = answer.trim().toLowerCase() === correct_form.toLowerCase() ? 1 : 0;
+  const is_correct = expandForms(correct_form).includes(answer.trim().toLowerCase()) ? 1 : 0;
   db.prepare('INSERT INTO conjugation_attempts(verb,tense,person,correct_form,user_answer,is_correct) VALUES(?,?,?,?,?,?)')
     .run(verb, tense, person, correct_form, answer, is_correct);
   res.json({ is_correct, correct_form, all_forms: verbData[tense] });
