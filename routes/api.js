@@ -1193,4 +1193,32 @@ router.get('/export', (req, res) => {
   res.json(data);
 });
 
+// ── Verb Scores ──────────────────────────────────────────────────────────────
+router.get('/verb-scores', (req, res) => {
+  const rows = db.prepare('SELECT verb, tense, best_correct, xp, attempts, last_practiced FROM verb_scores ORDER BY verb, tense').all();
+  res.json(rows);
+});
+
+router.post('/verb-scores', (req, res) => {
+  const { verb, tenseScores } = req.body;
+  if (!verb || !Array.isArray(tenseScores)) return res.status(400).json({ error: 'invalid' });
+  const upsert = db.prepare(`
+    INSERT INTO verb_scores (verb, tense, best_correct, xp, attempts, last_practiced)
+    VALUES (?, ?, ?, ?, 1, unixepoch())
+    ON CONFLICT(verb, tense) DO UPDATE SET
+      best_correct = MAX(best_correct, excluded.best_correct),
+      xp = xp + excluded.xp,
+      attempts = attempts + 1,
+      last_practiced = unixepoch()
+  `);
+  const txn = db.transaction((scores) => {
+    scores.forEach(({ tense, correct }) => {
+      if (!tense || correct == null) return;
+      upsert.run(verb, tense, correct, correct);
+    });
+  });
+  txn(tenseScores);
+  res.json({ ok: true });
+});
+
 module.exports = router;

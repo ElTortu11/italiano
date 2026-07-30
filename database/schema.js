@@ -156,6 +156,17 @@ function createSchema() {
       unlocked_at INTEGER
     );
 
+    CREATE TABLE IF NOT EXISTS verb_scores (
+      verb TEXT NOT NULL,
+      tense TEXT NOT NULL,
+      best_correct INTEGER DEFAULT 0,
+      xp INTEGER DEFAULT 0,
+      attempts INTEGER DEFAULT 0,
+      last_practiced INTEGER DEFAULT (unixepoch()),
+      PRIMARY KEY (verb, tense)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_verb_scores_verb ON verb_scores(verb);
     CREATE INDEX IF NOT EXISTS idx_flashcards_next_review ON flashcards(next_review);
     CREATE INDEX IF NOT EXISTS idx_flashcards_category ON flashcards(category_id);
     CREATE INDEX IF NOT EXISTS idx_vocabulary_category ON vocabulary_items(category_id);

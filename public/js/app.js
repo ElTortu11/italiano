@@ -1032,7 +1032,7 @@ const TENSE_HINTS = {
 };
 let conjState = { answered: false, streak: 0, correct: 0, total: 0, selectedTenses: [...ALL_TENSES] };
 const DRILL_TENSES = ['presente','passato_prossimo','imperfetto','futuro','condizionale','congiuntivo'];
-let drillState = { phase:'pick', verb:null, translation:'', conjugations:{}, tenses:[...DRILL_TENSES], tenseIndex:0, mistakes:[], reviewIndex:0, score:{correct:0,total:0}, verbList:[] };
+let drillState = { phase:'pick', verb:null, translation:'', conjugations:{}, tenses:[...DRILL_TENSES], tenseIndex:0, mistakes:[], reviewIndex:0, score:{correct:0,total:0}, tenseScores:[], verbList:[] };
 
 async function renderConjugation(el) {
   const verbs = await API.get('/conjugation/verbs');
@@ -1059,6 +1059,7 @@ async function renderConjugation(el) {
       <button class="tab-btn active" data-tab="practice">Pratica</button>
       <button class="tab-btn" data-tab="drill">Per verbo</button>
       <button class="tab-btn" data-tab="reference">Riferimento</button>
+      <button class="tab-btn" data-tab="scores">Punteggi</button>
     </div>
 
     <div id="conj-tab-content">
@@ -1086,8 +1087,11 @@ async function renderConjugation(el) {
         renderConjugationReference(el, verbs);
       } else if (tab === 'drill') {
         pillsCard.style.display = 'none';
-        drillState = { phase:'pick', verb:null, translation:'', conjugations:{}, tenses:[...DRILL_TENSES], tenseIndex:0, mistakes:[], reviewIndex:0, score:{correct:0,total:0}, verbList:verbs };
+        drillState = { phase:'pick', verb:null, translation:'', conjugations:{}, tenses:[...DRILL_TENSES], tenseIndex:0, mistakes:[], reviewIndex:0, score:{correct:0,total:0}, tenseScores:[], verbList:verbs };
         renderDrillTab(document.getElementById('conj-tab-content'), verbs);
+      } else if (tab === 'scores') {
+        pillsCard.style.display = 'none';
+        renderVerbScores(document.getElementById('conj-tab-content'));
       } else {
         pillsCard.style.display = '';
         loadConjugationExercise(el);
@@ -1363,7 +1367,7 @@ function renderDrillTense(area) {
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
         <div style="font-size:0.8rem;color:var(--text-muted)">${progress} — ${drillState.verb} (${drillState.translation})</div>
-        <div style="font-size:0.8rem;color:var(--text-muted)">✓ ${drillState.score.correct}/${drillState.score.total}</div>
+        <div style="font-size:0.8rem;color:var(--text-muted)" id="drill-score-display">✓ ${drillState.score.correct}/${drillState.score.total}</div>
       </div>
       <div style="font-weight:700;font-size:1.15rem;margin-bottom:4px">${TENSE_LABELS[tense]}</div>
       <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:16px">${TENSE_HINTS[tense]||''}</div>
@@ -1379,9 +1383,10 @@ function renderDrillTense(area) {
           </div>
         `).join('')}
       </div>
-      <div style="display:flex;gap-2;margin-top:16px;justify-content:flex-end" id="drill-btns">
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;flex-wrap:wrap" id="drill-btns">
         <button class="btn btn-primary" id="drill-check">Controlla</button>
         <button class="btn btn-outline" id="drill-show" style="display:none">Mostra risposte</button>
+        <button class="btn btn-outline" id="drill-retry" style="display:none">Riprova</button>
         <button class="btn btn-primary" id="drill-next" style="display:none">Avanti →</button>
       </div>
     </div>
@@ -1389,6 +1394,10 @@ function renderDrillTense(area) {
 
   const inputs = [...area.querySelectorAll('.drill-input')];
   inputs[0].focus();
+
+  let isLocked = false;
+  let pendingKey = null;
+
   inputs.forEach((inp, i) => {
     inp.addEventListener('keydown', e => {
       if (e.key === 'Enter') { e.preventDefault(); i < inputs.length - 1 ? inputs[i+1].focus() : doCheck(); }
@@ -1406,16 +1415,30 @@ function renderDrillTense(area) {
       inp.style.borderColor = ok ? 'var(--accent)' : '#ef4444';
       inp.disabled = true;
       area.querySelector(`.drill-result[data-person="${person}"]`).textContent = ok ? '✓' : '✗';
-      drillState.score.total++;
-      if (ok) { drillState.score.correct++; correct++; }
-      else { drillState.mistakes.push({ tense, person, correct: forms[person], typed: inp.value }); }
+      if (!isLocked) {
+        drillState.score.total++;
+        if (ok) { drillState.score.correct++; correct++; }
+        else { drillState.mistakes.push({ tense, person, correct: forms[person], typed: inp.value }); }
+      } else {
+        if (ok) correct++;
+      }
     });
+    if (!isLocked) {
+      drillState.tenseScores.push({ tense, correct, total: inputs.length });
+      isLocked = true;
+    }
+    const scoreEl = area.querySelector('#drill-score-display');
+    if (scoreEl) scoreEl.textContent = `✓ ${drillState.score.correct}/${drillState.score.total}`;
+
     document.getElementById('drill-check').style.display = 'none';
-    if (correct < inputs.length) document.getElementById('drill-show').style.display = 'inline-flex';
+    if (correct < inputs.length) {
+      document.getElementById('drill-show').style.display = 'inline-flex';
+      document.getElementById('drill-retry').style.display = 'inline-flex';
+    }
     document.getElementById('drill-next').style.display = 'inline-flex';
 
-    const onKey = e => { if (e.key === 'ArrowRight' || e.key === 'Enter') { document.removeEventListener('keydown', onKey); goNext(); } };
-    setTimeout(() => document.addEventListener('keydown', onKey), 50);
+    pendingKey = e => { if (e.key === 'ArrowRight' || e.key === 'Enter') { document.removeEventListener('keydown', pendingKey); pendingKey = null; goNext(); } };
+    setTimeout(() => document.addEventListener('keydown', pendingKey), 50);
   }
 
   function goNext() {
@@ -1432,6 +1455,20 @@ function renderDrillTense(area) {
         inp.style.borderColor = '#f59e0b';
       }
     });
+  });
+  document.getElementById('drill-retry').addEventListener('click', () => {
+    if (pendingKey) { document.removeEventListener('keydown', pendingKey); pendingKey = null; }
+    inputs.forEach(inp => {
+      inp.value = '';
+      inp.style.borderColor = '';
+      inp.disabled = false;
+      area.querySelector(`.drill-result[data-person="${inp.dataset.person}"]`).textContent = '';
+    });
+    document.getElementById('drill-check').style.display = 'inline-flex';
+    document.getElementById('drill-show').style.display = 'none';
+    document.getElementById('drill-retry').style.display = 'none';
+    document.getElementById('drill-next').style.display = 'none';
+    inputs[0].focus();
   });
   document.getElementById('drill-next').addEventListener('click', goNext);
 }
@@ -1495,6 +1532,9 @@ function renderDrillDone(area) {
   const { correct, total } = drillState.score;
   const pct = total > 0 ? Math.round(correct/total*100) : 0;
   const emoji = pct >= 90 ? '🎉' : pct >= 70 ? '👍' : '💪';
+  if (drillState.tenseScores.length > 0) {
+    API.post('/verb-scores', { verb: drillState.verb, tenseScores: drillState.tenseScores }).catch(() => {});
+  }
   area.innerHTML = `
     <div class="card" style="text-align:center;padding:32px 24px">
       <div style="font-size:2.5rem;margin-bottom:8px">${emoji}</div>
@@ -1528,6 +1568,72 @@ function renderDrillDone(area) {
     drillState.phase = 'pick';
     renderDrillTab(null, drillState.verbList || []);
   });
+}
+
+async function renderVerbScores(area) {
+  area.innerHTML = `<div class="loading"><div class="spinner"></div> Caricamento...</div>`;
+  const rows = await API.get('/verb-scores').catch(() => []);
+
+  // Aggregate by verb
+  const byVerb = {};
+  rows.forEach(r => {
+    if (!byVerb[r.verb]) byVerb[r.verb] = { bestTotal: 0, xpTotal: 0, tenses: {} };
+    byVerb[r.verb].tenses[r.tense] = { best: r.best_correct, xp: r.xp };
+    byVerb[r.verb].bestTotal += r.best_correct;
+    byVerb[r.verb].xpTotal += r.xp;
+  });
+
+  const verbEntries = Object.entries(byVerb).sort((a, b) => b[1].xpTotal - a[1].xpTotal);
+  const totalXP = verbEntries.reduce((s, [, v]) => s + v.xpTotal, 0);
+  const totalBest = verbEntries.reduce((s, [, v]) => s + v.bestTotal, 0);
+  const maxPossibleAll = verbEntries.length * 36;
+
+  if (verbEntries.length === 0) {
+    area.innerHTML = `<div class="card" style="text-align:center;padding:40px 24px">
+      <div style="font-size:2.5rem;margin-bottom:12px">📚</div>
+      <div style="font-weight:600;font-size:1.1rem;margin-bottom:6px">Nessun verbo praticato ancora</div>
+      <div style="color:var(--text-muted);font-size:0.9rem">Completa un esercizio "Per verbo" per iniziare a guadagnare punti</div>
+    </div>`;
+    return;
+  }
+
+  const TENSE_SHORT = { presente:'Pres.', imperfetto:'Imperf.', futuro:'Fut.', condizionale:'Cond.', congiuntivo:'Cong.', passato_prossimo:'Pass.' };
+
+  area.innerHTML = `
+    <div class="card mb-3" style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;gap:16px;flex-wrap:wrap">
+      <div>
+        <div style="font-size:2rem;font-weight:800;color:var(--accent);line-height:1">${totalXP} XP</div>
+        <div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px">${verbEntries.length} / 100 verbi praticati</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:1rem;font-weight:700">${totalBest} / ${maxPossibleAll} pt</div>
+        <div style="font-size:0.8rem;color:var(--text-muted)">punteggio massimo raggiunto</div>
+        <div style="font-size:0.75rem;color:var(--text-muted)">max 36 pt per verbo (6 tempi × 6 forme)</div>
+      </div>
+    </div>
+    <div id="verb-scores-list">
+      ${verbEntries.map(([verb, data]) => {
+        const tenseCount = Object.keys(data.tenses).length;
+        const maxPossible = tenseCount * 6;
+        const pct = maxPossible > 0 ? Math.round(data.bestTotal / maxPossible * 100) : 0;
+        const barColor = pct >= 90 ? 'var(--accent)' : pct >= 60 ? '#f59e0b' : '#ef4444';
+        return `
+        <div class="card mb-2" style="padding:12px 16px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+            <div style="font-weight:600">${verb}</div>
+            <div style="font-size:0.85rem;font-weight:700;color:var(--accent)">${data.xpTotal} XP</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <div style="font-size:0.78rem;color:var(--text-muted)">${Object.entries(data.tenses).map(([t, s]) => `${TENSE_SHORT[t]||t} ${s.best}/6`).join(' · ')}</div>
+            <div style="font-size:0.8rem;font-weight:600">${data.bestTotal}/${maxPossible}</div>
+          </div>
+          <div style="height:7px;background:var(--surface-2);border-radius:99px;overflow:hidden">
+            <div style="height:100%;width:${pct}%;background:${barColor};border-radius:99px;transition:width 0.6s ease"></div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
 }
 
 function renderConjugationReference(el, verbs) {
