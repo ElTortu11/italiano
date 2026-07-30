@@ -1449,10 +1449,12 @@ function renderDrillTense(area) {
   document.getElementById('drill-check').addEventListener('click', doCheck);
   document.getElementById('drill-show').addEventListener('click', () => {
     inputs.forEach(inp => {
-      if (inp.disabled && inp.style.borderColor.includes('4444')) {
-        const person = inp.dataset.person;
+      const person = inp.dataset.person;
+      const resultEl = area.querySelector(`.drill-result[data-person="${person}"]`);
+      if (inp.disabled && resultEl && resultEl.textContent === '✗') {
         inp.value = forms[person] || '';
         inp.style.borderColor = '#f59e0b';
+        resultEl.textContent = '→';
       }
     });
   });

@@ -420,8 +420,7 @@ function ppA(pp) {
 }
 function ppE(pp) {
   const base = pp.replace(/o$/,'');
-  return t(['sono','sei','è','siamo','siete','sono'].map((a,i) =>
-    `${a} ${base}${['o/a','o/a','o','i/e','i/e','i/e'][i]}`));
+  return t([`sono ${base}o`,`sei ${base}o`,`è ${base}o`,`siamo ${base}i`,`siete ${base}i`,`sono ${base}i`]);
 }
 function regAre(s, pp, aux='avere') {
   const fs = s+'er';
@@ -499,7 +498,7 @@ const VERBS = {
     futuro: { io:'sarò', tu:'sarai', lui:'sarà', noi:'saremo', voi:'sarete', loro:'saranno' },
     condizionale: { io:'sarei', tu:'saresti', lui:'sarebbe', noi:'saremmo', voi:'sareste', loro:'sarebbero' },
     congiuntivo: { io:'sia', tu:'sia', lui:'sia', noi:'siamo', voi:'siate', loro:'siano' },
-    passato_prossimo: { io:'sono stato/a', tu:'sei stato/a', lui:'è stato', noi:'siamo stati/e', voi:'siete stati/e', loro:'sono stati/e' },
+    passato_prossimo: { io:'sono stato', tu:'sei stato', lui:'è stato', noi:'siamo stati', voi:'siete stati', loro:'sono stati' },
   },
   avere: {
     presente: { io:'ho', tu:'hai', lui:'ha', noi:'abbiamo', voi:'avete', loro:'hanno' },
@@ -523,7 +522,7 @@ const VERBS = {
     futuro: { io:'andrò', tu:'andrai', lui:'andrà', noi:'andremo', voi:'andrete', loro:'andranno' },
     condizionale: { io:'andrei', tu:'andresti', lui:'andrebbe', noi:'andremmo', voi:'andreste', loro:'andrebbero' },
     congiuntivo: { io:'vada', tu:'vada', lui:'vada', noi:'andiamo', voi:'andiate', loro:'vadano' },
-    passato_prossimo: { io:'sono andato/a', tu:'sei andato/a', lui:'è andato', noi:'siamo andati/e', voi:'siete andati/e', loro:'sono andati/e' },
+    passato_prossimo: { io:'sono andato', tu:'sei andato', lui:'è andato', noi:'siamo andati', voi:'siete andati', loro:'sono andati' },
   },
   venire: {
     presente: { io:'vengo', tu:'vieni', lui:'viene', noi:'veniamo', voi:'venite', loro:'vengono' },
@@ -531,7 +530,7 @@ const VERBS = {
     futuro: { io:'verrò', tu:'verrai', lui:'verrà', noi:'verremo', voi:'verrete', loro:'verranno' },
     condizionale: { io:'verrei', tu:'verresti', lui:'verrebbe', noi:'verremmo', voi:'verreste', loro:'verrebbero' },
     congiuntivo: { io:'venga', tu:'venga', lui:'venga', noi:'veniamo', voi:'veniate', loro:'vengano' },
-    passato_prossimo: { io:'sono venuto/a', tu:'sei venuto/a', lui:'è venuto', noi:'siamo venuti/e', voi:'siete venuti/e', loro:'sono venuti/e' },
+    passato_prossimo: { io:'sono venuto', tu:'sei venuto', lui:'è venuto', noi:'siamo venuti', voi:'siete venuti', loro:'sono venuti' },
   },
   potere: {
     presente: { io:'posso', tu:'puoi', lui:'può', noi:'possiamo', voi:'potete', loro:'possono' },
@@ -587,7 +586,7 @@ const VERBS = {
     futuro: { io:'starò', tu:'starai', lui:'starà', noi:'staremo', voi:'starete', loro:'staranno' },
     condizionale: { io:'starei', tu:'staresti', lui:'starebbe', noi:'staremmo', voi:'stareste', loro:'starebbero' },
     congiuntivo: { io:'stia', tu:'stia', lui:'stia', noi:'stiamo', voi:'stiate', loro:'stiano' },
-    passato_prossimo: { io:'sono stato/a', tu:'sei stato/a', lui:'è stato', noi:'siamo stati/e', voi:'siete stati/e', loro:'sono stati/e' },
+    passato_prossimo: { io:'sono stato', tu:'sei stato', lui:'è stato', noi:'siamo stati', voi:'siete stati', loro:'sono stati' },
   },
   uscire: {
     presente: { io:'esco', tu:'esci', lui:'esce', noi:'usciamo', voi:'uscite', loro:'escono' },
@@ -595,7 +594,7 @@ const VERBS = {
     futuro: { io:'uscirò', tu:'uscirai', lui:'uscirà', noi:'usciremo', voi:'uscirete', loro:'usciranno' },
     condizionale: { io:'uscirei', tu:'usciresti', lui:'uscirebbe', noi:'usciremmo', voi:'uscireste', loro:'uscirebbero' },
     congiuntivo: { io:'esca', tu:'esca', lui:'esca', noi:'usciamo', voi:'usciate', loro:'escano' },
-    passato_prossimo: { io:'sono uscito/a', tu:'sei uscito/a', lui:'è uscito', noi:'siamo usciti/e', voi:'siete usciti/e', loro:'sono usciti/e' },
+    passato_prossimo: { io:'sono uscito', tu:'sei uscito', lui:'è uscito', noi:'siamo usciti', voi:'siete usciti', loro:'sono usciti' },
   },
   leggere: {
     presente: { io:'leggo', tu:'leggi', lui:'legge', noi:'leggiamo', voi:'leggete', loro:'leggono' },
@@ -769,7 +768,7 @@ const VERBS = {
   },
   rimanere: {
     presente:     t(['rimango','rimani','rimane','rimaniamo','rimanete','rimangono']),
-    imperfetto:   t(['rimanevo','rimanevi','rimaneva','rimenevamo','rimanevate','rimanevano']),
+    imperfetto:   t(['rimanevo','rimanevi','rimaneva','rimanevamo','rimanevate','rimanevano']),
     futuro:       t(['rimarrò','rimarrai','rimarrà','rimarremo','rimarrete','rimarranno']),
     condizionale: t(['rimarrei','rimarresti','rimarrebbe','rimarremmo','rimarreste','rimarrebbero']),
     congiuntivo:  t(['rimanga','rimanga','rimanga','rimaniamo','rimaniate','rimangano']),
