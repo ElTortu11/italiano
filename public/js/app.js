@@ -57,18 +57,18 @@ applyTheme(currentTheme);
 
 // ── Router ────────────────────────────────────────────────────────────────
 const ROUTES = {
-  dashboard: { title:'Panel', render: renderDashboard },
-  session: { title:'Sesión diaria', render: renderSession },
-  flashcards: { title:'Flashcards', render: renderFlashcards },
-  vocabulary: { title:'Vocabulario', render: renderVocabulary },
-  conjugation: { title:'Conjugaciones', render: renderConjugation },
-  grammar: { title:'Gramática', render: renderGrammar },
-  writing: { title:'Escritura', render: renderWriting },
-  reading: { title:'Lectura', render: renderReading },
-  errors: { title:'Cuaderno de errores', render: renderErrors },
-  progress: { title:'Progreso', render: renderProgress },
-  rewards: { title:'Recompensas', render: renderRewards },
-  settings: { title:'Configuración', render: renderSettings },
+  dashboard: { title:'Bacheca', render: renderDashboard },
+  session: { title:'Sessione del giorno', render: renderSession },
+  flashcards: { title:'Flashcard', render: renderFlashcards },
+  vocabulary: { title:'Vocabolario', render: renderVocabulary },
+  conjugation: { title:'Coniugazioni', render: renderConjugation },
+  grammar: { title:'Grammatica', render: renderGrammar },
+  writing: { title:'Scrittura', render: renderWriting },
+  reading: { title:'Lettura', render: renderReading },
+  errors: { title:'Quaderno degli errori', render: renderErrors },
+  progress: { title:'Progressi', render: renderProgress },
+  rewards: { title:'Premi', render: renderRewards },
+  settings: { title:'Impostazioni', render: renderSettings },
 };
 
 let currentRoute = 'dashboard';
@@ -159,10 +159,10 @@ function navigate(route) {
   });
 
   const content = document.getElementById('app-content');
-  content.innerHTML = `<div class="loading"><div class="spinner"></div> Cargando...</div>`;
+  content.innerHTML = `<div class="loading"><div class="spinner"></div> Caricamento...</div>`;
 
   ROUTES[route].render(content).catch(err => {
-    content.innerHTML = `<div class="alert alert-error">Error al cargar: ${err.message}</div>`;
+    content.innerHTML = `<div class="alert alert-error">Errore: ${err.message}</div>`;
   });
 }
 
@@ -189,11 +189,11 @@ const fmt = {
   num: n => (n||0).toLocaleString(),
   interval: secs => {
     const d = Math.round(secs / 86400);
-    if (d <= 0) return 'hoy';
-    if (d === 1) return 'mañana';
-    if (d < 7) return `en ${d} días`;
-    if (d < 30) return `en ${Math.round(d/7)} sem.`;
-    return `en ${Math.round(d/30)} mes.`;
+    if (d <= 0) return 'oggi';
+    if (d === 1) return 'domani';
+    if (d < 7) return `tra ${d} giorni`;
+    if (d < 30) return `tra ${Math.round(d/7)} sett.`;
+    return `tra ${Math.round(d/30)} mes.`;
   },
 };
 
@@ -217,32 +217,32 @@ async function renderDashboard(el) {
     <div class="section-header">
       <div>
         <div class="section-title">¡Buongiorno! 👋</div>
-        <div class="section-sub">Objetivo: ${data.goalLevel} · Meta diaria: ${data.dailyGoalMinutes} minutos</div>
+        <div class="section-sub">Obiettivo: ${data.goalLevel} · Obiettivo giornaliero: ${data.dailyGoalMinutes} minuti</div>
       </div>
-      <button class="btn btn-primary" data-route="session">Iniciar sesión →</button>
+      <button class="btn btn-primary" data-route="session">Inizia sessione →</button>
     </div>
 
     <!-- Quick stats -->
     <div class="grid-4 mb-4">
       <div class="stat-tile stat-tile-accent">
-        <div class="stat-tile-label">Racha actual</div>
+        <div class="stat-tile-label">Serie attuale</div>
         <div class="stat-tile-value">🔥 ${data.streak}</div>
-        <div class="stat-tile-sub">Mejor: ${data.bestStreak} días</div>
+        <div class="stat-tile-sub">Migliore: ${data.bestStreak} giorni</div>
       </div>
       <div class="stat-tile">
-        <div class="stat-tile-label">Palabras aprendidas</div>
+        <div class="stat-tile-label">Parole imparate</div>
         <div class="stat-tile-value">${fmt.num(data.learnedWords)}</div>
-        <div class="stat-tile-sub">de ${fmt.num(data.totalWords)} total</div>
+        <div class="stat-tile-sub">di ${fmt.num(data.totalWords)} totali</div>
       </div>
       <div class="stat-tile ${data.dueCards > 0 ? 'stat-tile-gold' : ''}">
-        <div class="stat-tile-label">Repasos pendientes</div>
+        <div class="stat-tile-label">Ripetizioni in sospeso</div>
         <div class="stat-tile-value">${data.dueCards}</div>
-        <div class="stat-tile-sub">flashcards vencidas</div>
+        <div class="stat-tile-sub">flashcard in scadenza</div>
       </div>
       <div class="stat-tile">
-        <div class="stat-tile-label">Hoy estudiado</div>
+        <div class="stat-tile-label">Studiato oggi</div>
         <div class="stat-tile-value">${Math.round(data.todayMinutes)}min</div>
-        <div class="stat-tile-sub">Meta: ${data.dailyGoalMinutes} min</div>
+        <div class="stat-tile-sub">Obiettivo: ${data.dailyGoalMinutes} min</div>
       </div>
     </div>
 
@@ -250,15 +250,15 @@ async function renderDashboard(el) {
     <div class="card mb-4">
       <div class="card-header">
         <div>
-          <div class="card-title">Meta de hoy</div>
-          <div class="card-subtitle">${data.dailyGoalMinutes} minutos · ${goalPct}% completado</div>
+          <div class="card-title">Obiettivo di oggi</div>
+          <div class="card-subtitle">${data.dailyGoalMinutes} minuti · ${goalPct}% completato</div>
         </div>
-        ${data.goalMet ? '<span class="badge badge-green">✓ Meta cumplida</span>' : ''}
+        ${data.goalMet ? '<span class="badge badge-green">✓ Obiettivo raggiunto</span>' : ''}
       </div>
       ${progressBar(goalPct)}
       <div class="flex justify-between mt-2 text-xs text-muted">
-        <span>${Math.round(data.todayMinutes)} min estudiados</span>
-        <span>${data.todayCards} flashcards repasadas</span>
+        <span>${Math.round(data.todayMinutes)} min studiati</span>
+        <span>${data.todayCards} flashcard ripetute</span>
       </div>
     </div>
 
@@ -266,8 +266,8 @@ async function renderDashboard(el) {
       <!-- Weak categories -->
       <div class="card">
         <div class="card-header">
-          <div class="card-title">Áreas débiles</div>
-          <button class="btn btn-sm btn-ghost" data-route="progress">Ver todo</button>
+          <div class="card-title">Aree deboli</div>
+          <button class="btn btn-sm btn-ghost" data-route="progress">Vedi tutto</button>
         </div>
         ${data.weakCategories.length ? data.weakCategories.map(c => `
           <div class="flex items-center gap-3 mb-3">
@@ -279,34 +279,34 @@ async function renderDashboard(el) {
               </div>
               ${progressBar(c.acc ? fmt.pct(c.acc) : 0)}
             </div>
-          </div>`).join('') : '<div class="text-muted text-sm">¡Aún no hay datos suficientes!</div>'}
+          </div>`).join('') : '<div class="text-muted text-sm">Ancora pochi dati!</div>'}
       </div>
 
       <!-- Recent errors -->
       <div class="card">
         <div class="card-header">
-          <div class="card-title">Errores recientes</div>
-          <button class="btn btn-sm btn-ghost" data-route="errors">Ver cuaderno</button>
+          <div class="card-title">Errori recenti</div>
+          <button class="btn btn-sm btn-ghost" data-route="errors">Vedi quaderno</button>
         </div>
         ${data.recentErrors.length ? data.recentErrors.map(e => `
           <div class="mb-3 pb-3 border-b" style="border-bottom:1px solid var(--border)">
             <div class="text-sm italic text-red">${e.original_text.substring(0,60)}${e.original_text.length>60?'…':''}</div>
             <div class="text-xs text-muted mt-1">${e.corrected_text ? '→ '+e.corrected_text.substring(0,50) : ''}</div>
-          </div>`).join('') : '<div class="text-muted text-sm">¡Sin errores registrados todavía!</div>'}
+          </div>`).join('') : '<div class="text-muted text-sm">Nessun errore ancora!</div>'}
       </div>
     </div>
 
     <!-- Quick actions -->
     <div class="card">
-      <div class="card-title mb-4">Acceso rápido</div>
+      <div class="card-title mb-4">Accesso rapido</div>
       <div class="grid-3">
         ${[
-          { route:'flashcards', icon:'🗃️', label:'Flashcards', sub: data.dueCards+' pendientes' },
-          { route:'conjugation', icon:'⚡', label:'Conjugar', sub:'Práctica rápida' },
-          { route:'vocabulary', icon:'📖', label:'Vocabulario', sub:'Explorar categorías' },
-          { route:'writing', icon:'✍️', label:'Escribir', sub:'Redacción libre' },
-          { route:'grammar', icon:'📐', label:'Gramática', sub:'Reglas y ejercicios' },
-          { route:'errors', icon:'⚠️', label:'Errores', sub:'Repasar y corregir' },
+          { route:'flashcards', icon:'🗃️', label:'Flashcard', sub: data.dueCards+' in sospeso' },
+          { route:'conjugation', icon:'⚡', label:'Coniugare', sub:'Pratica veloce' },
+          { route:'vocabulary', icon:'📖', label:'Vocabolario', sub:'Esplora categorie' },
+          { route:'writing', icon:'✍️', label:'Scrittura', sub:'Composizione libera' },
+          { route:'grammar', icon:'📐', label:'Grammatica', sub:'Regole ed esercizi' },
+          { route:'errors', icon:'⚠️', label:'Errori', sub:'Ripassare e correggere' },
         ].map(a => `
           <button class="card" style="text-align:left;cursor:pointer;border-color:var(--border)" data-route="${a.route}">
             <div style="font-size:1.5rem;margin-bottom:6px">${a.icon}</div>
@@ -332,56 +332,56 @@ async function renderSession(el) {
   el.innerHTML = `
     <div class="section-header">
       <div>
-        <div class="section-title">Sesión diaria</div>
-        <div class="section-sub">${new Date().toLocaleDateString('es', { weekday:'long', day:'numeric', month:'long' })}</div>
+        <div class="section-title">Sessione del giorno</div>
+        <div class="section-sub">${new Date().toLocaleDateString('it', { weekday:'long', day:'numeric', month:'long' })}</div>
       </div>
     </div>
 
     <div class="grid-2 mb-4">
       <div class="stat-tile ${dueCount > 0 ? 'stat-tile-gold' : ''}">
-        <div class="stat-tile-label">Flashcards vencidas</div>
+        <div class="stat-tile-label">Flashcard in scadenza</div>
         <div class="stat-tile-value">${dueCount}</div>
-        <div class="stat-tile-sub">Necesitan repaso ahora</div>
+        <div class="stat-tile-sub">Necessitano ripasso ora</div>
       </div>
       <div class="stat-tile">
-        <div class="stat-tile-label">Palabras nuevas disponibles</div>
+        <div class="stat-tile-label">Parole nuove disponibili</div>
         <div class="stat-tile-value">${newCount}</div>
-        <div class="stat-tile-sub">Sin estudiar todavía</div>
+        <div class="stat-tile-sub">Ancora da studiare</div>
       </div>
     </div>
 
     <div class="card mb-4">
-      <div class="card-title mb-2">Plan de sesión sugerido</div>
-      <div class="text-sm text-muted mb-4">Basado en tus datos de progreso y objetivos</div>
+      <div class="card-title mb-2">Piano di sessione suggerito</div>
+      <div class="text-sm text-muted mb-4">Basato sui tuoi dati di progresso e obiettivi</div>
       <div id="session-plan">
         ${buildSessionPlan(dueCount, newCount)}
       </div>
     </div>
 
     <div class="card mb-4">
-      <div class="card-title mb-4">Inicio rápido</div>
+      <div class="card-title mb-4">Avvio rapido</div>
       <div class="grid-2">
         <button class="btn btn-primary btn-lg btn-block" id="start-flashcards">
-          🗃️ Repasar flashcards ${dueCount > 0 ? `(${dueCount})` : ''}
+          🗃️ Ripassa flashcard ${dueCount > 0 ? `(${dueCount})` : ''}
         </button>
         <button class="btn btn-outline btn-lg btn-block" id="start-conjugation">
-          ⚡ Práctica de conjugación
+          ⚡ Pratica di coniugazione
         </button>
         <button class="btn btn-outline btn-lg btn-block" id="start-vocab">
-          📖 Vocabulario nuevo
+          📖 Vocabolario nuovo
         </button>
         <button class="btn btn-outline btn-lg btn-block" id="start-writing">
-          ✍️ Ejercicio de escritura
+          ✍️ Esercizio di scrittura
         </button>
       </div>
     </div>
 
     <div class="card">
-      <div class="card-title mb-2">Metodología de esta sesión</div>
+      <div class="card-title mb-2">Metodologia di questa sessione</div>
       <div class="text-sm text-muted" style="line-height:1.8">
-        <strong>SM-2</strong> — El algoritmo de repetición espaciada programa cada flashcard según tu rendimiento.<br>
-        <strong>70% input · 15% SRS · 15% producción</strong> — Proporción óptima para B1→C1.<br>
-        <strong>Constancia</strong> — 30–45 min diarios supera ampliamente a sesiones largas esporádicas.
+        <strong>SM-2</strong> — L'algoritmo di ripetizione spaziata programma ogni flashcard in base alle tue prestazioni.<br>
+        <strong>70% input · 15% SRS · 15% produzione</strong> — Proporzione ottimale per B1→C1.<br>
+        <strong>Costanza</strong> — 30–45 min al giorno supera di gran lunga le sessioni lunghe sporadiche.
       </div>
     </div>
   `;
@@ -394,11 +394,11 @@ async function renderSession(el) {
 
 function buildSessionPlan(due, newW) {
   const steps = [];
-  if (due > 0) steps.push({ icon:'🗃️', label:`Repasar ${Math.min(due, 30)} flashcards vencidas`, mins:10, route:'flashcards' });
-  if (newW > 0) steps.push({ icon:'✨', label:`Aprender ${Math.min(newW, 15)} palabras nuevas`, mins:10, route:'flashcards' });
-  steps.push({ icon:'⚡', label:'5 ejercicios de conjugación', mins:5, route:'conjugation' });
-  steps.push({ icon:'✍️', label:'Escribir 80–120 palabras en italiano', mins:10, route:'writing' });
-  steps.push({ icon:'⚠️', label:'Repasar 3 errores del cuaderno', mins:5, route:'errors' });
+  if (due > 0) steps.push({ icon:'🗃️', label:`Ripassa ${Math.min(due, 30)} flashcard in scadenza`, mins:10, route:'flashcards' });
+  if (newW > 0) steps.push({ icon:'✨', label:`Impara ${Math.min(newW, 15)} parole nuove`, mins:10, route:'flashcards' });
+  steps.push({ icon:'⚡', label:'5 esercizi di coniugazione', mins:5, route:'conjugation' });
+  steps.push({ icon:'✍️', label:'Scrivi 80–120 parole in italiano', mins:10, route:'writing' });
+  steps.push({ icon:'⚠️', label:'Ripassa 3 errori del quaderno', mins:5, route:'errors' });
   const total = steps.reduce((s, x) => s + x.mins, 0);
   return `
     ${steps.map((s, i) => `
@@ -409,8 +409,8 @@ function buildSessionPlan(due, newW) {
         <span class="text-xs text-muted">${s.mins}min</span>
       </div>`).join('')}
     <div class="flex justify-between text-sm mt-2">
-      <span class="text-muted">Duración estimada</span>
-      <span class="font-medium text-accent">${total} minutos</span>
+      <span class="text-muted">Durata stimata</span>
+      <span class="font-medium text-accent">${total} minuti</span>
     </div>
   `;
 }
@@ -421,31 +421,31 @@ function buildSessionPlan(due, newW) {
 let fcState = { cards: [], index: 0, flipped: false, reviewed: 0, correct: 0, mode: 'due', typingMode: false, pendingCategoryId: null, pendingCategoryName: '' };
 
 function showModeModal(el, tab) {
-  showModal('¿Cómo quieres estudiar?', `
+  showModal('Come vuoi studiare?', `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:4px 0">
       <div style="text-align:center;padding:24px 16px;border:1.5px solid var(--border);border-radius:12px">
         <div style="font-size:2.8rem">🃏</div>
-        <div style="font-weight:700;margin-top:10px;font-size:1rem">Clásico</div>
-        <div style="font-size:0.8rem;color:var(--text-muted);margin-top:6px;line-height:1.4">Voltea la tarjeta y autoevalúate</div>
+        <div style="font-weight:700;margin-top:10px;font-size:1rem">Classico</div>
+        <div style="font-size:0.8rem;color:var(--text-muted);margin-top:6px;line-height:1.4">Gira la carta e autovalutati</div>
       </div>
       <div style="text-align:center;padding:24px 16px;border:1.5px solid var(--border);border-radius:12px">
         <div style="font-size:2.8rem">✍️</div>
-        <div style="font-weight:700;margin-top:10px;font-size:1rem">Escritura</div>
-        <div style="font-size:0.8rem;color:var(--text-muted);margin-top:6px;line-height:1.4">Ves el español → escribe en italiano con artículo</div>
+        <div style="font-weight:700;margin-top:10px;font-size:1rem">Scrittura</div>
+        <div style="font-size:0.8rem;color:var(--text-muted);margin-top:6px;line-height:1.4">Vedi lo spagnolo → scrivi in italiano con l'articolo</div>
       </div>
     </div>
   `, [
-    { label: '🃏 Clásico', cls: 'btn-outline', action: () => {
+    { label: '🃏 Classico', cls: 'btn-outline', action: () => {
       fcState.typingMode = false;
       closeModal();
       loadFlashcards(el, tab);
-      document.getElementById('fc-mode-label') && (document.getElementById('fc-mode-label').textContent = '🃏 Clásico');
+      document.getElementById('fc-mode-label') && (document.getElementById('fc-mode-label').textContent = '🃏 Classico');
     }},
-    { label: '✍️ Escritura', cls: 'btn-primary', action: () => {
+    { label: '✍️ Scrittura', cls: 'btn-primary', action: () => {
       fcState.typingMode = true;
       closeModal();
       loadFlashcards(el, tab);
-      document.getElementById('fc-mode-label') && (document.getElementById('fc-mode-label').textContent = '✍️ Escritura');
+      document.getElementById('fc-mode-label') && (document.getElementById('fc-mode-label').textContent = '✍️ Scrittura');
     }},
   ]);
 }
@@ -454,21 +454,21 @@ async function renderFlashcards(el) {
   el.innerHTML = `
     <div class="section-header">
       <div>
-        <div class="section-title">Flashcards</div>
-        <div class="section-sub">Repetición espaciada SM-2</div>
+        <div class="section-title">Flashcard</div>
+        <div class="section-sub">Ripetizione spaziata SM-2</div>
       </div>
       <div class="flex gap-2">
         <button class="btn btn-outline btn-sm" id="fc-mode-change">
-          <span id="fc-mode-label">${fcState.typingMode ? '✍️ Escritura' : '🃏 Clásico'}</span> ▾
+          <span id="fc-mode-label">${fcState.typingMode ? '✍️ Scrittura' : '🃏 Classico'}</span> ▾
         </button>
-        <button class="btn btn-outline btn-sm" id="fc-add-btn">+ Nueva tarjeta</button>
+        <button class="btn btn-outline btn-sm" id="fc-add-btn">+ Nuova scheda</button>
       </div>
     </div>
 
     <div class="tabs">
-      <button class="tab-btn active" data-mode="due">Vencidas</button>
-      <button class="tab-btn" data-mode="new">Nuevas</button>
-      <button class="tab-btn" data-mode="all">Todas</button>
+      <button class="tab-btn active" data-mode="due">In scadenza</button>
+      <button class="tab-btn" data-mode="new">Nuove</button>
+      <button class="tab-btn" data-mode="all">Tutte</button>
       <button class="tab-btn" data-mode="verbi">Verbi</button>
     </div>
 
@@ -521,8 +521,8 @@ async function loadFlashcards(el, mode, catId = null) {
 
     if (!cards.length) {
       const msg = mode === 'due'
-        ? '¡Sin repasos pendientes! Vuelve mañana o estudia tarjetas nuevas.'
-        : '¡Has estudiado todas las palabras disponibles!';
+        ? 'Nessun ripasso in sospeso! Torna domani o studia nuove schede.'
+        : 'Hai studiato tutte le parole disponibili!';
       container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🎉</div><div class="empty-state-title">${msg}</div></div>`;
       return;
     }
@@ -563,8 +563,8 @@ function renderVerbFlashcards(container, verbs) {
         </div>
       </div>
       <div class="flex gap-2 justify-center mt-4">
-        <button class="btn btn-outline" id="vf-prev" ${idx===0?'disabled':''}>← Anterior</button>
-        <button class="btn btn-primary" id="vf-next">${idx < verbs.length-1 ? 'Siguiente →' : 'Terminare ✓'}</button>
+        <button class="btn btn-outline" id="vf-prev" ${idx===0?'disabled':''}>← Indietro</button>
+        <button class="btn btn-primary" id="vf-next">${idx < verbs.length-1 ? 'Avanti →' : 'Terminare ✓'}</button>
       </div>`;
     document.getElementById('fc-card').addEventListener('click', () => {
       if (!flipped) { document.getElementById('fc-card').classList.add('flipped'); flipped = true; }
@@ -584,18 +584,18 @@ function renderFlashcard(container) {
   const { cards, index } = fcState;
   if (index >= cards.length) {
     const acc = fcState.reviewed > 0 ? Math.round((fcState.correct / fcState.reviewed) * 100) : 0;
-    const modeLabel = fcState.typingMode ? 'Modo Escritura' : 'Modo Clásico';
+    const modeLabel = fcState.typingMode ? 'Modalità Scrittura' : 'Modalità Classica';
     container.innerHTML = `
       <div class="card" style="text-align:center;padding:40px">
         <div style="font-size:3rem;margin-bottom:16px">🎯</div>
-        <div class="section-title mb-2">Sesión completada</div>
+        <div class="section-title mb-2">Sessione completata</div>
         <div class="text-muted mb-1">${modeLabel}</div>
-        <div class="text-muted mb-4">${fcState.reviewed} tarjetas · ${acc}% de aciertos</div>
+        <div class="text-muted mb-4">${fcState.reviewed} schede · ${acc}% di precisione</div>
         <div class="grid-2 mb-4" style="max-width:300px;margin:0 auto">
-          <div class="stat-tile"><div class="stat-tile-label">Repasadas</div><div class="stat-tile-value">${fcState.reviewed}</div></div>
-          <div class="stat-tile stat-tile-accent"><div class="stat-tile-label">Aciertos</div><div class="stat-tile-value">${acc}%</div></div>
+          <div class="stat-tile"><div class="stat-tile-label">Ripetute</div><div class="stat-tile-value">${fcState.reviewed}</div></div>
+          <div class="stat-tile stat-tile-accent"><div class="stat-tile-label">Precisione</div><div class="stat-tile-value">${acc}%</div></div>
         </div>
-        <button class="btn btn-primary" onclick="navigate('dashboard')">Volver al panel</button>
+        <button class="btn btn-primary" onclick="navigate('dashboard')">Torna alla bacheca</button>
       </div>`;
     API.post('/milestones/check', {}).catch(() => {});
     return;
@@ -608,7 +608,7 @@ function renderFlashcard(container) {
 
   const card = cards[index];
   const progress = Math.round((index / cards.length) * 100);
-  const nextReview = card.interval > 0 ? `Intervalo: ${card.interval} días` : 'Tarjeta nueva';
+  const nextReview = card.interval > 0 ? `Intervallo: ${card.interval} giorni` : 'Scheda nuova';
 
   container.innerHTML = `
     <div class="mb-3 flex items-center justify-between text-sm text-muted">
@@ -624,7 +624,7 @@ function renderFlashcard(container) {
           ${card.category_icon ? `<div style="font-size:1.2rem;opacity:0.5">${card.category_icon} ${card.category_name||''}</div>` : ''}
           <div class="flashcard-word">${card.front}</div>
           ${card.gender ? `<div class="flashcard-subinfo">${card.article||''} — ${card.gender==='m'?'maschile':'femminile'}${card.plural?' — pl: '+card.plural:''}</div>` : ''}
-          <div class="flashcard-tap-hint">Toca para ver la respuesta</div>
+          <div class="flashcard-tap-hint">Tocca per vedere la risposta</div>
         </div>
         <div class="flashcard-face flashcard-back">
           <div class="flashcard-word" style="color:var(--accent)">${card.back}</div>
@@ -635,12 +635,12 @@ function renderFlashcard(container) {
     </div>
 
     <div id="fc-actions" class="mt-4" style="display:none">
-      <div class="text-center text-sm text-muted mb-3">¿Cómo te fue?</div>
+      <div class="text-center text-sm text-muted mb-3">Come è andata?</div>
       <div class="fc-quality-btns">
-        <button class="fc-quality-btn q-0" data-q="0">❌<span>No la recordé</span></button>
-        <button class="fc-quality-btn q-1" data-q="1">😓<span>Con dificultad</span></button>
-        <button class="fc-quality-btn q-3" data-q="3">🙂<span>Bien</span></button>
-        <button class="fc-quality-btn q-5" data-q="5">⚡<span>Muy fácil</span></button>
+        <button class="fc-quality-btn q-0" data-q="0">❌<span>Non ricordavo</span></button>
+        <button class="fc-quality-btn q-1" data-q="1">😓<span>Con difficoltà</span></button>
+        <button class="fc-quality-btn q-3" data-q="3">🙂<span>Bene</span></button>
+        <button class="fc-quality-btn q-5" data-q="5">⚡<span>Molto facile</span></button>
       </div>
     </div>
   `;
@@ -664,7 +664,7 @@ function renderFlashcard(container) {
         fcState.index++;
         fcState.flipped = false;
         renderFlashcard(container);
-      } catch(e) { toast('Error al guardar repaso', 'error'); }
+      } catch(e) { toast('Errore nel salvataggio', 'error'); }
     });
   });
 }
@@ -677,28 +677,28 @@ function renderFlashcardTyping(container) {
   container.innerHTML = `
     <div class="mb-3 flex items-center justify-between text-sm text-muted">
       <span>${index + 1} / ${cards.length}</span>
-      <span>${card.interval > 0 ? 'Intervalo: '+card.interval+' días' : 'Tarjeta nueva'}</span>
+      <span>${card.interval > 0 ? 'Intervallo: '+card.interval+' giorni' : 'Scheda nuova'}</span>
     </div>
     ${progressBar(progress)}
     <div style="height:16px"></div>
 
     <div class="fc-typing-card" id="fc-typing-card">
-      <div class="fc-typing-lang">Español → Italiano</div>
+      <div class="fc-typing-lang">Spagnolo → Italiano</div>
       ${card.category_icon ? `<div class="fc-typing-cat">${card.category_icon} ${card.category_name||''}</div>` : ''}
       <div class="fc-typing-word">${card.back}</div>
-      <div class="fc-typing-hint">Escribe con artículo (ej: <em>il cane</em>, <em>la casa</em>, <em>l'uomo</em>)</div>
+      <div class="fc-typing-hint">Scrivi con l'articolo (es: <em>il cane</em>, <em>la casa</em>, <em>l'uomo</em>)</div>
       <div class="fc-typing-input-wrap">
-        <input id="fc-type-input" class="fc-typing-input" placeholder="artículo + palabra..."
+        <input id="fc-type-input" class="fc-typing-input" placeholder="articolo + parola..."
           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-        <button class="btn btn-primary" id="fc-type-check">Comprobar</button>
+        <button class="btn btn-primary" id="fc-type-check">Controlla</button>
       </div>
       <div id="fc-type-result" style="display:none;margin-top:12px"></div>
       <div id="fc-type-example" style="display:none;margin-top:8px;font-size:0.85rem" class="flashcard-example"></div>
     </div>
 
     <div class="flex gap-2 justify-center mt-3" id="fc-type-actions">
-      <button class="btn btn-outline btn-sm" id="fc-type-skip">Saltar</button>
-      <button class="btn btn-primary" id="fc-type-next" style="display:none">Siguiente → <span style="opacity:.6;font-size:0.8em">→</span></button>
+      <button class="btn btn-outline btn-sm" id="fc-type-skip">Salta</button>
+      <button class="btn btn-primary" id="fc-type-next" style="display:none">Avanti → <span style="opacity:.6;font-size:0.8em">→</span></button>
     </div>
     <div style="display:none;text-align:center;font-size:0.75rem;color:var(--text-muted);margin-top:6px" id="fc-key-hint"></div>
   `;
@@ -727,7 +727,7 @@ function renderFlashcardTyping(container) {
     const resultEl = document.getElementById('fc-type-result');
     resultEl.style.display = 'block';
     if (isOk) {
-      resultEl.innerHTML = `<div class="fc-type-feedback correct">✓ ¡Correcto!</div>`;
+      resultEl.innerHTML = `<div class="fc-type-feedback correct">✓ Corretto!</div>`;
     } else {
       resultEl.innerHTML = `<div class="fc-type-feedback wrong">✗ Risposta: <strong>${correct}</strong></div>`;
     }
@@ -742,12 +742,12 @@ function renderFlashcardTyping(container) {
       await API.post(`/flashcards/${card.id}/review`, { quality });
       fcState.reviewed++;
       if (isOk) fcState.correct++;
-    } catch(e) { toast('Error al guardar', 'error'); }
+    } catch(e) { toast('Errore nel salvataggio', 'error'); }
 
     document.getElementById('fc-type-check').style.display = 'none';
     const nextBtn = document.getElementById('fc-type-next');
     nextBtn.style.display = 'inline-flex';
-    document.getElementById('fc-key-hint').textContent = '→ tecla derecha para siguiente';
+    document.getElementById('fc-key-hint').textContent = '→ tasto destro per avanzare';
     document.getElementById('fc-key-hint').style.display = 'block';
 
     // ArrowRight to advance
@@ -775,7 +775,7 @@ function renderFlashcardTyping(container) {
 function showWordListView(container, words) {
   container.innerHTML = `
     <div class="mb-3 flex gap-2">
-      <input type="search" id="word-search" placeholder="Buscar palabra..." style="max-width:300px">
+      <input type="search" id="word-search" placeholder="Cerca parola..." style="max-width:300px">
     </div>
     <div class="word-list" id="word-list">
       ${words.map(w => wordItemHTML(w)).join('')}
@@ -800,17 +800,17 @@ function wordItemHTML(w) {
 }
 
 function showAddCardModal() {
-  showModal('Nueva flashcard', `
-    <div class="form-group"><label class="form-label">Frente (italiano)</label><input id="fc-front" placeholder="es. andare"></div>
-    <div class="form-group"><label class="form-label">Reverso (español)</label><input id="fc-back" placeholder="es. ir"></div>
+  showModal('Nuova flashcard', `
+    <div class="form-group"><label class="form-label">Fronte (italiano)</label><input id="fc-front" placeholder="es. andare"></div>
+    <div class="form-group"><label class="form-label">Retro (spagnolo)</label><input id="fc-back" placeholder="es. ir"></div>
   `, [
-    { label:'Cancelar', action:'close', cls:'btn-outline' },
-    { label:'Crear tarjeta', action: async () => {
+    { label:'Annulla', action:'close', cls:'btn-outline' },
+    { label:'Crea scheda', action: async () => {
       const front = document.getElementById('fc-front').value.trim();
       const back = document.getElementById('fc-back').value.trim();
-      if (!front || !back) { toast('Completa ambos campos', 'error'); return; }
+      if (!front || !back) { toast('Compila entrambi i campi', 'error'); return; }
       await API.post('/flashcards', { front, back });
-      toast('Tarjeta creada');
+      toast('Scheda creata');
       closeModal();
       navigate('flashcards');
     }, cls:'btn-primary' },
@@ -826,17 +826,17 @@ async function renderVocabulary(el) {
   el.innerHTML = `
     <div class="section-header">
       <div>
-        <div class="section-title">Vocabulario</div>
-        <div class="section-sub">${categories.length} categorías · ${categories.reduce((s,c)=>s+c.word_count,0)} palabras</div>
+        <div class="section-title">Vocabolario</div>
+        <div class="section-sub">${categories.length} categorie · ${categories.reduce((s,c)=>s+c.word_count,0)} parole</div>
       </div>
       <div class="flex gap-2">
-        <button class="btn btn-outline btn-sm" id="add-word-btn">+ Añadir palabra</button>
-        <button class="btn btn-outline btn-sm" id="add-cat-btn">+ Categoría</button>
+        <button class="btn btn-outline btn-sm" id="add-word-btn">+ Aggiungi parola</button>
+        <button class="btn btn-outline btn-sm" id="add-cat-btn">+ Categoria</button>
       </div>
     </div>
 
     <div class="mb-4">
-      <input type="search" id="cat-search" placeholder="Buscar categoría..." style="max-width:320px">
+      <input type="search" id="cat-search" placeholder="Cerca categoria..." style="max-width:320px">
     </div>
 
     <div class="grid-3 category-cards-grid" id="cat-grid">
@@ -870,17 +870,17 @@ function categoryCardHTML(c) {
         ${acc !== null ? `<span class="badge badge-${acc>=80?'green':acc>=60?'blue':'red'}">${acc}%</span>` : ''}
       </div>
       <div class="category-name">${c.name}</div>
-      <div class="category-count">${c.word_count} palabras · ${c.learned_count||0} aprendidas</div>
+      <div class="category-count">${c.word_count} parole · ${c.learned_count||0} imparate</div>
       ${progressBar(pct)}
       <div class="category-progress-text">
-        <span>${pct}% dominado</span>
-        ${c.next_review ? `<span>próx. repaso ${fmt.interval(Math.max(0,(c.next_review-Date.now()/1000)))}</span>` : ''}
+        <span>${pct}% dominato</span>
+        ${c.next_review ? `<span>pross. ripasso ${fmt.interval(Math.max(0,(c.next_review-Date.now()/1000)))}</span>` : ''}
       </div>
     </div>`;
 }
 
 async function openCategory(el, catId) {
-  showModal('Cargando...', `<div class="loading"><div class="spinner"></div></div>`, []);
+  showModal('Caricamento...', `<div class="loading"><div class="spinner"></div></div>`, []);
   const modal = document.querySelector('#active-modal .modal');
   if (modal) modal.style.maxWidth = '680px';
 
@@ -893,21 +893,21 @@ async function openCategory(el, catId) {
 
   const bodyHTML = `
     <div style="margin-bottom:12px">
-      <input type="search" id="cat-word-filter" placeholder="Filtrar palabras..." style="width:100%">
+      <input type="search" id="cat-word-filter" placeholder="Filtra parole..." style="width:100%">
     </div>
     <div class="word-list" id="cat-word-list" style="max-height:55dvh;overflow-y:auto">
       ${words.map(w => wordItemHTML(w)).join('')}
     </div>`;
 
   closeModal();
-  showModal(`${cat?.icon||'📚'} ${cat?.name||'Categoría'} · ${words.length} palabras`, bodyHTML, [
-    { label: '🃏 Clásico', cls: 'btn-outline', action: () => {
+  showModal(`${cat?.icon||'📚'} ${cat?.name||'Categoria'} · ${words.length} parole`, bodyHTML, [
+    { label: '🃏 Classico', cls: 'btn-outline', action: () => {
       fcState.typingMode = false;
       fcState.pendingCategoryId = catId;
       closeModal();
       navigate('flashcards');
     }},
-    { label: '✍️ Escritura', cls: 'btn-primary', action: () => {
+    { label: '✍️ Scrittura', cls: 'btn-primary', action: () => {
       fcState.typingMode = true;
       fcState.pendingCategoryId = catId;
       closeModal();
@@ -950,35 +950,35 @@ async function showWordDetail(id) {
       </div>` : ''}
     ${collocs.length ? `<div class="mb-3"><div class="text-xs font-medium text-muted mb-2 uppercase tracking-wide">Colocaciones</div>${collocs.map(c=>`<span class="tag">${c}</span> `).join('')}</div>` : ''}
     ${w.notes ? `<div class="alert alert-info mt-2 text-xs">${w.notes}</div>` : ''}
-    ${w.false_friend_note ? `<div class="alert alert-warn mt-2 text-xs">⚠️ <strong>Falso amigo:</strong> ${w.false_friend_note}</div>` : ''}
+    ${w.false_friend_note ? `<div class="alert alert-warn mt-2 text-xs">⚠️ <strong>Falso amico:</strong> ${w.false_friend_note}</div>` : ''}
   `, [
-    { label:'Cerrar', action:'close', cls:'btn-outline' },
+    { label:'Chiudi', action:'close', cls:'btn-outline' },
   ]);
 }
 
 function showAddWordModal(categories) {
-  showModal('Añadir palabra', `
+  showModal('Aggiungi parola', `
     <div class="form-row">
       <div class="form-group"><label class="form-label">Italiano</label><input id="w-it" placeholder="es. andare"></div>
-      <div class="form-group"><label class="form-label">Español</label><input id="w-es" placeholder="es. ir"></div>
+      <div class="form-group"><label class="form-label">Spagnolo</label><input id="w-es" placeholder="es. ir"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label class="form-label">Categoría</label>
+      <div class="form-group"><label class="form-label">Categoria</label>
         <select id="w-cat">${categories.map(c=>`<option value="${c.id}">${c.icon} ${c.name}</option>`).join('')}</select>
       </div>
-      <div class="form-group"><label class="form-label">Nivel MCER</label>
+      <div class="form-group"><label class="form-label">Livello QCER</label>
         <select id="w-lv"><option>A1</option><option>A2</option><option selected>B1</option><option>B2</option><option>C1</option></select>
       </div>
     </div>
-    <div class="form-group"><label class="form-label">Ejemplo en italiano</label><input id="w-ex-it" placeholder="Vado a Roma."></div>
-    <div class="form-group"><label class="form-label">Traducción del ejemplo</label><input id="w-ex-es" placeholder="Voy a Roma."></div>
-    <div class="form-group"><label class="form-label">Notas</label><input id="w-notes" placeholder="Observaciones opcionales"></div>
+    <div class="form-group"><label class="form-label">Esempio in italiano</label><input id="w-ex-it" placeholder="Vado a Roma."></div>
+    <div class="form-group"><label class="form-label">Traduzione dell'esempio</label><input id="w-ex-es" placeholder="Voy a Roma."></div>
+    <div class="form-group"><label class="form-label">Note</label><input id="w-notes" placeholder="Osservazioni opzionali"></div>
   `, [
-    { label:'Cancelar', action:'close', cls:'btn-outline' },
-    { label:'Añadir', action: async () => {
+    { label:'Annulla', action:'close', cls:'btn-outline' },
+    { label:'Aggiungi', action: async () => {
       const italian = document.getElementById('w-it').value.trim();
       const spanish = document.getElementById('w-es').value.trim();
-      if (!italian || !spanish) { toast('Italiano y español son obligatorios', 'error'); return; }
+      if (!italian || !spanish) { toast('Italiano e spagnolo sono obbligatori', 'error'); return; }
       await API.post('/vocabulary/words', {
         italian, spanish,
         category_id: parseInt(document.getElementById('w-cat').value),
@@ -987,7 +987,7 @@ function showAddWordModal(categories) {
         example_es: document.getElementById('w-ex-es').value,
         notes: document.getElementById('w-notes').value,
       });
-      toast('Palabra añadida con flashcard');
+      toast('Parola aggiunta con flashcard');
       closeModal();
       navigate('vocabulary');
     }, cls:'btn-primary' },
@@ -995,19 +995,19 @@ function showAddWordModal(categories) {
 }
 
 function showAddCategoryModal() {
-  showModal('Nueva categoría', `
+  showModal('Nuova categoria', `
     <div class="form-row">
-      <div class="form-group"><label class="form-label">Nombre</label><input id="cat-name" placeholder="Viajes"></div>
+      <div class="form-group"><label class="form-label">Nome</label><input id="cat-name" placeholder="Viaggi"></div>
       <div class="form-group"><label class="form-label">Emoji</label><input id="cat-icon" placeholder="✈️" style="max-width:80px"></div>
     </div>
   `, [
-    { label:'Cancelar', action:'close', cls:'btn-outline' },
-    { label:'Crear', action: async () => {
+    { label:'Annulla', action:'close', cls:'btn-outline' },
+    { label:'Crea', action: async () => {
       const name = document.getElementById('cat-name').value.trim();
       const icon = document.getElementById('cat-icon').value.trim() || '📚';
-      if (!name) { toast('El nombre es obligatorio', 'error'); return; }
+      if (!name) { toast('Il nome è obbligatorio', 'error'); return; }
       await API.post('/vocabulary/categories', { name, icon });
-      toast('Categoría creada');
+      toast('Categoria creata');
       closeModal();
       navigate('vocabulary');
     }, cls:'btn-primary' },
@@ -1023,12 +1023,12 @@ const TENSE_LABELS = {
   futuro: 'Futuro', condizionale: 'Condizionale', congiuntivo: 'Congiuntivo',
 };
 const TENSE_HINTS = {
-  presente: 'Presente Indicativo — ¿Qué hace ahora?',
-  imperfetto: 'Imperfetto — Acción pasada habitual o en curso',
-  futuro: 'Futuro Semplice — ¿Qué hará?',
-  condizionale: 'Condizionale Presente — ¿Qué haría? (vorrei...)',
+  presente: 'Presente Indicativo — Cosa fa adesso?',
+  imperfetto: 'Imperfetto — Azione passata abituale o in corso',
+  futuro: 'Futuro Semplice — Cosa farà?',
+  condizionale: 'Condizionale Presente — Cosa farebbe? (vorrei...)',
   congiuntivo: 'Congiuntivo Presente — Penso che... Spero che...',
-  passato_prossimo: 'Passato Prossimo — Acción pasada completada',
+  passato_prossimo: 'Passato Prossimo — Azione passata completata',
 };
 let conjState = { answered: false, streak: 0, correct: 0, total: 0, selectedTenses: [...ALL_TENSES] };
 const DRILL_TENSES = ['presente','passato_prossimo','imperfetto','futuro','condizionale','congiuntivo'];
@@ -1040,30 +1040,30 @@ async function renderConjugation(el) {
   el.innerHTML = `
     <div class="section-header">
       <div>
-        <div class="section-title">Conjugaciones</div>
-        <div class="section-sub">${verbs.length} verbos disponibles</div>
+        <div class="section-title">Coniugazioni</div>
+        <div class="section-sub">${verbs.length} verbi disponibili</div>
       </div>
       <div class="flex items-center gap-3">
         <div class="stat-tile" style="padding:8px 16px;min-width:0">
-          <div class="stat-tile-label">Racha</div>
+          <div class="stat-tile-label">Serie</div>
           <div class="stat-tile-value" id="conj-streak">0</div>
         </div>
         <div class="stat-tile" style="padding:8px 16px;min-width:0">
-          <div class="stat-tile-label">Aciertos</div>
+          <div class="stat-tile-label">Precisione</div>
           <div class="stat-tile-value" id="conj-acc">—</div>
         </div>
       </div>
     </div>
 
     <div class="tabs">
-      <button class="tab-btn active" data-tab="practice">Práctica</button>
-      <button class="tab-btn" data-tab="drill">Por verbo</button>
-      <button class="tab-btn" data-tab="reference">Referencia</button>
+      <button class="tab-btn active" data-tab="practice">Pratica</button>
+      <button class="tab-btn" data-tab="drill">Per verbo</button>
+      <button class="tab-btn" data-tab="reference">Riferimento</button>
     </div>
 
     <div id="conj-tab-content">
       <div class="card mb-3" style="padding:12px 16px">
-        <div class="text-sm font-medium mb-2" style="color:var(--text-muted)">Tiempos a practicar:</div>
+        <div class="text-sm font-medium mb-2" style="color:var(--text-muted)">Tempi da praticare:</div>
         <div class="flex flex-wrap gap-2" id="tense-pills">
           ${ALL_TENSES.map(t => `
             <button class="tense-pill ${conjState.selectedTenses.includes(t)?'active':''}" data-tense="${t}">
@@ -1130,7 +1130,7 @@ function renderExerciseUI(area, ex) {
   const persons = ['io','tu','lui','noi','voi','loro'];
   area.innerHTML = `
     <div class="conj-exercise">
-      <div class="conj-prompt">Conjuga en <strong>${ex.tense_display}</strong></div>
+      <div class="conj-prompt">Coniuga al <strong>${ex.tense_display}</strong></div>
       <div class="conj-verb">${ex.verb}</div>
       <div class="conj-tense">${TENSE_HINTS[ex.tense] || ex.tense_display}</div>
 
@@ -1145,11 +1145,11 @@ function renderExerciseUI(area, ex) {
       </div>
 
       <div class="flex gap-2 justify-center mt-4" id="conj-btn-row">
-        <button class="btn btn-outline" id="conj-skip">Saltar</button>
-        <button class="btn btn-primary" id="conj-check">Comprobar</button>
+        <button class="btn btn-outline" id="conj-skip">Salta</button>
+        <button class="btn btn-primary" id="conj-check">Controlla</button>
         <button class="btn btn-outline" id="conj-retry" style="display:none">Riprova</button>
         <button class="btn btn-outline" id="conj-show" style="display:none">Mostra le risposte</button>
-        <button class="btn btn-primary" id="conj-next" style="display:none">Siguiente →</button>
+        <button class="btn btn-primary" id="conj-next" style="display:none">Avanti →</button>
       </div>
     </div>`;
 
@@ -1262,7 +1262,7 @@ function renderDrillTab(container, verbList) {
     (async () => {
     let verbsData;
     try { verbsData = await API.get('/conjugation/verbs-with-translations'); }
-    catch(e) { area.innerHTML = `<div class="alert alert-error">Error al cargar verbos</div>`; return; }
+    catch(e) { area.innerHTML = `<div class="alert alert-error">Errore nel caricamento dei verbi</div>`; return; }
 
     let selectedVerb = null;
 
@@ -1271,8 +1271,8 @@ function renderDrillTab(container, verbList) {
       const filtered = q ? verbsData.filter(({verb, translation}) => verb.includes(q) || translation.toLowerCase().includes(q)) : verbsData;
       area.innerHTML = `
         <div class="card" style="padding:16px 20px">
-          <div style="font-weight:600;font-size:1.05rem;margin-bottom:10px">Elige un verbo</div>
-          <input id="drill-search" class="input" placeholder="Buscar verbo o traducción..." value="${filter}" style="margin-bottom:8px">
+          <div style="font-weight:600;font-size:1.05rem;margin-bottom:10px">Scegli un verbo</div>
+          <input id="drill-search" class="input" placeholder="Cerca verbo o traduzione..." value="${filter}" style="margin-bottom:8px">
           <div id="drill-verb-list" style="height:190px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm)">
             ${filtered.map(({verb, translation}) => `
               <div class="drill-verb-row ${selectedVerb===verb?'drill-verb-selected':''}" data-verb="${verb}"
@@ -1280,14 +1280,14 @@ function renderDrillTab(container, verbList) {
                 <span style="font-weight:500">${verb}</span>
                 <span style="color:var(--text-muted);font-size:0.82rem">${translation}</span>
               </div>`).join('')}
-            ${filtered.length === 0 ? `<div style="padding:16px;text-align:center;color:var(--text-muted)">Sin resultados</div>` : ''}
+            ${filtered.length === 0 ? `<div style="padding:16px;text-align:center;color:var(--text-muted)">Nessun risultato</div>` : ''}
           </div>
           ${selectedVerb ? `<div style="margin:8px 0;font-size:0.9rem;color:var(--accent);font-weight:600">✓ ${selectedVerb}</div>` : `<div style="height:28px;margin:4px 0"></div>`}
-          <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:6px">Tiempos:</div>
+          <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:6px">Tempi:</div>
           <div class="flex flex-wrap gap-2 mb-3" id="drill-tense-picks">
             ${DRILL_TENSES.map(t => `<button class="tense-pill ${drillState.tenses.includes(t)?'active':''}" data-t="${t}">${TENSE_LABELS[t]}</button>`).join('')}
           </div>
-          <button class="btn btn-primary btn-block" id="drill-start" ${selectedVerb?'':'disabled'}>Empezar →</button>
+          <button class="btn btn-primary btn-block" id="drill-start" ${selectedVerb?'':'disabled'} style="margin-top:8px">Inizia →</button>
         </div>
       `;
 
@@ -1326,7 +1326,7 @@ function renderDrillTab(container, verbList) {
             drillState.score = { correct: 0, total: 0 };
             drillState.phase = 'practice';
             renderDrillTense(area);
-          } catch(e) { toast('Error al cargar verbo', 'error'); }
+          } catch(e) { toast('Errore nel caricamento del verbo', 'error'); }
         });
       }
     };
@@ -1380,9 +1380,9 @@ function renderDrillTense(area) {
         `).join('')}
       </div>
       <div style="display:flex;gap-2;margin-top:16px;justify-content:flex-end" id="drill-btns">
-        <button class="btn btn-primary" id="drill-check">Comprobar</button>
-        <button class="btn btn-outline" id="drill-show" style="display:none">Ver respuestas</button>
-        <button class="btn btn-primary" id="drill-next" style="display:none">Siguiente →</button>
+        <button class="btn btn-primary" id="drill-check">Controlla</button>
+        <button class="btn btn-outline" id="drill-show" style="display:none">Mostra risposte</button>
+        <button class="btn btn-primary" id="drill-next" style="display:none">Avanti →</button>
       </div>
     </div>
   `;
@@ -1447,9 +1447,9 @@ function renderDrillReview(area) {
   const total = drillState.mistakes.length;
   area.innerHTML = `
     <div class="card">
-      <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:4px">Repaso de errores — ${drillState.reviewIndex+1}/${total}</div>
+      <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:4px">Ripasso errori — ${drillState.reviewIndex+1}/${total}</div>
       <div style="font-weight:700;font-size:1.1rem;margin-bottom:2px">${drillState.verb} — ${TENSE_LABELS[mistake.tense]}</div>
-      <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px">Sujeto: <strong>${mistake.person}</strong></div>
+      <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px">Soggetto: <strong>${mistake.person}</strong></div>
       <div style="margin-bottom:12px">
         <input id="drill-retry-input" class="input" placeholder="${mistake.person}..."
           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
@@ -1457,8 +1457,8 @@ function renderDrillReview(area) {
       </div>
       <div id="drill-retry-result" style="min-height:32px;margin-bottom:12px"></div>
       <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button class="btn btn-primary" id="drill-retry-check">Comprobar</button>
-        <button class="btn btn-primary" id="drill-retry-next" style="display:none">Siguiente →</button>
+        <button class="btn btn-primary" id="drill-retry-check">Controlla</button>
+        <button class="btn btn-primary" id="drill-retry-next" style="display:none">Avanti →</button>
       </div>
     </div>
   `;
@@ -1473,7 +1473,7 @@ function renderDrillReview(area) {
     inp.disabled = true;
     inp.style.borderColor = ok ? 'var(--accent)' : '#ef4444';
     const res = document.getElementById('drill-retry-result');
-    if (ok) res.innerHTML = `<span style="color:var(--accent);font-weight:600">✓ ¡Correcto!</span>`;
+    if (ok) res.innerHTML = `<span style="color:var(--accent);font-weight:600">✓ Corretto!</span>`;
     else res.innerHTML = `<span style="color:#ef4444">✗ Risposta: <strong>${mistake.correct}</strong></span>`;
     document.getElementById('drill-retry-check').style.display = 'none';
     document.getElementById('drill-retry-next').style.display = 'inline-flex';
@@ -1501,10 +1501,10 @@ function renderDrillDone(area) {
       <div style="font-size:1.3rem;font-weight:700;margin-bottom:4px">${drillState.verb}</div>
       <div style="font-size:0.9rem;color:var(--text-muted);margin-bottom:20px">${drillState.translation}</div>
       <div style="font-size:2rem;font-weight:700;color:${pct>=80?'var(--accent)':'#f59e0b'};margin-bottom:4px">${pct}%</div>
-      <div style="font-size:0.9rem;color:var(--text-muted);margin-bottom:24px">${correct} / ${total} correctas</div>
+      <div style="font-size:0.9rem;color:var(--text-muted);margin-bottom:24px">${correct} / ${total} corrette</div>
       ${drillState.mistakes.length > 0 ? `
         <div style="text-align:left;margin-bottom:20px">
-          <div style="font-weight:600;margin-bottom:8px;font-size:0.9rem">Errores:</div>
+          <div style="font-weight:600;margin-bottom:8px;font-size:0.9rem">Errori:</div>
           ${[...new Map(drillState.mistakes.map(m=>[`${m.tense}-${m.person}`,m])).values()].map(m => `
             <div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:4px;padding:4px 8px;background:var(--bg-secondary);border-radius:6px">
               <span style="color:var(--text-muted)">${TENSE_LABELS[m.tense]} — ${m.person}</span>
@@ -1514,8 +1514,8 @@ function renderDrillDone(area) {
         </div>
       ` : ''}
       <div style="display:flex;gap:8px;justify-content:center">
-        <button class="btn btn-outline" id="drill-again">Repetir verbo</button>
-        <button class="btn btn-primary" id="drill-new">Nuevo verbo</button>
+        <button class="btn btn-outline" id="drill-again">Ripeti verbo</button>
+        <button class="btn btn-primary" id="drill-new">Nuovo verbo</button>
       </div>
     </div>
   `;
@@ -1534,7 +1534,7 @@ function renderConjugationReference(el, verbs) {
   const area = document.getElementById('conj-tab-content');
   area.innerHTML = `
     <div class="card">
-      <div class="card-title mb-3">Referencia de verbos</div>
+      <div class="card-title mb-3">Riferimento verbi</div>
       <div class="flex gap-2 mb-4">
         <select id="ref-verb" style="max-width:200px">
           ${verbs.map(v=>`<option>${v}</option>`).join('')}
@@ -1573,23 +1573,23 @@ function renderConjugationReference(el, verbs) {
 // GRAMMAR
 // ══════════════════════════════════════════════════════════════════════════════
 const GRAMMAR_TOPICS = [
-  { id:'articles', title:'Artículos definidos e indefinidos', level:'A2', desc:'Il/la/lo/l\'/i/gli/le — un/una/uno/un\'', content: `
-    <h3 style="margin-bottom:12px">Artículos definidos</h3>
+  { id:'articles', title:'Articoli determinativi e indeterminativi', level:'A2', desc:'Il/la/lo/l\'/i/gli/le — un/una/uno/un\'', content: `
+    <h3 style="margin-bottom:12px">Articoli determinativi</h3>
     <div class="overflow-auto"><table class="conj-table">
-      <tr><th>Género/Número</th><th>Uso</th><th>Ejemplo</th></tr>
-      <tr><td>il</td><td>Masc. sing. — consonante normal</td><td>il libro, il cane</td></tr>
+      <tr><th>Genere/Numero</th><th>Uso</th><th>Esempio</th></tr>
+      <tr><td>il</td><td>Masc. sing. — consonante normale</td><td>il libro, il cane</td></tr>
       <tr><td>lo</td><td>Masc. sing. — s+cons., z, gn, ps, x, y</td><td>lo studente, lo zaino</td></tr>
-      <tr><td>l'</td><td>Masc./Fem. sing. — vocal</td><td>l'amico, l'amica</td></tr>
+      <tr><td>l'</td><td>Masc./Fem. sing. — vocale</td><td>l'amico, l'amica</td></tr>
       <tr><td>la</td><td>Fem. sing. — consonante</td><td>la casa, la donna</td></tr>
-      <tr><td>i</td><td>Masc. plural — consonante normal</td><td>i libri, i cani</td></tr>
-      <tr><td>gli</td><td>Masc. plural — vocal, s+cons., z...</td><td>gli studenti, gli amici</td></tr>
-      <tr><td>le</td><td>Fem. plural</td><td>le case, le amiche</td></tr>
+      <tr><td>i</td><td>Masc. plur. — consonante normale</td><td>i libri, i cani</td></tr>
+      <tr><td>gli</td><td>Masc. plur. — vocale, s+cons., z...</td><td>gli studenti, gli amici</td></tr>
+      <tr><td>le</td><td>Fem. plur.</td><td>le case, le amiche</td></tr>
     </table></div>
-    <div class="alert alert-info mt-4">🇪🇸 Diferencia del español: el italiano tiene más formas. Además, los posesivos requieren artículo: <strong>il mio libro</strong> (no ~~mio libro~~), excepto en singular con familiares próximos: <em>mia madre, mio padre, mia sorella</em>.</div>
+    <div class="alert alert-info mt-4">🇪🇸 Differenza rispetto allo spagnolo: l'italiano ha più forme. Inoltre, i possessivi richiedono l'articolo: <strong>il mio libro</strong> (non ~~mio libro~~), tranne al singolare con familiari stretti: <em>mia madre, mio padre, mia sorella</em>.</div>
   `},
-  { id:'prepositions', title:'Preposiciones articuladas', level:'A2', desc:'del, dello, della, nel, nel...', content: `
+  { id:'prepositions', title:'Preposizioni articolate', level:'A2', desc:'del, dello, della, nel, nel...', content: `
     <h3 style="margin-bottom:12px">Preposizioni articolate</h3>
-    <p class="text-sm text-muted mb-3">En italiano, las preposiciones simples se combinan con el artículo definido para formar una sola palabra.</p>
+    <p class="text-sm text-muted mb-3">In italiano, le preposizioni semplici si combinano con l'articolo determinativo per formare un'unica parola.</p>
     <div class="overflow-auto"><table class="conj-table">
       <tr><th>Prep.</th><th>+il</th><th>+lo</th><th>+l'</th><th>+la</th><th>+i</th><th>+gli</th><th>+le</th></tr>
       <tr><td><strong>di</strong></td><td>del</td><td>dello</td><td>dell'</td><td>della</td><td>dei</td><td>degli</td><td>delle</td></tr>
@@ -1598,31 +1598,31 @@ const GRAMMAR_TOPICS = [
       <tr><td><strong>in</strong></td><td>nel</td><td>nello</td><td>nell'</td><td>nella</td><td>nei</td><td>negli</td><td>nelle</td></tr>
       <tr><td><strong>su</strong></td><td>sul</td><td>sullo</td><td>sull'</td><td>sulla</td><td>sui</td><td>sugli</td><td>sulle</td></tr>
     </table></div>
-    <div class="alert alert-warn mt-4">⚠️ En español solo existen <strong>del</strong> (de+el) y <strong>al</strong> (a+el). En italiano el sistema es completo para todas las preposiciones principales.</div>
+    <div class="alert alert-warn mt-4">⚠️ In spagnolo esistono solo <strong>del</strong> (de+el) e <strong>al</strong> (a+el). In italiano il sistema è completo per tutte le principali preposizioni.</div>
   `},
   { id:'congiuntivo', title:'Il Congiuntivo', level:'B2', desc:'Penso che... Sebbene... Nonostante...', content: `
-    <h3 style="margin-bottom:12px">El Congiuntivo — el reto más importante para hispanohablantes</h3>
-    <p class="text-sm mb-3">El congiuntivo italiano se usa más que el subjuntivo español. Fíjate en los contextos:</p>
+    <h3 style="margin-bottom:12px">Il Congiuntivo — la sfida più importante per i madrelingua spagnoli</h3>
+    <p class="text-sm mb-3">Il congiuntivo italiano si usa più del subjuntivo spagnolo. Nota i contesti:</p>
     <div class="mb-4">
-      <div class="font-medium mb-2">1. Tras verbos de opinión, sentimiento, voluntad + <em>che</em></div>
+      <div class="font-medium mb-2">1. Dopo verbi di opinione, sentimento, volontà + <em>che</em></div>
       <div class="bg-surface-2 p-3 rounded text-sm" style="background:var(--surface-2)">
-        Penso <strong>che sia</strong> giusto. (Creo que es correcto)<br>
-        Spero <strong>che tu venga</strong>. (Espero que vengas)<br>
-        Voglio <strong>che tu stia</strong> bene. (Quiero que estés bien)
+        Penso <strong>che sia</strong> giusto. (Credo che sia giusto)<br>
+        Spero <strong>che tu venga</strong>. (Spero che tu venga)<br>
+        Voglio <strong>che tu stia</strong> bene. (Voglio che tu stia bene)
       </div>
     </div>
     <div class="mb-4">
-      <div class="font-medium mb-2">2. Tras conectores concesivos y finales</div>
+      <div class="font-medium mb-2">2. Dopo connettivi concessivi e finali</div>
       <div class="bg-surface-2 p-3 rounded text-sm" style="background:var(--surface-2)">
-        <strong>Sebbene/Benché/Nonostante</strong> sia stanco, continuo. (Aunque esté cansado)<br>
-        <strong>Affinché</strong> tu capisca... (Para que entiendas)<br>
-        <strong>Prima che</strong> arrivi... (Antes de que llegue)
+        <strong>Sebbene/Benché/Nonostante</strong> sia stanco, continuo. (Benché sia stanco)<br>
+        <strong>Affinché</strong> tu capisca... (Perché tu capisca)<br>
+        <strong>Prima che</strong> arrivi... (Prima che arrivi)
       </div>
     </div>
     <div class="mb-3">
-      <div class="font-medium mb-2">Irregulares esenciales</div>
+      <div class="font-medium mb-2">Irregolari essenziali</div>
       <div class="overflow-auto"><table class="conj-table">
-        <tr><th>Infinitivo</th><th>io/tu/lui</th><th>noi</th><th>voi</th><th>loro</th></tr>
+        <tr><th>Infinito</th><th>io/tu/lui</th><th>noi</th><th>voi</th><th>loro</th></tr>
         <tr><td>essere</td><td>sia</td><td>siamo</td><td>siate</td><td>siano</td></tr>
         <tr><td>avere</td><td>abbia</td><td>abbiamo</td><td>abbiate</td><td>abbiano</td></tr>
         <tr><td>fare</td><td>faccia</td><td>facciamo</td><td>facciate</td><td>facciano</td></tr>
@@ -1635,64 +1635,64 @@ const GRAMMAR_TOPICS = [
     </div>
   `},
   { id:'periodo_ipotetico', title:'Periodo Ipotetico', level:'B2', desc:'Se + congiuntivo/condizionale', content: `
-    <h3 style="margin-bottom:12px">Las tres frases condicionales del italiano</h3>
+    <h3 style="margin-bottom:12px">I tre tipi di periodo ipotetico in italiano</h3>
     <div class="mb-4">
-      <div class="badge badge-green mb-2">Tipo I — Real/Posible</div>
+      <div class="badge badge-green mb-2">Tipo I — Reale/Possibile</div>
       <div class="bg-surface-2 p-3 rounded text-sm" style="background:var(--surface-2)">
         <strong>Se + presente → futuro (o presente)</strong><br>
-        <em>Se studi, <strong>passerai</strong> l'esame.</em> (Si estudias, pasarás el examen)
+        <em>Se studi, <strong>passerai</strong> l'esame.</em> (Se studi, passerai l'esame)
       </div>
     </div>
     <div class="mb-4">
-      <div class="badge badge-blue mb-2">Tipo II — Improbable</div>
+      <div class="badge badge-blue mb-2">Tipo II — Improbabile</div>
       <div class="bg-surface-2 p-3 rounded text-sm" style="background:var(--surface-2)">
         <strong>Se + congiuntivo imperfetto → condizionale presente</strong><br>
-        <em>Se <strong>studiassi</strong>, <strong>passerei</strong> l'esame.</em> (Si estudiara, pasaría el examen)
+        <em>Se <strong>studiassi</strong>, <strong>passerei</strong> l'esame.</em> (Se studiassi, passerei l'esame)
       </div>
     </div>
     <div class="mb-4">
-      <div class="badge badge-red mb-2">Tipo III — Imposible (pasado)</div>
+      <div class="badge badge-red mb-2">Tipo III — Impossibile (passato)</div>
       <div class="bg-surface-2 p-3 rounded text-sm" style="background:var(--surface-2)">
         <strong>Se + congiuntivo trapassato → condizionale passato</strong><br>
-        <em>Se <strong>avessi studiato</strong>, <strong>avrei passato</strong> l'esame.</em> (Si hubiera estudiado, habría pasado)
+        <em>Se <strong>avessi studiato</strong>, <strong>avrei passato</strong> l'esame.</em> (Se avessi studiato, avrei passato l'esame)
       </div>
     </div>
-    <div class="alert alert-warn">⚠️ Mixto (muy italiano): <em>Se avessi studiato, <strong>passeresti</strong> l'esame adesso.</em> — Cond. pasado + Cond. presente</div>
+    <div class="alert alert-warn">⚠️ Misto (molto italiano): <em>Se avessi studiato, <strong>passeresti</strong> l'esame adesso.</em> — Cond. passato + Cond. presente</div>
   `},
   { id:'ne_ci', title:'Le particelle NE e CI', level:'B1', desc:'Ne ho tre. Ci penso. Non ci credo.', content: `
-    <h3 style="margin-bottom:12px">Ne y Ci — dos partículas sin equivalente directo en español</h3>
+    <h3 style="margin-bottom:12px">NE e CI — due particelle senza equivalente diretto in spagnolo</h3>
     <div class="mb-4">
-      <div class="font-medium mb-2">NE — partitivo y de referencia</div>
+      <div class="font-medium mb-2">NE — partitivo e di riferimento</div>
       <div class="bg-surface-2 p-3 rounded text-sm" style="background:var(--surface-2)">
-        <em>Quanti libri hai? <strong>Ne</strong> ho tre.</em> (¿Cuántos libros tienes? Tengo tres <em>de ellos</em>)<br>
-        <em>Parliamo di politica? Preferirei non <strong>parlarne</strong>.</em> (¿Hablamos de política? Preferiría no hablar <em>de eso</em>)<br>
-        <em><strong>Ne</strong> ho abbastanza!</em> (¡Ya estoy harto! / ¡Tengo suficiente <em>de ello</em>!)
+        <em>Quanti libri hai? <strong>Ne</strong> ho tre.</em> (Quanti libri hai? Ne ho tre)<br>
+        <em>Parliamo di politica? Preferirei non <strong>parlarne</strong>.</em> (Non voglio parlare di questo)<br>
+        <em><strong>Ne</strong> ho abbastanza!</em> (Ne ho abbastanza / Sono stufo!)
       </div>
     </div>
     <div class="mb-4">
-      <div class="font-medium mb-2">CI — locativo y de referencia a idea</div>
+      <div class="font-medium mb-2">CI — locativo e di riferimento a un'idea</div>
       <div class="bg-surface-2 p-3 rounded text-sm" style="background:var(--surface-2)">
-        <em>Vai a Roma? Sì, <strong>ci</strong> vado domani.</em> (¿Vas a Roma? Sí, voy <em>allí</em> mañana)<br>
-        <em><strong>Ci</strong> penso.</em> (Lo pienso / Pienso en <em>ello</em>)<br>
-        <em>Non <strong>ci</strong> credo.</em> (No me lo creo / No creo en <em>ello</em>)<br>
-        <em><strong>Ce la</strong> fai?</em> (¿Puedes? / ¿Te las arreglas?)
+        <em>Vai a Roma? Sì, <strong>ci</strong> vado domani.</em> (Sì, vado lì domani)<br>
+        <em><strong>Ci</strong> penso.</em> (Ci penso su)<br>
+        <em>Non <strong>ci</strong> credo.</em> (Non ci credo)<br>
+        <em><strong>Ce la</strong> fai?</em> (Riesci? / Ce la fai?)
       </div>
     </div>
   `},
   { id:'false_friends', title:'Falsi Amici', level:'B1', desc:'Burro, caldo, camera, parente...', content: `
-    <h3 style="margin-bottom:12px">Los falsos amigos más peligrosos para hispanohablantes</h3>
+    <h3 style="margin-bottom:12px">I falsi amici più pericolosi per i madrelingua spagnoli</h3>
     <div class="overflow-auto"><table class="conj-table">
-      <tr><th>Italiano</th><th>Parece que significa...</th><th>En realidad significa</th><th>El español es...</th></tr>
-      <tr><td><strong>il burro</strong></td><td>el burro</td><td class="text-accent">la mantequilla</td><td>l'asino / il somaro</td></tr>
-      <tr><td><strong>caldo</strong></td><td>el caldo (sopa)</td><td class="text-accent">caliente</td><td>il brodo</td></tr>
-      <tr><td><strong>la camera</strong></td><td>la cámara</td><td class="text-accent">la habitación</td><td>la macchina fotografica</td></tr>
-      <tr><td><strong>il parente</strong></td><td>el padre/la madre</td><td class="text-accent">el familiar</td><td>i genitori</td></tr>
-      <tr><td><strong>sensibile</strong></td><td>sensato</td><td class="text-accent">sensible (emocional)</td><td>ragionevole / sensato</td></tr>
-      <tr><td><strong>annoiare</strong></td><td>molestar</td><td class="text-accent">aburrir</td><td>irritare / infastidire</td></tr>
-      <tr><td><strong>pretendere</strong></td><td>pretender (fingir)</td><td class="text-accent">exigir / reclamar</td><td>fingere</td></tr>
-      <tr><td><strong>morbido</strong></td><td>mórbido</td><td class="text-accent">suave / blando</td><td>morboso</td></tr>
-      <tr><td><strong>conveniente</strong></td><td>conveniente</td><td class="text-accent">barato / económico</td><td>adeguato / opportuno</td></tr>
-      <tr><td><strong>il pavimento</strong></td><td>el pavimento</td><td class="text-accent">el suelo interior</td><td>il selciato / l'asfalto</td></tr>
+      <tr><th>Italiano</th><th>Sembra significare...</th><th>Significa in realtà</th><th>In spagnolo è...</th></tr>
+      <tr><td><strong>il burro</strong></td><td>il somaro</td><td class="text-accent">il burro (mantequilla)</td><td>l'asino / il somaro</td></tr>
+      <tr><td><strong>caldo</strong></td><td>il brodo</td><td class="text-accent">caldo / calore</td><td>il brodo</td></tr>
+      <tr><td><strong>la camera</strong></td><td>la fotocamera</td><td class="text-accent">la stanza</td><td>la macchina fotografica</td></tr>
+      <tr><td><strong>il parente</strong></td><td>il genitore</td><td class="text-accent">il familiare</td><td>i genitori</td></tr>
+      <tr><td><strong>sensibile</strong></td><td>ragionevole</td><td class="text-accent">sensibile (emotivo)</td><td>ragionevole / sensato</td></tr>
+      <tr><td><strong>annoiare</strong></td><td>irritare</td><td class="text-accent">annoiare</td><td>irritare / infastidire</td></tr>
+      <tr><td><strong>pretendere</strong></td><td>fingere</td><td class="text-accent">esigere / reclamare</td><td>fingere</td></tr>
+      <tr><td><strong>morbido</strong></td><td>morboso</td><td class="text-accent">morbido / soffice</td><td>morboso</td></tr>
+      <tr><td><strong>conveniente</strong></td><td>adeguato</td><td class="text-accent">economico / a buon prezzo</td><td>adeguato / opportuno</td></tr>
+      <tr><td><strong>il pavimento</strong></td><td>il selciato</td><td class="text-accent">il pavimento interno</td><td>il selciato / l'asfalto</td></tr>
     </table></div>
   `},
 ];
@@ -1701,8 +1701,8 @@ async function renderGrammar(el) {
   el.innerHTML = `
     <div class="section-header">
       <div>
-        <div class="section-title">Gramática</div>
-        <div class="section-sub">Ruta progresiva B1 → C1</div>
+        <div class="section-title">Grammatica</div>
+        <div class="section-sub">Percorso progressivo B1 → C1</div>
       </div>
     </div>
 
@@ -1734,7 +1734,7 @@ async function renderGrammar(el) {
       detail.style.display = 'block';
       list.style.display = 'none';
       detail.innerHTML = `
-        <button class="btn btn-ghost btn-sm mb-4" id="back-grammar">← Volver</button>
+        <button class="btn btn-ghost btn-sm mb-4" id="back-grammar">← Indietro</button>
         <div class="card">
           <div class="flex items-center gap-2 mb-4">
             <div class="section-title">${topic.title}</div>
@@ -1763,14 +1763,14 @@ async function renderWriting(el) {
   el.innerHTML = `
     <div class="section-header">
       <div>
-        <div class="section-title">Escritura</div>
-        <div class="section-sub">Redacción y producción escrita en italiano</div>
+        <div class="section-title">Scrittura</div>
+        <div class="section-sub">Scrittura e produzione scritta in italiano</div>
       </div>
     </div>
 
     <div class="tabs">
-      <button class="tab-btn active" data-wtab="new">Nuevo ejercicio</button>
-      <button class="tab-btn" data-wtab="history">Historial</button>
+      <button class="tab-btn active" data-wtab="new">Nuovo esercizio</button>
+      <button class="tab-btn" data-wtab="history">Cronologia</button>
     </div>
 
     <div id="writing-tab"></div>
@@ -1794,35 +1794,35 @@ function renderWritingNew(el, prompts) {
 
   tab.innerHTML = `
     <div class="writing-prompt-card">
-      <div class="writing-prompt-label">Propuesta de ejercicio</div>
-      <div class="writing-prompt-text">${prompt?.prompt || 'Escribe un texto libre en italiano.'}</div>
+      <div class="writing-prompt-label">Proposta di esercizio</div>
+      <div class="writing-prompt-text">${prompt?.prompt || 'Scrivi un testo libero in italiano.'}</div>
       <div class="writing-meta">
-        <span>Tipo: ${prompt?.type || 'libre'}</span>
-        <span>Objetivo: mín. 80 palabras</span>
+        <span>Tipo: ${prompt?.type || 'libero'}</span>
+        <span>Obiettivo: min. 80 parole</span>
       </div>
     </div>
 
     <div class="card mb-4">
-      <label class="form-label">Tu texto en italiano</label>
+      <label class="form-label">Il tuo testo in italiano</label>
       <textarea id="writing-text" placeholder="Scrivi qui il tuo testo in italiano..." style="min-height:200px"></textarea>
       <div class="flex justify-between mt-2">
-        <span class="text-xs text-muted" id="word-count">0 palabras</span>
-        <span class="text-xs text-muted">Escribe en italiano, sin traducir mentalmente desde el español.</span>
+        <span class="text-xs text-muted" id="word-count">0 parole</span>
+        <span class="text-xs text-muted">Scrivi in italiano, senza tradurre mentalmente dallo spagnolo.</span>
       </div>
     </div>
 
     <div class="flex gap-2 mb-4">
-      <button class="btn btn-primary" id="save-writing">Guardar y revisar</button>
-      <button class="btn btn-outline" id="new-prompt-btn">Otro ejercicio</button>
+      <button class="btn btn-primary" id="save-writing">Salva e rivedi</button>
+      <button class="btn btn-outline" id="new-prompt-btn">Altro esercizio</button>
     </div>
 
     <div class="card">
-      <div class="card-title mb-2">Consejos para este ejercicio</div>
+      <div class="card-title mb-2">Consigli per questo esercizio</div>
       <ul class="text-sm text-muted" style="padding-left:20px;line-height:2">
-        <li>Usa vocabulario que hayas aprendido recientemente en tus flashcards</li>
-        <li>Practica los tiempos verbales que estudias en conjugaciones</li>
-        <li>Intenta usar al menos 2 conectores: <em>tuttavia, inoltre, quindi, sebbene...</em></li>
-        <li>Escribe primero sin corrección, luego relée</li>
+        <li>Usa il vocabolario che hai imparato di recente nelle flashcard</li>
+        <li>Pratica i tempi verbali che studi nelle coniugazioni</li>
+        <li>Prova a usare almeno 2 connettivi: <em>tuttavia, inoltre, quindi, sebbene...</em></li>
+        <li>Scrivi prima senza correzioni, poi rileggi</li>
       </ul>
     </div>
   `;
@@ -1830,22 +1830,22 @@ function renderWritingNew(el, prompts) {
   const textarea = tab.querySelector('#writing-text');
   textarea.addEventListener('input', () => {
     const words = textarea.value.trim().split(/\s+/).filter(Boolean).length;
-    document.getElementById('word-count').textContent = `${words} palabra${words!==1?'s':''}`;
+    document.getElementById('word-count').textContent = `${words} parol${words!==1?'e':'a'}`;
   });
 
   tab.querySelector('#save-writing').addEventListener('click', async () => {
     const text = textarea.value.trim();
-    if (text.length < 20) { toast('El texto es demasiado corto', 'error'); return; }
+    if (text.length < 20) { toast('Il testo è troppo corto', 'error'); return; }
     try {
       if (prompt?.id) {
         await API.put(`/writing/exercises/${prompt.id}`, { user_text: text });
       } else {
-        await API.post('/writing/exercises', { prompt: 'Texto libre', type: 'free' });
+        await API.post('/writing/exercises', { prompt: 'Testo libero', type: 'free' });
       }
-      toast('Texto guardado. ¡Buen trabajo!');
+      toast('Testo salvato. Ottimo lavoro!');
       textarea.value = '';
     } catch(e) {
-      toast('Error al guardar', 'error');
+      toast('Errore nel salvataggio', 'error');
     }
   });
 
@@ -1856,7 +1856,7 @@ function renderWritingHistory(el, exercises) {
   const tab = document.getElementById('writing-tab');
   const completed = exercises.filter(e => e.user_text);
   tab.innerHTML = `
-    <div class="section-sub mb-4">${completed.length} textos escritos</div>
+    <div class="section-sub mb-4">${completed.length} testi scritti</div>
     ${completed.length ? completed.map(e => `
       <div class="card mb-3">
         <div class="flex justify-between mb-2">
@@ -1865,9 +1865,9 @@ function renderWritingHistory(el, exercises) {
         </div>
         <div class="text-sm text-muted mb-2 italic">"${e.prompt.substring(0,80)}..."</div>
         <div class="text-sm" style="line-height:1.8">${e.user_text?.substring(0,200)}${(e.user_text?.length||0)>200?'…':''}</div>
-        <div class="text-xs text-muted mt-2">${e.word_count} palabras</div>
+        <div class="text-xs text-muted mt-2">${e.word_count} parole</div>
       </div>`).join('')
-    : '<div class="empty-state"><div class="empty-state-icon">✍️</div><div class="empty-state-title">Aún no has escrito ningún texto</div></div>'}
+    : '<div class="empty-state"><div class="empty-state-icon">✍️</div><div class="empty-state-title">Non hai ancora scritto nessun testo</div></div>'}
   `;
 }
 
@@ -1883,9 +1883,9 @@ Molti esperti sostengono che il modo migliore per imparare una lingua è l'immer
 
 La costanza è fondamentale: è meglio studiare trenta minuti ogni giorno che tre ore una volta alla settimana.`,
     questions: [
-      { q:'¿Por qué es importante hablar una lengua extranjera?', a:'Permite comunicarse con personas de diferentes países, abre oportunidades de trabajo y enriquece la comprensión cultural.' },
-      { q:'¿Cuál es el mejor método para aprender según los expertos?', a:'La inmersión total: vivir en el país, hablar con nativos y leer mucho.' },
-      { q:'¿Qué dice el texto sobre la constancia?', a:'Es mejor estudiar 30 minutos cada día que 3 horas una vez por semana.' },
+      { q:'Perché è importante parlare una lingua straniera?', a:'Permette di comunicare con persone di paesi diversi, apre opportunità di lavoro e arricchisce la comprensione culturale.' },
+      { q:'Qual è il metodo migliore per imparare secondo gli esperti?', a:'L\'immersione totale: vivere nel paese, parlare con i nativi e leggere molto.' },
+      { q:'Cosa dice il testo sulla costanza?', a:'È meglio studiare 30 minuti ogni giorno che 3 ore una volta alla settimana.' },
     ]},
   { id:2, title:"Il caffè italiano", level:'A2', text:`Il caffè è parte integrante della cultura italiana. Gli italiani bevono il caffè in modo molto diverso rispetto ad altri paesi.
 
@@ -1895,16 +1895,16 @@ Al mattino, gli italiani preferiscono il cappuccino o il caffè latte. Dopo pran
 
 Il bar italiano non è solo un posto dove bere il caffè. È un luogo di incontro sociale, dove le persone si fermano per chiacchierare e iniziare la giornata.`,
     questions: [
-      { q:'¿Cómo beben el espresso los italianos?', a:'De pie en la barra del bar, en pocos segundos.' },
-      { q:'¿Qué bebida es rara ordenar después del almuerzo?', a:'El cappuccino.' },
-      { q:'¿Qué función social tiene el bar italiano?', a:'Es un lugar de encuentro donde la gente se detiene a charlar y comenzar el día.' },
+      { q:'Come bevono l\'espresso gli italiani?', a:'In piedi al bancone del bar, in pochi secondi.' },
+      { q:'Quale bevanda è strano ordinare dopo pranzo?', a:'Il cappuccino.' },
+      { q:'Che funzione sociale ha il bar italiano?', a:'È un luogo di incontro dove le persone si fermano a chiacchierare e iniziare la giornata.' },
     ]},
 ];
 
 async function renderReading(el) {
   el.innerHTML = `
     <div class="section-header">
-      <div class="section-title">Lectura</div>
+      <div class="section-title">Lettura</div>
     </div>
     <div id="reading-content">
       <div class="grid-2">
@@ -1912,7 +1912,7 @@ async function renderReading(el) {
           <div class="card" style="cursor:pointer" data-text-id="${t.id}">
             <div class="flex justify-between mb-2">
               ${cefrBadge(t.level)}
-              <span class="text-xs text-muted">${t.text.split(' ').length} palabras</span>
+              <span class="text-xs text-muted">${t.text.split(' ').length} parole</span>
             </div>
             <div class="font-medium mb-1">${t.title}</div>
             <div class="text-sm text-muted">${t.text.substring(0,100)}...</div>
@@ -1920,7 +1920,7 @@ async function renderReading(el) {
         <div class="card" style="border-style:dashed;display:flex;align-items:center;justify-content:center;padding:32px;color:var(--text-3)">
           <div style="text-align:center">
             <div style="font-size:2rem;margin-bottom:8px">+</div>
-            <div class="text-sm">Más textos próximamente</div>
+            <div class="text-sm">Più testi a breve</div>
           </div>
         </div>
       </div>
@@ -1944,7 +1944,7 @@ function showReadingText(el, text) {
   content.style.display = 'none';
 
   viewer.innerHTML = `
-    <button class="btn btn-ghost btn-sm mb-4" id="back-reading">← Volver</button>
+    <button class="btn btn-ghost btn-sm mb-4" id="back-reading">← Indietro</button>
     <div class="card mb-4">
       <div class="flex items-center gap-2 mb-4">
         <div class="section-title">${text.title}</div>
@@ -1954,14 +1954,14 @@ function showReadingText(el, text) {
     </div>
 
     <div class="card">
-      <div class="card-title mb-3">Comprensión lectora</div>
+      <div class="card-title mb-3">Comprensione della lettura</div>
       ${text.questions.map((q, i) => `
         <div class="mb-4">
           <div class="font-medium text-sm mb-2">${i+1}. ${q.q}</div>
-          <textarea placeholder="Escribe tu respuesta en español..." style="min-height:60px" data-answer="${q.a}" class="answer-area"></textarea>
+          <textarea placeholder="Scrivi la tua risposta in italiano..." style="min-height:60px" data-answer="${q.a}" class="answer-area"></textarea>
           <div class="answer-reveal text-sm text-accent mt-2" style="display:none">✓ ${q.a}</div>
         </div>`).join('')}
-      <button class="btn btn-outline btn-sm" id="reveal-answers">Ver respuestas</button>
+      <button class="btn btn-outline btn-sm" id="reveal-answers">Vedi risposte</button>
     </div>
   `;
 
@@ -1984,16 +1984,16 @@ async function renderErrors(el) {
   el.innerHTML = `
     <div class="section-header">
       <div>
-        <div class="section-title">Cuaderno de errores</div>
-        <div class="section-sub">${errors.length} errores registrados</div>
+        <div class="section-title">Quaderno degli errori</div>
+        <div class="section-sub">${errors.length} errori registrati</div>
       </div>
-      <button class="btn btn-outline btn-sm" id="add-error-btn">+ Registrar error</button>
+      <button class="btn btn-outline btn-sm" id="add-error-btn">+ Registra errore</button>
     </div>
 
     <div class="tabs">
-      <button class="tab-btn active" data-etab="pending">Pendientes</button>
-      <button class="tab-btn" data-etab="all">Todos</button>
-      <button class="tab-btn" data-etab="mastered">Corregidos</button>
+      <button class="tab-btn active" data-etab="pending">In sospeso</button>
+      <button class="tab-btn" data-etab="all">Tutti</button>
+      <button class="tab-btn" data-etab="mastered">Corretti</button>
       <button class="tab-btn" data-etab="verbi">Verbi</button>
       <button class="tab-btn" data-etab="parole">Parole</button>
     </div>
@@ -2008,15 +2008,15 @@ async function renderErrors(el) {
     else if (filter === 'mastered') filtered = errors.filter(e => e.mastery === 2);
 
     if (!filtered.length) {
-      list.innerHTML = `<div class="empty-state"><div class="empty-state-icon">${filter==='mastered'?'🏆':'✅'}</div><div class="empty-state-title">${filter==='mastered'?'Aún no has corregido errores completamente':'¡Sin errores pendientes!'}</div></div>`;
+      list.innerHTML = `<div class="empty-state"><div class="empty-state-icon">${filter==='mastered'?'🏆':'✅'}</div><div class="empty-state-title">${filter==='mastered'?'Non hai ancora corretto nessun errore':'Nessun errore in sospeso!'}</div></div>`;
       return;
     }
 
     list.innerHTML = filtered.map(e => `
       <div class="error-item ${e.mastery===2?'mastered':''}" data-id="${e.id}">
         <div class="flex justify-between mb-1">
-          <span class="badge ${['badge-gray','badge-orange','badge-green'][e.mastery||0]}">${['Aprendiendo','En progreso','Corregido'][e.mastery||0]}</span>
-          <span class="badge badge-${e.importance===3?'red':e.importance===2?'orange':'gray'}">${['','Baja','Media','Alta'][e.importance||2]}</span>
+          <span class="badge ${['badge-gray','badge-orange','badge-green'][e.mastery||0]}">${['Imparando','In corso','Corretto'][e.mastery||0]}</span>
+          <span class="badge badge-${e.importance===3?'red':e.importance===2?'orange':'gray'}">${['','Bassa','Media','Alta'][e.importance||2]}</span>
         </div>
         <div class="error-original">"${e.original_text}"</div>
         ${e.corrected_text ? `<div class="error-corrected">→ "${e.corrected_text}"</div>` : ''}
@@ -2024,32 +2024,32 @@ async function renderErrors(el) {
         <div class="error-meta">
           <span class="badge badge-gray">${e.category}</span>
           <span class="text-xs text-muted">${e.times_seen}x visto</span>
-          ${e.times_correct > 0 ? `<span class="text-xs text-accent">${e.times_correct}x correcto</span>` : ''}
+          ${e.times_correct > 0 ? `<span class="text-xs text-accent">${e.times_correct}x corretto</span>` : ''}
         </div>
         <div class="flex gap-2 mt-3">
-          <button class="btn btn-sm btn-primary review-correct-btn" data-id="${e.id}">✓ Lo tengo</button>
-          <button class="btn btn-sm btn-outline review-wrong-btn" data-id="${e.id}">✗ Aún me cuesta</button>
-          <button class="btn btn-sm btn-ghost delete-error-btn" data-id="${e.id}">Eliminar</button>
+          <button class="btn btn-sm btn-primary review-correct-btn" data-id="${e.id}">✓ Ce l'ho fatta</button>
+          <button class="btn btn-sm btn-outline review-wrong-btn" data-id="${e.id}">✗ Ancora difficile</button>
+          <button class="btn btn-sm btn-ghost delete-error-btn" data-id="${e.id}">Elimina</button>
         </div>
       </div>`).join('');
 
     list.querySelectorAll('.review-correct-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         await API.post(`/errors/${btn.dataset.id}/review`, { correct: true });
-        toast('¡Progreso registrado!');
+        toast('Progresso registrato!');
         navigate('errors');
       });
     });
     list.querySelectorAll('.review-wrong-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         await API.post(`/errors/${btn.dataset.id}/review`, { correct: false });
-        toast('Repaso programado');
+        toast('Ripasso programmato');
         navigate('errors');
       });
     });
     list.querySelectorAll('.delete-error-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (!confirm('¿Eliminar este error?')) return;
+        if (!confirm('Eliminare questo errore?')) return;
         await API.del(`/errors/${btn.dataset.id}`);
         navigate('errors');
       });
@@ -2110,7 +2110,7 @@ async function renderErrors(el) {
         return `<div class="card">
           <div style="font-weight:700;margin-bottom:4px">${col.icon} ${col.label}</div>
           <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:12px">${col.desc} · ${words.length} parole</div>
-          ${words.length ? `<div class="word-list">${wordRows}</div>${words.length>30?`<div class="text-xs text-muted mt-2">+${words.length-30} más</div>`:''}` : '<div class="text-sm text-muted">Nessuna parola</div>'}
+          ${words.length ? `<div class="word-list">${wordRows}</div>${words.length>30?`<div class="text-xs text-muted mt-2">+${words.length-30} altri</div>`:''}` : '<div class="text-sm text-muted">Nessuna parola</div>'}
         </div>`;
       }).join('')}
     </div>`;
@@ -2128,23 +2128,23 @@ async function renderErrors(el) {
   });
 
   el.querySelector('#add-error-btn').addEventListener('click', () => {
-    showModal('Registrar error', `
-      <div class="form-group"><label class="form-label">Texto original (incorrecto)</label><textarea id="err-orig" rows="2" placeholder="Ho freddo. Sto freddo."></textarea></div>
-      <div class="form-group"><label class="form-label">Corrección</label><input id="err-corr" placeholder="Ho freddo."></div>
-      <div class="form-group"><label class="form-label">Explicación</label><textarea id="err-expl" rows="2" placeholder="Usar 'avere' para sensaciones físicas, no 'stare'"></textarea></div>
+    showModal('Registra errore', `
+      <div class="form-group"><label class="form-label">Testo originale (scorretto)</label><textarea id="err-orig" rows="2" placeholder="Ho freddo. Sto freddo."></textarea></div>
+      <div class="form-group"><label class="form-label">Correzione</label><input id="err-corr" placeholder="Ho freddo."></div>
+      <div class="form-group"><label class="form-label">Spiegazione</label><textarea id="err-expl" rows="2" placeholder="Usare 'avere' per le sensazioni fisiche, non 'stare'"></textarea></div>
       <div class="form-row">
-        <div class="form-group"><label class="form-label">Categoría</label>
+        <div class="form-group"><label class="form-label">Categoria</label>
           <select id="err-cat"><option>grammar</option><option>vocabulary</option><option>conjugation</option><option>false_friend</option><option>other</option></select>
         </div>
-        <div class="form-group"><label class="form-label">Importancia</label>
-          <select id="err-imp"><option value="1">Baja</option><option value="2" selected>Media</option><option value="3">Alta</option></select>
+        <div class="form-group"><label class="form-label">Importanza</label>
+          <select id="err-imp"><option value="1">Bassa</option><option value="2" selected>Media</option><option value="3">Alta</option></select>
         </div>
       </div>
     `, [
-      { label:'Cancelar', action:'close', cls:'btn-outline' },
-      { label:'Registrar', action: async () => {
+      { label:'Annulla', action:'close', cls:'btn-outline' },
+      { label:'Registra', action: async () => {
         const orig = document.getElementById('err-orig').value.trim();
-        if (!orig) { toast('El texto original es obligatorio', 'error'); return; }
+        if (!orig) { toast('Il testo originale è obbligatorio', 'error'); return; }
         await API.post('/errors', {
           original_text: orig,
           corrected_text: document.getElementById('err-corr').value.trim(),
@@ -2152,7 +2152,7 @@ async function renderErrors(el) {
           category: document.getElementById('err-cat').value,
           importance: parseInt(document.getElementById('err-imp').value),
         });
-        toast('Error registrado');
+        toast('Errore registrato');
         closeModal();
         navigate('errors');
       }, cls:'btn-primary' },
@@ -2171,36 +2171,36 @@ async function renderProgress(el) {
 
   el.innerHTML = `
     <div class="section-header">
-      <div class="section-title">Progreso</div>
+      <div class="section-title">Progressi</div>
     </div>
 
     <!-- Summary stats -->
     <div class="grid-4 mb-4">
       <div class="stat-tile stat-tile-accent">
-        <div class="stat-tile-label">Racha actual</div>
+        <div class="stat-tile-label">Serie attuale</div>
         <div class="stat-tile-value">🔥 ${dashboard.streak}</div>
-        <div class="stat-tile-sub">Mejor: ${dashboard.bestStreak}</div>
+        <div class="stat-tile-sub">Migliore: ${dashboard.bestStreak}</div>
       </div>
       <div class="stat-tile">
-        <div class="stat-tile-label">Palabras aprendidas</div>
+        <div class="stat-tile-label">Parole imparate</div>
         <div class="stat-tile-value">${dashboard.learnedWords}</div>
-        <div class="stat-tile-sub">de ${dashboard.totalWords}</div>
+        <div class="stat-tile-sub">di ${dashboard.totalWords}</div>
       </div>
       <div class="stat-tile">
-        <div class="stat-tile-label">Semana actual</div>
+        <div class="stat-tile-label">Settimana attuale</div>
         <div class="stat-tile-value">${Math.round(dashboard.weekMinutes)}min</div>
-        <div class="stat-tile-sub">${dashboard.weekDays} días activos</div>
+        <div class="stat-tile-sub">${dashboard.weekDays} giorni attivi</div>
       </div>
       <div class="stat-tile ${dashboard.weekAccuracy > 0 ? 'stat-tile-accent' : ''}">
-        <div class="stat-tile-label">Precisión semana</div>
+        <div class="stat-tile-label">Precisione settimana</div>
         <div class="stat-tile-value">${dashboard.weekAccuracy ? fmt.pct(dashboard.weekAccuracy) : '—'}%</div>
-        <div class="stat-tile-sub">en flashcards</div>
+        <div class="stat-tile-sub">nelle flashcard</div>
       </div>
     </div>
 
     <!-- Vocabulary by category -->
     <div class="card mb-4">
-      <div class="card-title mb-4">Vocabulario por categoría</div>
+      <div class="card-title mb-4">Vocabolario per categoria</div>
       ${data.categoryProgress.map(c => {
         const pct = c.total > 0 ? Math.round((c.learned / c.total) * 100) : 0;
         const acc = c.accuracy !== null ? Math.round(c.accuracy * 100) : null;
@@ -2211,7 +2211,7 @@ async function renderProgress(el) {
               <span class="text-sm font-medium">${c.name}</span>
             </div>
             <div class="flex items-center gap-2">
-              ${acc !== null ? `<span class="text-xs text-muted">${acc}% aciertos</span>` : ''}
+              ${acc !== null ? `<span class="text-xs text-muted">${acc}% precisione</span>` : ''}
               <span class="text-xs text-muted">${c.learned}/${c.total}</span>
             </div>
           </div>
@@ -2222,38 +2222,38 @@ async function renderProgress(el) {
 
     <!-- Activity last 30 days -->
     <div class="card mb-4">
-      <div class="card-title mb-3">Actividad — últimos 30 días</div>
+      <div class="card-title mb-3">Attività — ultimi 30 giorni</div>
       <div class="activity-calendar" id="act-calendar"></div>
       <div class="flex gap-4 mt-3 text-xs text-muted">
-        <span>🟩 Meta cumplida</span>
-        <span>🟦 Estudiaste</span>
-        <span>⬜ Sin estudio</span>
+        <span>🟩 Obiettivo raggiunto</span>
+        <span>🟦 Hai studiato</span>
+        <span>⬜ Nessuno studio</span>
       </div>
     </div>
 
     <!-- Error stats -->
     ${data.errorsByCategory.length ? `
       <div class="card mb-4">
-        <div class="card-title mb-3">Errores por categoría</div>
+        <div class="card-title mb-3">Errori per categoria</div>
         ${data.errorsByCategory.map(e => `
           <div class="flex items-center gap-3 mb-3">
             <span class="badge badge-gray">${e.category}</span>
             <div style="flex:1">
               ${progressBar(e.total > 0 ? Math.round(e.resolved/e.total*100) : 0)}
             </div>
-            <span class="text-xs text-muted">${e.resolved}/${e.total} corregidos</span>
+            <span class="text-xs text-muted">${e.resolved}/${e.total} corretti</span>
           </div>`).join('')}
       </div>` : ''}
 
     <!-- Level estimate -->
     <div class="card">
-      <div class="card-title mb-3">Estimación de nivel</div>
-      <div class="alert alert-info">Esta estimación es orientativa y se basa en tu actividad en la app, no en una evaluación oficial del MCER.</div>
+      <div class="card-title mb-3">Stima del livello</div>
+      <div class="alert alert-info">Questa stima è indicativa e si basa sulla tua attività nell'app, non su una valutazione ufficiale del QCER.</div>
       <div class="mt-3">
         ${[
-          { label:'Vocabulario activo', pct: Math.min(100, Math.round((dashboard.learnedWords/500)*100)), note:`${dashboard.learnedWords}/500 palabras para B2` },
-          { label:'Consistencia', pct: Math.min(100, Math.round((dashboard.streak/30)*100)), note:`${dashboard.streak}/30 días de racha` },
-          { label:'Precisión general', pct: Math.min(100, Math.round((dashboard.weekAccuracy||0)*100)), note:`${fmt.pct(dashboard.weekAccuracy||0)}% en flashcards` },
+          { label:'Vocabolario attivo', pct: Math.min(100, Math.round((dashboard.learnedWords/500)*100)), note:`${dashboard.learnedWords}/500 parole per B2` },
+          { label:'Costanza', pct: Math.min(100, Math.round((dashboard.streak/30)*100)), note:`${dashboard.streak}/30 giorni di serie` },
+          { label:'Precisione generale', pct: Math.min(100, Math.round((dashboard.weekAccuracy||0)*100)), note:`${fmt.pct(dashboard.weekAccuracy||0)}% nelle flashcard` },
         ].map(m => `
           <div class="mb-4">
             <div class="flex justify-between mb-1">
@@ -2276,7 +2276,7 @@ async function renderProgress(el) {
     const stat = data.last30.find(s => s.date === ds);
     const div = document.createElement('div');
     div.className = `cal-day${stat?.goal_met ? ' level-4' : stat?.minutes_studied > 0 ? ' level-2' : ''}`;
-    div.title = ds + (stat ? ` — ${Math.round(stat.minutes_studied)}min` : ' — sin estudio');
+    div.title = ds + (stat ? ` — ${Math.round(stat.minutes_studied)}min` : ' — nessuno studio');
     calEl.appendChild(div);
   }
 }
@@ -2289,12 +2289,12 @@ async function renderRewards(el) {
 
   el.innerHTML = `
     <div class="section-header">
-      <div class="section-title">Recompensas e hitos</div>
+      <div class="section-title">Premi e traguardi</div>
     </div>
 
     <div class="tabs">
-      <button class="tab-btn active" data-rtab="rewards">Mis recompensas</button>
-      <button class="tab-btn" data-rtab="milestones">Hitos</button>
+      <button class="tab-btn active" data-rtab="rewards">I miei premi</button>
+      <button class="tab-btn" data-rtab="milestones">Traguardi</button>
     </div>
     <div id="rewards-tab"></div>
   `;
@@ -2304,44 +2304,44 @@ async function renderRewards(el) {
     if (tab === 'rewards') {
       rtab.innerHTML = `
         <div class="flex justify-end mb-4">
-          <button class="btn btn-primary btn-sm" id="add-reward-btn">+ Nueva recompensa</button>
+          <button class="btn btn-primary btn-sm" id="add-reward-btn">+ Nuovo premio</button>
         </div>
         ${rewards.length ? rewards.map(r => `
           <div class="card mb-3">
             <div class="flex justify-between mb-2">
               <div class="font-medium">${r.title}</div>
-              <span class="badge ${r.earned?'badge-gold':'badge-gray'}">${r.earned?'🏆 Ganada':'Pendiente'}</span>
+              <span class="badge ${r.earned?'badge-gold':'badge-gray'}">${r.earned?'🏆 Guadagnato':'In sospeso'}</span>
             </div>
             ${r.description ? `<div class="text-sm text-muted mb-2">${r.description}</div>` : ''}
             <div class="text-xs text-muted mb-2">Requisito: ${r.requirement_type} — ${r.requirement_value}</div>
             ${progressBar(Math.min(100, Math.round((r.current_value/r.requirement_value)*100)))}
-            ${r.earned && !r.claimed ? `<button class="btn btn-sm btn-primary mt-2 claim-reward" data-id="${r.id}">Reclamar recompensa</button>` : ''}
+            ${r.earned && !r.claimed ? `<button class="btn btn-sm btn-primary mt-2 claim-reward" data-id="${r.id}">Riscatta premio</button>` : ''}
           </div>`).join('')
-        : '<div class="empty-state"><div class="empty-state-icon">🎁</div><div class="empty-state-title">Crea tu primera recompensa personal</div></div>'}
+        : '<div class="empty-state"><div class="empty-state-icon">🎁</div><div class="empty-state-title">Crea il tuo primo premio personale</div></div>'}
       `;
       rtab.querySelector('#add-reward-btn')?.addEventListener('click', () => {
-        showModal('Nueva recompensa', `
-          <div class="form-group"><label class="form-label">Recompensa</label><input id="rw-title" placeholder="Ver una película italiana"></div>
-          <div class="form-group"><label class="form-label">Descripción</label><input id="rw-desc" placeholder="Opcional"></div>
-          <div class="form-group"><label class="form-label">Objetivo</label><input id="rw-val" type="number" placeholder="7" min="1"></div>
-          <div class="form-group"><label class="form-label">Tipo de objetivo</label>
-            <select id="rw-type"><option value="days_streak">Días de racha</option><option value="words_learned">Palabras aprendidas</option><option value="sessions">Sesiones completadas</option></select>
+        showModal('Nuovo premio', `
+          <div class="form-group"><label class="form-label">Premio</label><input id="rw-title" placeholder="Guardare un film italiano"></div>
+          <div class="form-group"><label class="form-label">Descrizione</label><input id="rw-desc" placeholder="Opzionale"></div>
+          <div class="form-group"><label class="form-label">Obiettivo</label><input id="rw-val" type="number" placeholder="7" min="1"></div>
+          <div class="form-group"><label class="form-label">Tipo di obiettivo</label>
+            <select id="rw-type"><option value="days_streak">Giorni di serie</option><option value="words_learned">Parole imparate</option><option value="sessions">Sessioni completate</option></select>
           </div>
         `, [
-          { label:'Cancelar', action:'close', cls:'btn-outline' },
-          { label:'Crear', action: async () => {
+          { label:'Annulla', action:'close', cls:'btn-outline' },
+          { label:'Crea', action: async () => {
             const title = document.getElementById('rw-title').value.trim();
             const val = parseFloat(document.getElementById('rw-val').value);
-            if (!title || !val) { toast('Completa todos los campos', 'error'); return; }
+            if (!title || !val) { toast('Compila tutti i campi', 'error'); return; }
             await API.post('/rewards', { title, description: document.getElementById('rw-desc').value, requirement_type: document.getElementById('rw-type').value, requirement_value: val });
-            toast('Recompensa creada'); closeModal(); navigate('rewards');
+            toast('Premio creato'); closeModal(); navigate('rewards');
           }, cls:'btn-primary' },
         ]);
       });
       rtab.querySelectorAll('.claim-reward')?.forEach(btn => {
         btn.addEventListener('click', async () => {
           await API.put(`/rewards/${btn.dataset.id}`, { claimed: 1 });
-          toast('🎉 ¡Recompensa reclamada!'); navigate('rewards');
+          toast('🎉 Premio riscattato!'); navigate('rewards');
         });
       });
     } else {
@@ -2357,7 +2357,7 @@ async function renderRewards(el) {
                 </div>
               </div>
               <div class="text-sm text-muted">${m.description}</div>
-              ${m.unlocked ? `<div class="text-xs text-accent mt-2">Desbloqueado ${m.unlocked_at ? fmt.date(m.unlocked_at*1000) : ''}</div>` : ''}
+              ${m.unlocked ? `<div class="text-xs text-accent mt-2">Sbloccato ${m.unlocked_at ? fmt.date(m.unlocked_at*1000) : ''}</div>` : ''}
             </div>`).join('')}
         </div>`;
     }
@@ -2381,63 +2381,63 @@ async function renderSettings(el) {
   const settings = await API.get('/settings');
 
   el.innerHTML = `
-    <div class="section-title mb-4">Configuración</div>
+    <div class="section-title mb-4">Impostazioni</div>
 
     <div class="card mb-4">
-      <div class="card-title mb-4">Objetivo y nivel</div>
+      <div class="card-title mb-4">Obiettivo e livello</div>
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">Objetivo de nivel</label>
-          <select id="s-goal"><option value="B2" ${settings.goal_level==='B2'?'selected':''}>B2 — Nivel intermedio avanzado</option><option value="C1" ${settings.goal_level==='C1'?'selected':''}>C1 — Nivel avanzado</option></select>
+          <label class="form-label">Obiettivo di livello</label>
+          <select id="s-goal"><option value="B2" ${settings.goal_level==='B2'?'selected':''}>B2 — Livello intermedio avanzato</option><option value="C1" ${settings.goal_level==='C1'?'selected':''}>C1 — Livello avanzato</option></select>
         </div>
         <div class="form-group">
-          <label class="form-label">Minutos diarios</label>
+          <label class="form-label">Minuti giornalieri</label>
           <select id="s-mins">
-            ${[15,20,30,45,60,90].map(m=>`<option value="${m}" ${settings.daily_minutes==m?'selected':''}>${m} minutos</option>`).join('')}
+            ${[15,20,30,45,60,90].map(m=>`<option value="${m}" ${settings.daily_minutes==m?'selected':''}>${m} minuti</option>`).join('')}
           </select>
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">Tarjetas nuevas por día</label>
+        <label class="form-label">Schede nuove al giorno</label>
         <select id="s-cards">
-          ${[5,10,15,20,25,30].map(n=>`<option value="${n}" ${settings.daily_new_cards==n?'selected':''}>${n} tarjetas</option>`).join('')}
+          ${[5,10,15,20,25,30].map(n=>`<option value="${n}" ${settings.daily_new_cards==n?'selected':''}>${n} schede</option>`).join('')}
         </select>
       </div>
     </div>
 
     <div class="card mb-4">
-      <div class="card-title mb-4">Apariencia</div>
+      <div class="card-title mb-4">Aspetto</div>
       <div class="form-group">
         <label class="form-label">Tema</label>
         <select id="s-theme">
-          <option value="auto" ${currentTheme==='auto'?'selected':''}>Automático (sistema)</option>
-          <option value="light" ${currentTheme==='light'?'selected':''}>Claro</option>
-          <option value="dark" ${currentTheme==='dark'?'selected':''}>Oscuro</option>
+          <option value="auto" ${currentTheme==='auto'?'selected':''}>Automatico (sistema)</option>
+          <option value="light" ${currentTheme==='light'?'selected':''}>Chiaro</option>
+          <option value="dark" ${currentTheme==='dark'?'selected':''}>Scuro</option>
         </select>
       </div>
     </div>
 
     <div class="card mb-4">
-      <div class="card-title mb-4">Datos</div>
+      <div class="card-title mb-4">Dati</div>
       <div class="flex gap-2 flex-wrap">
-        <a href="/api/export" download class="btn btn-outline">⬇️ Exportar todos mis datos</a>
+        <a href="/api/export" download class="btn btn-outline">⬇️ Esporta tutti i miei dati</a>
       </div>
-      <div class="form-hint mt-2">Los datos se exportan en formato JSON. Úsalos como copia de seguridad o para migrar a otro dispositivo.</div>
+      <div class="form-hint mt-2">I dati vengono esportati in formato JSON. Usali come backup o per migrare su un altro dispositivo.</div>
     </div>
 
     <div class="card mb-4">
-      <div class="card-title mb-2">Plan de estudio recomendado</div>
+      <div class="card-title mb-2">Piano di studio consigliato</div>
       <div class="text-sm text-muted" style="line-height:2">
-        <strong>Basado en investigación sobre adquisición de idiomas (Krashen, Nation, Webb):</strong><br>
-        — <strong>70%</strong> input comprensible (lectura + escucha al nivel i+1)<br>
-        — <strong>15%</strong> repetición espaciada con Anki/flashcards (SM-2)<br>
-        — <strong>15%</strong> producción activa (escritura, conjugaciones)<br>
-        — <strong>30–45 min/día</strong> supera ampliamente a sesiones largas esporádicas<br>
-        — El <strong>congiuntivo</strong> es el objetivo gramatical #1 para hispanohablantes en B2
+        <strong>Basato sulla ricerca sull'acquisizione delle lingue (Krashen, Nation, Webb):</strong><br>
+        — <strong>70%</strong> input comprensibile (lettura + ascolto al livello i+1)<br>
+        — <strong>15%</strong> ripetizione spaziata con Anki/flashcard (SM-2)<br>
+        — <strong>15%</strong> produzione attiva (scrittura, coniugazioni)<br>
+        — <strong>30–45 min/giorno</strong> supera di gran lunga le sessioni lunghe sporadiche<br>
+        — Il <strong>congiuntivo</strong> è l'obiettivo grammaticale #1 per i madrelingua spagnoli a B2
       </div>
     </div>
 
-    <button class="btn btn-primary" id="save-settings">Guardar configuración</button>
+    <button class="btn btn-primary" id="save-settings">Salva impostazioni</button>
   `;
 
   el.querySelector('#save-settings').addEventListener('click', async () => {
@@ -2449,7 +2449,7 @@ async function renderSettings(el) {
     };
     await API.put('/settings', newSettings);
     applyTheme(newSettings.theme);
-    toast('Configuración guardada');
+    toast('Impostazioni salvate');
   });
 
   document.getElementById('s-theme').addEventListener('change', e => applyTheme(e.target.value));
