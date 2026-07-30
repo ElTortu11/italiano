@@ -1171,10 +1171,16 @@ function renderExerciseUI(area, ex) {
     conjState.streak = 0;
     loadConjugationExercise(document.getElementById('app-content'));
   });
-  document.getElementById('conj-next').addEventListener('click', () => {
+  let arrowListener = null;
+
+  function goNext() {
+    if (arrowListener) { document.removeEventListener('keydown', arrowListener); arrowListener = null; }
     loadConjugationExercise(document.getElementById('app-content'));
-  });
+  }
+
+  document.getElementById('conj-next').addEventListener('click', goNext);
   document.getElementById('conj-retry').addEventListener('click', () => {
+    if (arrowListener) { document.removeEventListener('keydown', arrowListener); arrowListener = null; }
     inputs.forEach(inp => {
       inp.disabled = false;
       inp.value = '';
@@ -1194,8 +1200,9 @@ function renderExerciseUI(area, ex) {
       const correct = (ex.all_forms || {})[person] || '';
       const isOk = inp.value.trim().toLowerCase() === correct.toLowerCase();
       if (!isOk) {
-        const icon = document.getElementById('icon-' + person);
-        icon.innerHTML = `<span style="color:#ef4444">✗</span> <span style="color:var(--text-muted);font-size:0.85em">${correct}</span>`;
+        inp.value = correct;
+        inp.style.borderColor = '#f59e0b';
+        document.getElementById('icon-' + person).textContent = '';
       }
     });
     document.getElementById('conj-show').style.display = 'none';
@@ -1216,10 +1223,8 @@ function renderExerciseUI(area, ex) {
       inp.disabled = true;
       inp.style.borderColor = isOk ? 'var(--accent)' : '#ef4444';
       const icon = document.getElementById('icon-' + person);
-      if (isOk) {
-        icon.textContent = '✓';
-        icon.style.color = 'var(--accent)';
-      }
+      icon.textContent = isOk ? '✓' : '✗';
+      icon.style.color = isOk ? 'var(--accent)' : '#ef4444';
 
       await API.post('/conjugation/check', { verb: ex.verb, tense: ex.tense, person, answer: answer || '__skip__' });
     }
@@ -1240,6 +1245,9 @@ function renderExerciseUI(area, ex) {
     document.getElementById('conj-retry').style.display = 'inline-flex';
     if (correctCount < persons.length) document.getElementById('conj-show').style.display = 'inline-flex';
     document.getElementById('conj-next').style.display = 'inline-flex';
+
+    arrowListener = e => { if (e.key === 'ArrowRight' || e.key === 'Enter') goNext(); };
+    document.addEventListener('keydown', arrowListener);
   }
 }
 
