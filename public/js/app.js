@@ -688,7 +688,7 @@ function renderFlashcardTyping(container) {
       ${card.category_icon ? `<div class="fc-typing-cat">${card.category_icon} ${card.category_name||''}</div>` : ''}
       <div class="fc-typing-word">${card.back}</div>
       ${card.category_name === 'Preposizioni'
-        ? `<div class="fc-typing-hint">Scrivi la preposizione in italiano</div>`
+        ? `<div class="fc-typing-hint">Scrivi la preposizione in italiano</div>${card.notes ? `<div class="fc-typing-sub" style="font-size:0.78rem;color:var(--text-muted);margin-top:2px;margin-bottom:4px">${card.notes}</div>` : ''}`
         : card.word_type === 'verb'
           ? `<div class="fc-typing-hint">Scrivi il verbo all'infinito</div>`
           : `<div class="fc-typing-hint">Scrivi con l'articolo (es: <em>il cane</em>, <em>la casa</em>, <em>l'uomo</em>)</div>`
@@ -724,7 +724,9 @@ function renderFlashcardTyping(container) {
     if (!typed) return;
 
     const correct = card.front;
-    const isOk = normalize(typed) === normalize(correct);
+    // Accept answer with or without parenthetical note e.g. "della (di + la)" → accept "della"
+    const correctBase = correct.replace(/\s*\([^)]*\)\s*$/, '').trim();
+    const isOk = normalize(typed) === normalize(correct) || normalize(typed) === normalize(correctBase);
     const quality = isOk ? 5 : 1;
 
     input.disabled = true;
@@ -1468,7 +1470,8 @@ function renderDrillTense(area) {
     }
     document.getElementById('drill-next').style.display = 'inline-flex';
 
-    pendingKey = e => { if (e.key === 'ArrowRight' || e.key === 'Enter') { document.removeEventListener('keydown', pendingKey); pendingKey = null; goNext(); } };
+    // Only ArrowRight advances — Enter is excluded to prevent autorepeat from skipping results
+    pendingKey = e => { if (e.key === 'ArrowRight') { document.removeEventListener('keydown', pendingKey); pendingKey = null; goNext(); } };
     setTimeout(() => document.addEventListener('keydown', pendingKey), 50);
   }
 
