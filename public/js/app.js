@@ -63,6 +63,7 @@ const ROUTES = {
   vocabulary: { title:'Vocabolario', render: renderVocabulary },
   conjugation: { title:'Coniugazioni', render: renderConjugation },
   grammar: { title:'Grammatica', render: renderGrammar },
+  completamento: { title:'Completamento', render: renderCompletamento },
   writing: { title:'Scrittura', render: renderWriting },
   reading: { title:'Lettura', render: renderReading },
   errors: { title:'Quaderno degli errori', render: renderErrors },
@@ -2515,6 +2516,238 @@ async function renderRewards(el) {
   });
 
   showRewardsTab('rewards');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// COMPLETAMENTO (CLOZE)
+// ══════════════════════════════════════════════════════════════════════════════
+
+const CLOZE = {
+  articoli: [
+    { title:'Al bar', text:'Ogni mattina Marco ordina ___ caffè e ___ cornetto. ___ barista lo conosce già. Sulla vetrina ci sono ___ paste e ___ pasticcini.', answers:['un','un','Il','delle','dei'] },
+    { title:'Lo sport', text:'___ sport più praticato in Italia è ___ calcio. ___ squadra della mia città ha vinto ___ campionato. Guardo ___ partite in televisione.', answers:['Lo','il','La','il','le'] },
+    { title:'La famiglia', text:'___ mio fratello è ___ medico bravo. Ha ___ figlia di tre anni e ___ figlio di cinque. ___ bambini sono molto vivaci.', answers:['Il','un','una','un','I'] },
+    { title:'La natura', text:'___ sole sorge a est e tramonta a ovest. ___ luna piena illumina ___ notte. ___ stelle brillano nel cielo sereno.', answers:['Il','La','la','Le'] },
+    { title:'In città', text:'___ centro storico è pieno di turisti. ___ negozi aprono alle nove. ___ piazze della città sono bellissime e ___ fontane sono famose nel mondo.', answers:['Il','I','Le','le'] },
+    { title:'Gli animali', text:'___ gatto di Lucia dorme tutto ___ giorno sul divano. ___ cani del vicino abbaiano sempre. ___ aquile volano sulle montagne alte.', answers:['Il','il','I','Le'] },
+    { title:'Nello zaino', text:'Nella borsa ho ___ smartphone, ___ portafoglio e ___ chiavi di casa. Stamattina ho dimenticato ___ ombrello.', answers:['uno','un','le',"l'"] },
+    { title:'Il viaggio', text:'___ estate scorsa ho visitato ___ Sicilia con ___ miei genitori. ___ isola è bellissima e ___ cibo è straordinario.', answers:["L'",'la','i',"L'",'il'] },
+    { title:'La salute', text:'Ho ___ mal di testa terribile. ___ medico mi ha prescritto ___ farmaci. Devo bere ___ acqua e riposarmi.', answers:['un','Il','dei',"dell'"] },
+    { title:'Al mercato', text:'Ho comprato ___ pomodori freschi, ___ insalata e ___ uova. ___ venditore era molto simpatico e mi ha fatto ___ sconto.', answers:['dei',"un'",'delle','Il','uno'] },
+    { title:'La scuola di lingue', text:'Studio in ___ scuola di lingue privata. ___ professore di italiano si chiama Carlo. ___ lezioni sono ogni giorno alle nove.', answers:['una','Il','Le'] },
+    { title:'Natale', text:'A Natale prepariamo ___ albero e ___ presepe. ___ bambini aspettano ___ regali con entusiasmo. È ___ periodo magico.', answers:["l'",'il','I','i','un'] },
+    { title:'La tecnologia', text:'___ smartphone è diventato indispensabile. ___ applicazioni che uso di più sono per ___ foto e ___ messaggi. Non ricordo ___ vita senza internet.', answers:['Lo','Le','le','i','la'] },
+    { title:'Per cena', text:'Per cena ho preparato ___ zuppa di verdure e ___ pane tostato. Come dessert ho preso ___ yogurt alla frutta e ___ frutto di stagione.', answers:['una','del','uno','un'] },
+    { title:"L'arte italiana", text:"___ arte italiana è famosa nel mondo. ___ Colosseo e ___ Fontana di Trevi sono ___ simboli di Roma. Ogni anno arrivano ___ milioni di turisti.", answers:["L'",'Il','la','i','dei'] },
+    { title:'Il lavoro', text:'___ mio collega ha trovato ___ lavoro nuovo. Lavora in ___ azienda multinazionale. Ha ___ ufficio bellissimo al quinto piano.', answers:['Il','un',"un'",'un'] },
+    { title:'Lo sport invernale', text:'___ sci è ___ sport invernale che pratico ogni anno. ___ piste di Courmayeur sono fantastiche. Ho comprato ___ sci nuovi.', answers:['Lo','uno','Le','degli'] },
+    { title:'La musica', text:'___ musica classica mi rilassa molto. Ascolto spesso ___ sinfonie di Beethoven e ___ opere di Verdi. ___ violino è ___ strumento che preferisco.', answers:['La','le','le','Il','lo'] },
+    { title:'Il tempo libero', text:'Nel tempo libero leggo ___ romanzi e guardo ___ film. ___ domenica vado al cinema con ___ miei amici. Mi piacciono ___ film di fantascienza.', answers:['dei','dei','La','i','i'] },
+    { title:'Al ristorante', text:'Ho ordinato ___ antipasto, ___ primo piatto e ___ secondo. Come dessert ho preso ___ tiramisù. ___ conto era molto ragionevole.', answers:['un','un','un','il','Il'] },
+  ],
+  preposizioni: [
+    { title:'Vita quotidiana', text:'Marco si sveglia ___ sei ___ mattina. Fa colazione ___ cucina e poi va ___ lavoro. Torna ___ casa la sera.', answers:['alle','di','in','al','a'] },
+    { title:'Le origini', text:'Giulia viene ___ Napoli ma studia ___ Bologna. Ogni mese torna ___ casa sua ___ treno.', answers:['da','a','a','in'] },
+    { title:'Una serata fuori', text:'Ieri sera sono uscito ___ cena ___ mia moglie. Siamo andati ___ un ristorante vicino ___ teatro.', answers:['a','con','in','al'] },
+    { title:'Vacanze in Grecia', text:"Quest'estate vado ___ Grecia ___ tutta la famiglia. Partiamo ___ Roma ___ aereo e arriviamo ___ Atene la sera.", answers:['in','con','da','in','ad'] },
+    { title:'A scuola', text:'Gli studenti arrivano ___ scuola ___ otto. Il professore entra ___ classe e comincia la lezione.', answers:['a','alle','in'] },
+    { title:'Le stagioni', text:"D'estate vado ___ mare con gli amici. D'inverno preferisco stare ___ casa. ___ primavera mi piace camminare ___ parco.", answers:['al','a','In','nel'] },
+    { title:'Una lettera', text:'Ho scritto ___ mia amica che vive ___ Madrid. Le ho parlato ___ mio lavoro e ___ miei sogni futuri.', answers:['alla','a','del','dei'] },
+    { title:'Dal medico', text:'Domani ho un appuntamento ___ medico. Lo studio si trova ___ terzo piano ___ una clinica vicino ___ stazione.', answers:['dal','al','di','alla'] },
+    { title:'Il museo', text:'Siamo andati ___ museo ___ piedi. Il biglietto costa dodici euro ___ adulto. Le opere provengono ___ tutto il mondo.', answers:['al','a','per','da'] },
+    { title:'La ricetta', text:'La ricetta ___ pasta alla carbonara viene ___ Lazio. Si prepara ___ pancetta, uova e formaggio. Non si usa ___ nessun caso la panna.', answers:['della','dal','con','in'] },
+    { title:'Casa mia', text:'Abito ___ terzo piano ___ un palazzo storico. Il mio appartamento è ___ centro ___ una bella città italiana.', answers:['al','di','in','di'] },
+    { title:'In treno', text:'Parto ___ Milano ___ le otto e arrivo ___ Roma ___ mezzogiorno. Il viaggio dura due ore ___ treno.', answers:['da','alle','a','a','in'] },
+    { title:'Le vacanze estive', text:"Quest'estate resto ___ Italia. Vado ___ Puglia ___ luglio. Starò ___ un agriturismo vicino ___ mare.", answers:['in','in','a','in','al'] },
+    { title:'Sport e amici', text:'Il sabato mattina vado ___ palestra. Poi faccio una passeggiata ___ parco. La domenica gioco ___ calcio ___ amici.', answers:['in','nel','a','con'] },
+    { title:'In ufficio', text:"Lavoro ___ un'azienda ___ Milano. Arrivo ___ ufficio ___ le nove e parto ___ le sei.", answers:['in','di','in','alle','alle'] },
+    { title:'La spesa', text:'Ogni settimana vado ___ supermercato ___ fare la spesa. Compro frutta e verdura e qualcosa ___ cena. Pago spesso ___ contanti.', answers:['al','per','per','in'] },
+    { title:"All'università", text:"Studio Economia ___ Università ___ Bologna. Il mio corso inizia ___ nove ___ mattina.", answers:["all'",'di','alle','di'] },
+    { title:'Un fine settimana', text:'Il sabato vado ___ cinema. La domenica resto ___ casa. Ogni sera leggo ___ un\'ora prima ___ dormire.', answers:['al','a','per','di'] },
+    { title:"L'aeroporto", text:"Per andare ___ aeroporto parto ___ casa ___ le sei. Il volo decolla ___ le otto e un quarto.", answers:["all'",'da','alle','alle'] },
+    { title:'Una lettera', text:'Ho ricevuto una lettera ___ miei genitori che vivono ___ Spagna. Mi hanno scritto ___ nuovo lavoro e ___ mia sorella.', answers:['dai','in','del','della'] },
+  ],
+};
+
+let clozeState = { type: null, index: 0, highWater: -1, score: { correct: 0, total: 0 } };
+
+function normCloze(s) {
+  return (s || '').normalize('NFC').toLowerCase().trim().replace(/[''`‘’]/g, "'");
+}
+
+function renderCompletamento(el) {
+  if (!clozeState.type) {
+    el.innerHTML = `
+      <div class="section-header">
+        <div class="section-title">Completamento</div>
+        <div class="section-sub">Riempi gli spazi con l'articolo o la preposizione corretta</div>
+      </div>
+      <div class="card" style="max-width:460px">
+        <div style="font-weight:600;margin-bottom:16px">Scegli la categoria:</div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <button type="button" class="btn btn-primary" id="pick-art" style="justify-content:flex-start;gap:12px">
+            <span style="font-size:1.3rem">📝</span>
+            <span><strong>Articoli</strong><br><small style="font-weight:400;opacity:0.8">il, lo, la, l', un, dei… — 20 testi</small></span>
+          </button>
+          <button type="button" class="btn btn-outline" id="pick-prep" style="justify-content:flex-start;gap:12px">
+            <span style="font-size:1.3rem">📍</span>
+            <span><strong>Preposizioni</strong><br><small style="font-weight:400;opacity:0.8">di, a, da, nel, alla… — 20 testi</small></span>
+          </button>
+        </div>
+      </div>
+    `;
+    el.querySelector('#pick-art').onclick = () => {
+      clozeState = { type:'articoli', index:0, highWater:-1, score:{correct:0,total:0} };
+      renderClozeEx(el);
+    };
+    el.querySelector('#pick-prep').onclick = () => {
+      clozeState = { type:'preposizioni', index:0, highWater:-1, score:{correct:0,total:0} };
+      renderClozeEx(el);
+    };
+    return;
+  }
+  renderClozeEx(el);
+}
+
+function renderClozeEx(el) {
+  const exs = CLOZE[clozeState.type];
+  if (clozeState.index >= exs.length) { renderClozeDone(el); return; }
+
+  const ex = exs[clozeState.index];
+  const parts = ex.text.split('___');
+  const canGoBack = clozeState.index > 0;
+  const canGoFwd = clozeState.highWater >= clozeState.index;
+  const progress = `${clozeState.index + 1} / ${exs.length}`;
+  const typeLabel = clozeState.type === 'articoli' ? '📝 Articoli' : '📍 Preposizioni';
+
+  let textHTML = '';
+  parts.forEach((part, i) => {
+    textHTML += part;
+    if (i < parts.length - 1) {
+      const w = Math.max((ex.answers[i]?.length || 4) * 13 + 16, 44);
+      textHTML += `<input class="cloze-input" data-index="${i}" style="width:${w}px" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">`;
+    }
+  });
+
+  el.innerHTML = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <button type="button" id="cloze-prev" class="btn btn-outline" style="padding:2px 10px;font-size:0.9rem;${canGoBack?'':'visibility:hidden'}">←</button>
+          <div style="font-size:0.8rem;color:var(--text-muted)">${progress} — ${typeLabel}</div>
+          <button type="button" id="cloze-nav-fwd" class="btn btn-outline" style="padding:2px 10px;font-size:0.9rem;${canGoFwd?'':'visibility:hidden'}">→</button>
+        </div>
+        <div style="font-size:0.8rem;color:var(--text-muted)" id="cloze-score">✓ ${clozeState.score.correct}/${clozeState.score.total}</div>
+      </div>
+      <div style="font-weight:600;font-size:1rem;margin-bottom:14px">${ex.title}</div>
+      <div class="cloze-text">${textHTML}</div>
+      <div style="display:flex;gap:8px;margin-top:20px;justify-content:flex-end;flex-wrap:wrap">
+        <button type="button" class="btn btn-primary" id="cloze-check">Controlla</button>
+        <button type="button" class="btn btn-outline" id="cloze-show" style="display:none">Mostra risposte</button>
+        <button type="button" class="btn btn-outline" id="cloze-retry" style="display:none">Riprova</button>
+        <button type="button" class="btn btn-primary" id="cloze-next" style="display:none">Avanti →</button>
+      </div>
+    </div>
+  `;
+
+  const inputs = [...el.querySelectorAll('.cloze-input')];
+  if (inputs[0]) inputs[0].focus();
+
+  let isLocked = false;
+  let pendingKey = null;
+
+  inputs.forEach((inp, i) => {
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); i < inputs.length - 1 ? inputs[i+1].focus() : doCheck(); }
+    });
+  });
+
+  function doCheck() {
+    if (el.querySelector('#cloze-next').style.display !== 'none') return;
+    let correct = 0;
+    inputs.forEach((inp, i) => {
+      const typed = normCloze(inp.value);
+      const ok = typed === normCloze(ex.answers[i]);
+      inp.style.borderColor = ok ? 'var(--accent)' : '#ef4444';
+      inp.dataset.result = ok ? 'ok' : 'wrong';
+      inp.disabled = true;
+      if (!isLocked) { clozeState.score.total++; if (ok) { clozeState.score.correct++; correct++; } }
+      else if (ok) correct++;
+    });
+    if (!isLocked) isLocked = true;
+    const scoreEl = el.querySelector('#cloze-score');
+    if (scoreEl) scoreEl.textContent = `✓ ${clozeState.score.correct}/${clozeState.score.total}`;
+    el.querySelector('#cloze-check').style.display = 'none';
+    if (correct < inputs.length) {
+      el.querySelector('#cloze-show').style.display = 'inline-flex';
+      el.querySelector('#cloze-retry').style.display = 'inline-flex';
+    }
+    el.querySelector('#cloze-next').style.display = 'inline-flex';
+    pendingKey = e => { if (e.key === 'ArrowRight' || e.key === 'Enter') { document.removeEventListener('keydown', pendingKey); pendingKey = null; goNext(); } };
+    setTimeout(() => document.addEventListener('keydown', pendingKey), 50);
+  }
+
+  function goNext() {
+    if (pendingKey) { document.removeEventListener('keydown', pendingKey); pendingKey = null; }
+    clozeState.highWater = Math.max(clozeState.highWater, clozeState.index);
+    clozeState.index++;
+    renderClozeEx(el);
+  }
+
+  function goPrev() {
+    if (pendingKey) { document.removeEventListener('keydown', pendingKey); pendingKey = null; }
+    clozeState.index--;
+    renderClozeEx(el);
+  }
+
+  el.querySelector('#cloze-check').addEventListener('click', doCheck);
+  el.querySelector('#cloze-show').addEventListener('click', () => {
+    inputs.forEach((inp, i) => {
+      if (inp.dataset.result === 'wrong') {
+        inp.value = ex.answers[i];
+        inp.style.borderColor = '#f59e0b';
+      }
+    });
+  });
+  el.querySelector('#cloze-retry').addEventListener('click', () => {
+    if (pendingKey) { document.removeEventListener('keydown', pendingKey); pendingKey = null; }
+    inputs.forEach(inp => { inp.value = ''; inp.style.borderColor = ''; inp.disabled = false; delete inp.dataset.result; });
+    el.querySelector('#cloze-check').style.display = 'inline-flex';
+    el.querySelector('#cloze-show').style.display = 'none';
+    el.querySelector('#cloze-retry').style.display = 'none';
+    el.querySelector('#cloze-next').style.display = 'none';
+    inputs[0]?.focus();
+  });
+  el.querySelector('#cloze-next').addEventListener('click', goNext);
+  if (canGoBack) el.querySelector('#cloze-prev').addEventListener('click', goPrev);
+  if (canGoFwd) el.querySelector('#cloze-nav-fwd').addEventListener('click', goNext);
+}
+
+function renderClozeDone(el) {
+  const { correct, total } = clozeState.score;
+  const pct = total > 0 ? Math.round(correct / total * 100) : 0;
+  const emoji = pct >= 90 ? '🎉' : pct >= 70 ? '👍' : '💪';
+  const label = clozeState.type === 'articoli' ? 'Articoli' : 'Preposizioni';
+  el.innerHTML = `
+    <div class="card" style="text-align:center;padding:32px 24px">
+      <div style="font-size:2.5rem;margin-bottom:8px">${emoji}</div>
+      <div style="font-size:1.2rem;font-weight:700;margin-bottom:4px">${label} — completato!</div>
+      <div style="font-size:2rem;font-weight:700;color:${pct>=80?'var(--accent)':'#f59e0b'};margin-bottom:4px">${pct}%</div>
+      <div style="font-size:0.9rem;color:var(--text-muted);margin-bottom:24px">${correct} / ${total} corretti</div>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+        <button type="button" class="btn btn-outline" id="cloze-again">Riprova</button>
+        <button type="button" class="btn btn-primary" id="cloze-new">Cambia categoria</button>
+      </div>
+    </div>
+  `;
+  el.querySelector('#cloze-again').addEventListener('click', () => {
+    clozeState = { type:clozeState.type, index:0, highWater:-1, score:{correct:0,total:0} };
+    renderClozeEx(el);
+  });
+  el.querySelector('#cloze-new').addEventListener('click', () => {
+    clozeState = { type:null, index:0, highWater:-1, score:{correct:0,total:0} };
+    renderCompletamento(el);
+  });
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
