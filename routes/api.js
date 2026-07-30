@@ -430,8 +430,8 @@ function expandForms(form) {
   for (const pfx of esserePfx) {
     if (f.startsWith(pfx)) {
       const rest = f.slice(pfx.length);
-      if (rest.endsWith('o')) return [f, pfx + rest.slice(0,-1) + 'a'];
-      if (rest.endsWith('i')) return [f, pfx + rest.slice(0,-1) + 'e'];
+      if (rest.endsWith('o')) return [f, pfx + rest.slice(0,-1) + 'a', pfx + rest.slice(0,-1) + 'o/a'];
+      if (rest.endsWith('i')) return [f, pfx + rest.slice(0,-1) + 'e', pfx + rest.slice(0,-1) + 'i/e'];
     }
   }
   return [f];
