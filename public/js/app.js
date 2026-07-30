@@ -1388,7 +1388,7 @@ function renderDrillTense(area) {
       <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:16px">${TENSE_HINTS[tense]||''}</div>
       <div id="drill-forms">
         ${['io','tu','lui','noi','voi','loro'].map(person => {
-          const label = person === 'lui' && (forms[person]||'').includes('/') ? 'lui/lei' : person;
+          const label = person === 'lui' ? 'lui/lei' : person;
           return `
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
             <div style="width:52px;font-size:0.9rem;color:var(--text-muted);flex-shrink:0">${label}</div>
