@@ -1023,18 +1023,18 @@ const TENSE_LABELS = {
   futuro: 'Futuro', condizionale: 'Condizionale', congiuntivo: 'Congiuntivo',
 };
 function expandForms(form) {
-  if (!form || !form.includes('/')) return [form.toLowerCase().trim()];
-  const parts = form.split(' ');
-  for (let i = parts.length - 1; i >= 0; i--) {
-    if (parts[i].includes('/')) {
-      const [base, sfx] = parts[i].split('/');
-      const stem = base.slice(0, base.length - sfx.length);
-      const a1 = [...parts]; a1[i] = base;
-      const a2 = [...parts]; a2[i] = stem + sfx;
-      return [a1.join(' ').toLowerCase(), a2.join(' ').toLowerCase()];
+  const norm = s => s.normalize('NFC').toLowerCase().trim();
+  if (!form) return [''];
+  const f = norm(form);
+  const esserePfx = ['sono ','sei ','è ','siamo ','siete '];
+  for (const pfx of esserePfx) {
+    if (f.startsWith(pfx)) {
+      const rest = f.slice(pfx.length);
+      if (rest.endsWith('o')) return [f, pfx + rest.slice(0,-1) + 'a'];
+      if (rest.endsWith('i')) return [f, pfx + rest.slice(0,-1) + 'e'];
     }
   }
-  return [form.toLowerCase().trim()];
+  return [f];
 }
 
 const TENSE_HINTS = {
@@ -1426,7 +1426,7 @@ function renderDrillTense(area) {
     let correct = 0;
     inputs.forEach(inp => {
       const person = inp.dataset.person;
-      const typed = inp.value.toLowerCase().trim();
+      const typed = inp.value.normalize('NFC').toLowerCase().trim();
       const ok = expandForms(forms[person]||'').includes(typed);
       inp.style.borderColor = ok ? 'var(--accent)' : '#ef4444';
       inp.disabled = true;
@@ -1522,9 +1522,9 @@ function renderDrillReview(area) {
   inp.focus();
 
   function doRetryCheck() {
-    const typed = inp.value.toLowerCase().trim();
-    const expected = (mistake.correct||'').toLowerCase().trim();
-    const ok = typed === expected;
+    const typed = inp.value.normalize('NFC').toLowerCase().trim();
+    const expected = expandForms(mistake.correct||'')[0];
+    const ok = expandForms(mistake.correct||'').includes(typed);
     inp.disabled = true;
     inp.style.borderColor = ok ? 'var(--accent)' : '#ef4444';
     const res = document.getElementById('drill-retry-result');
