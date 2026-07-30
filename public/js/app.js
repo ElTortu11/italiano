@@ -1415,7 +1415,7 @@ function renderDrillTense(area) {
     document.getElementById('drill-next').style.display = 'inline-flex';
 
     const onKey = e => { if (e.key === 'ArrowRight' || e.key === 'Enter') { document.removeEventListener('keydown', onKey); goNext(); } };
-    document.addEventListener('keydown', onKey);
+    setTimeout(() => document.addEventListener('keydown', onKey), 50);
   }
 
   function goNext() {
