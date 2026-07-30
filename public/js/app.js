@@ -1244,10 +1244,10 @@ function renderExerciseUI(area, ex) {
     document.getElementById('conj-skip').style.display = 'none';
     document.getElementById('conj-retry').style.display = 'inline-flex';
     if (correctCount < persons.length) document.getElementById('conj-show').style.display = 'inline-flex';
-    document.getElementById('conj-next').style.display = 'inline-flex';
-
-    arrowListener = e => { if (e.key === 'ArrowRight' || e.key === 'Enter') goNext(); };
-    document.addEventListener('keydown', arrowListener);
+    const nextBtn = document.getElementById('conj-next');
+    nextBtn.style.display = 'inline-flex';
+    nextBtn.focus();
+    nextBtn.addEventListener('keydown', e => { if (e.key === 'ArrowRight') { e.preventDefault(); goNext(); } });
   }
 }
 
@@ -1257,59 +1257,82 @@ function renderDrillTab(container, verbList) {
   const area = document.getElementById('conj-exercise-area');
 
   if (drillState.phase === 'pick') {
-    area.innerHTML = `
-      <div class="card">
-        <div style="font-weight:600;font-size:1.1rem;margin-bottom:16px">Elige un verbo para practicar</div>
-        <div style="margin-bottom:12px">
-          <input id="drill-search" class="input" placeholder="Buscar verbo..." style="margin-bottom:8px;width:100%">
-          <select id="drill-verb-select" class="input" size="8" style="width:100%;height:200px">
-            ${verbList.map(v => `<option value="${v}">${v}</option>`).join('')}
-          </select>
-        </div>
-        <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px">Tiempos:</div>
-        <div class="flex flex-wrap gap-2 mb-3" id="drill-tense-picks">
-          ${DRILL_TENSES.map(t => `<button class="tense-pill ${drillState.tenses.includes(t)?'active':''}" data-t="${t}">${TENSE_LABELS[t]}</button>`).join('')}
-        </div>
-        <button class="btn btn-primary btn-block" id="drill-start">Empezar →</button>
-      </div>
-    `;
+    area.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
 
-    const search = document.getElementById('drill-search');
-    const sel = document.getElementById('drill-verb-select');
-    search.addEventListener('input', () => {
-      const q = search.value.toLowerCase();
-      [...sel.options].forEach(o => { o.style.display = o.value.includes(q) ? '' : 'none'; });
-    });
+    (async () => {
+    let verbsData;
+    try { verbsData = await API.get('/conjugation/verbs-with-translations'); }
+    catch(e) { area.innerHTML = `<div class="alert alert-error">Error al cargar verbos</div>`; return; }
 
-    document.getElementById('drill-tense-picks').querySelectorAll('.tense-pill').forEach(pill => {
-      pill.addEventListener('click', () => {
-        const t = pill.dataset.t;
-        if (drillState.tenses.includes(t)) {
-          if (drillState.tenses.length === 1) return;
-          drillState.tenses = drillState.tenses.filter(x => x !== t);
-          pill.classList.remove('active');
-        } else {
-          drillState.tenses.push(t);
-          pill.classList.add('active');
-        }
+    let selectedVerb = null;
+
+    const render = (filter = '') => {
+      const q = filter.toLowerCase();
+      const filtered = q ? verbsData.filter(({verb, translation}) => verb.includes(q) || translation.toLowerCase().includes(q)) : verbsData;
+      area.innerHTML = `
+        <div class="card" style="padding:16px 20px">
+          <div style="font-weight:600;font-size:1.05rem;margin-bottom:10px">Elige un verbo</div>
+          <input id="drill-search" class="input" placeholder="Buscar verbo o traducción..." value="${filter}" style="margin-bottom:8px">
+          <div id="drill-verb-list" style="height:190px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm)">
+            ${filtered.map(({verb, translation}) => `
+              <div class="drill-verb-row ${selectedVerb===verb?'drill-verb-selected':''}" data-verb="${verb}"
+                style="display:flex;justify-content:space-between;align-items:center;padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-subtle)">
+                <span style="font-weight:500">${verb}</span>
+                <span style="color:var(--text-muted);font-size:0.82rem">${translation}</span>
+              </div>`).join('')}
+            ${filtered.length === 0 ? `<div style="padding:16px;text-align:center;color:var(--text-muted)">Sin resultados</div>` : ''}
+          </div>
+          ${selectedVerb ? `<div style="margin:8px 0;font-size:0.9rem;color:var(--accent);font-weight:600">✓ ${selectedVerb}</div>` : `<div style="height:28px;margin:4px 0"></div>`}
+          <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:6px">Tiempos:</div>
+          <div class="flex flex-wrap gap-2 mb-3" id="drill-tense-picks">
+            ${DRILL_TENSES.map(t => `<button class="tense-pill ${drillState.tenses.includes(t)?'active':''}" data-t="${t}">${TENSE_LABELS[t]}</button>`).join('')}
+          </div>
+          <button class="btn btn-primary btn-block" id="drill-start" ${selectedVerb?'':'disabled'}>Empezar →</button>
+        </div>
+      `;
+
+      document.getElementById('drill-search').focus();
+      document.getElementById('drill-search').setSelectionRange(filter.length, filter.length);
+
+      document.getElementById('drill-search').addEventListener('input', e => render(e.target.value));
+
+      document.getElementById('drill-verb-list').querySelectorAll('.drill-verb-row').forEach(row => {
+        row.addEventListener('click', () => { selectedVerb = row.dataset.verb; render(document.getElementById('drill-search').value); });
       });
-    });
 
-    document.getElementById('drill-start').addEventListener('click', async () => {
-      const verb = sel.value;
-      if (!verb) return toast('Selecciona un verbo', 'error');
-      try {
-        const data = await API.get(`/conjugation/verb-data/${verb}`);
-        drillState.verb = verb;
-        drillState.translation = data.translation;
-        drillState.conjugations = data.conjugations;
-        drillState.tenseIndex = 0;
-        drillState.mistakes = [];
-        drillState.score = { correct: 0, total: 0 };
-        drillState.phase = 'practice';
-        renderDrillTense(area);
-      } catch(e) { toast('Error al cargar verbo', 'error'); }
-    });
+      document.getElementById('drill-tense-picks').querySelectorAll('.tense-pill').forEach(pill => {
+        pill.addEventListener('click', () => {
+          const t = pill.dataset.t;
+          if (drillState.tenses.includes(t)) {
+            if (drillState.tenses.length === 1) return;
+            drillState.tenses = drillState.tenses.filter(x => x !== t);
+          } else {
+            drillState.tenses.push(t);
+          }
+          render(document.getElementById('drill-search').value);
+        });
+      });
+
+      const startBtn = document.getElementById('drill-start');
+      if (startBtn && !startBtn.disabled) {
+        startBtn.addEventListener('click', async () => {
+          try {
+            const data = await API.get(`/conjugation/verb-data/${selectedVerb}`);
+            drillState.verb = selectedVerb;
+            drillState.translation = data.translation;
+            drillState.conjugations = data.conjugations;
+            drillState.tenseIndex = 0;
+            drillState.mistakes = [];
+            drillState.score = { correct: 0, total: 0 };
+            drillState.phase = 'practice';
+            renderDrillTense(area);
+          } catch(e) { toast('Error al cargar verbo', 'error'); }
+        });
+      }
+    };
+
+    render();
+    })();
     return;
   }
 

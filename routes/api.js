@@ -991,6 +991,10 @@ router.get('/conjugation/verbs', (req, res) => {
   res.json(Object.keys(VERBS));
 });
 
+router.get('/conjugation/verbs-with-translations', (req, res) => {
+  res.json(Object.keys(VERBS).map(v => ({ verb: v, translation: VERB_ES[v] || v })));
+});
+
 router.get('/conjugation/verb-flashcards', (req, res) => {
   const cards = Object.keys(VERBS).map(verb => ({
     verb,
