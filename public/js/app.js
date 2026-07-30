@@ -1081,6 +1081,7 @@ async function renderConjugation(el) {
     <div class="tabs">
       <button class="tab-btn active" data-tab="practice">Pratica</button>
       <button class="tab-btn" data-tab="drill">Per verbo</button>
+      <button class="tab-btn" data-tab="endings">Terminazioni</button>
       <button class="tab-btn" data-tab="reference">Riferimento</button>
       <button class="tab-btn" data-tab="scores">Punteggi</button>
     </div>
@@ -1112,6 +1113,9 @@ async function renderConjugation(el) {
         pillsCard.style.display = 'none';
         drillState = { phase:'pick', verb:null, translation:'', conjugations:{}, tenses:[...DRILL_TENSES], tenseIndex:0, highWater:-1, mistakes:[], reviewIndex:0, score:{correct:0,total:0}, tenseScores:[], verbList:verbs };
         renderDrillTab(document.getElementById('conj-tab-content'), verbs);
+      } else if (tab === 'endings') {
+        pillsCard.style.display = 'none';
+        renderEndingsTab(document.getElementById('conj-tab-content'));
       } else if (tab === 'scores') {
         pillsCard.style.display = 'none';
         renderVerbScores(document.getElementById('conj-tab-content'));
@@ -1680,6 +1684,172 @@ async function renderVerbScores(area) {
       }).join('')}
     </div>
   `;
+}
+
+// ─── Endings reference + quiz ────────────────────────────────────────────────
+const ENDINGS_DATA = {
+  cols: [
+    { key:'presente',     label:'Presente',              sub:'-are / -ere / -ire' },
+    { key:'passato',      label:'Passato (participio)',   sub:'-are / -ere / -ire' },
+    { key:'imperfetto',   label:'Imperfetto',             sub:'-are / -ere / -ire' },
+    { key:'futuro',       label:'Futuro',                 sub:'(uguale per tutti)' },
+    { key:'condizionale', label:'Condizionale',           sub:'(uguale per tutti)' },
+  ],
+  rows: [
+    { person:'io',      presente:'o',        passato:'ato / uto / ito', imperfetto:'avo / evo / ivo',   futuro:'ò',    condizionale:'ei' },
+    { person:'tu',      presente:'i',        passato:'ato / uto / ito', imperfetto:'avi / evi / ivi',   futuro:'ai',   condizionale:'esti' },
+    { person:'lei/lui', presente:'a / e / e',passato:'ato / uto / ito', imperfetto:'ava / eva / iva',   futuro:'à',    condizionale:'ebbe' },
+    { person:'noi',     presente:'iamo',     passato:'ato / uto / ito', imperfetto:'avamo / evamo / ivamo', futuro:'emo',  condizionale:'emmo' },
+    { person:'voi',     presente:'ate / ete / ite', passato:'ato / uto / ito', imperfetto:'avate / evate / ivate', futuro:'ete',  condizionale:'este' },
+    { person:'loro',    presente:'ano / ono / ono', passato:'ato / uto / ito', imperfetto:'avano / evano / ivano', futuro:'anno', condizionale:'ebbero' },
+  ],
+};
+
+function normEnding(s) {
+  return (s||'').normalize('NFC').toLowerCase().trim().replace(/\s*\/\s*/g,' / ');
+}
+
+function renderEndingsTab(area) {
+  const { cols, rows } = ENDINGS_DATA;
+
+  function tableHTML(quiz) {
+    const thStyle = 'padding:8px 12px;font-size:0.78rem;font-weight:600;color:var(--text-muted);border-bottom:2px solid var(--border);text-align:center;white-space:nowrap';
+    const tdStyle = 'padding:8px 10px;text-align:center;border-bottom:1px solid var(--border);font-size:0.88rem';
+    const subStyle = 'display:block;font-size:0.68rem;font-weight:400;color:var(--text-muted);margin-top:1px';
+    const personStyle = 'padding:8px 12px;font-weight:600;font-size:0.88rem;border-bottom:1px solid var(--border);color:var(--text-muted);white-space:nowrap';
+
+    let html = `<table style="width:100%;border-collapse:collapse">
+      <thead><tr>
+        <th style="${thStyle};text-align:left">Persona</th>
+        ${cols.map(c => `<th style="${thStyle}">${c.label}<span style="${subStyle}">${c.sub}</span></th>`).join('')}
+      </tr></thead><tbody>`;
+
+    rows.forEach((row, ri) => {
+      html += `<tr>
+        <td style="${personStyle}">${row.person}</td>
+        ${cols.map(c => {
+          const val = row[c.key];
+          if (quiz) {
+            const w = Math.max(60, val.length * 8);
+            return `<td style="${tdStyle}"><input
+              class="endings-input"
+              data-row="${ri}" data-col="${c.key}"
+              autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+              style="width:${w}px;max-width:100%;border:none;border-bottom:2px solid var(--border);
+                background:transparent;color:var(--text);font:inherit;font-size:0.85rem;
+                text-align:center;padding:2px 4px;outline:none;border-radius:0"></td>`;
+          }
+          return `<td style="${tdStyle}">${val}</td>`;
+        }).join('')}
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    return html;
+  }
+
+  function showReference() {
+    area.innerHTML = `
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <div>
+            <div class="card-title">Terminazioni base</div>
+            <div style="font-size:0.82rem;color:var(--text-muted)">Verbi regolari -are / -ere / -ire</div>
+          </div>
+          <button class="btn btn-primary btn-sm" id="endings-quiz-btn">Inizia quiz →</button>
+        </div>
+        <div style="overflow-x:auto">${tableHTML(false)}</div>
+        <div style="margin-top:16px;font-size:0.8rem;color:var(--text-muted);line-height:1.5">
+          <strong>Note:</strong> Futuro e Condizionale hanno le stesse terminazioni per tutti e tre i tipi.
+          Per il futuro di -are la radice cambia: <em>parlare → parler-</em>.
+          Il Passato mostra le terminazioni del participio passato (con ausiliare avere).
+        </div>
+      </div>`;
+    document.getElementById('endings-quiz-btn').addEventListener('click', showQuiz);
+  }
+
+  function showQuiz() {
+    area.innerHTML = `
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <div>
+            <div class="card-title">Quiz — Terminazioni base</div>
+            <div style="font-size:0.82rem;color:var(--text-muted)">Riempi tutta la tabella e premi Controlla</div>
+          </div>
+          <button class="btn btn-outline btn-sm" id="endings-ref-btn">← Riferimento</button>
+        </div>
+        <div style="overflow-x:auto" id="endings-table-wrap">${tableHTML(true)}</div>
+        <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;align-items:center">
+          <button class="btn btn-primary" id="endings-check">Controlla</button>
+          <button class="btn btn-outline" id="endings-show" style="display:none">Mostra risposte</button>
+          <button class="btn btn-outline" id="endings-retry" style="display:none">Riprova</button>
+          <span id="endings-score" style="margin-left:auto;font-weight:700;font-size:1rem"></span>
+        </div>
+      </div>`;
+
+    document.getElementById('endings-ref-btn').addEventListener('click', showReference);
+
+    const inputs = [...area.querySelectorAll('.endings-input')];
+    // Tab between inputs, Enter on last triggers check
+    inputs.forEach((inp, i) => {
+      inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); i < inputs.length - 1 ? inputs[i+1].focus() : doCheck(); }
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          const next = e.shiftKey ? inputs[i-1] : inputs[i+1];
+          if (next) next.focus();
+        }
+      });
+    });
+    if (inputs[0]) inputs[0].focus();
+
+    function doCheck() {
+      let correct = 0, total = 0;
+      inputs.forEach(inp => {
+        const { row, col } = inp.dataset;
+        const expected = ENDINGS_DATA.rows[+row][col];
+        const ok = normEnding(inp.value) === normEnding(expected);
+        inp.style.borderBottomColor = ok ? 'var(--accent)' : '#ef4444';
+        inp.dataset.result = ok ? 'ok' : 'wrong';
+        inp.disabled = true;
+        total++;
+        if (ok) correct++;
+      });
+      const pct = Math.round(correct / total * 100);
+      document.getElementById('endings-score').textContent = `${correct} / ${total} — ${pct}%`;
+      document.getElementById('endings-check').style.display = 'none';
+      document.getElementById('endings-show').style.display = correct < total ? 'inline-flex' : 'none';
+      document.getElementById('endings-retry').style.display = 'inline-flex';
+    }
+
+    document.getElementById('endings-check').addEventListener('click', doCheck);
+
+    document.getElementById('endings-show').addEventListener('click', () => {
+      inputs.forEach(inp => {
+        if (inp.dataset.result === 'wrong') {
+          const { row, col } = inp.dataset;
+          inp.value = ENDINGS_DATA.rows[+row][col];
+          inp.style.borderBottomColor = '#f59e0b';
+        }
+      });
+      document.getElementById('endings-show').style.display = 'none';
+    });
+
+    document.getElementById('endings-retry').addEventListener('click', () => {
+      inputs.forEach(inp => {
+        inp.value = '';
+        inp.style.borderBottomColor = 'var(--border)';
+        inp.dataset.result = '';
+        inp.disabled = false;
+      });
+      document.getElementById('endings-check').style.display = 'inline-flex';
+      document.getElementById('endings-show').style.display = 'none';
+      document.getElementById('endings-retry').style.display = 'none';
+      document.getElementById('endings-score').textContent = '';
+      if (inputs[0]) inputs[0].focus();
+    });
+  }
+
+  showReference();
 }
 
 function renderConjugationReference(el, verbs) {
