@@ -191,6 +191,123 @@ function createSchema() {
 
   const insertSetting = db.prepare(`INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)`);
   defaults.forEach(([k, v]) => insertSetting.run(k, v));
+
+  // ── Preposizioni category (idempotent) ──────────────────────────────────────
+  db.prepare(`INSERT OR IGNORE INTO vocabulary_categories(name,name_it,icon,color,sort_order) VALUES(?,?,?,?,?)`)
+    .run('Preposizioni','Preposizioni','📍','#b45309',22);
+
+  const prepCatId = db.prepare(`SELECT id FROM vocabulary_categories WHERE name='Preposizioni'`).get()?.id;
+  if (prepCatId) {
+    const insW = db.prepare(`
+      INSERT OR IGNORE INTO vocabulary_items(italian,spanish,category_id,word_type,gender,article,plural,example_it,example_es,cefr_level,notes,false_friend_note,collocations)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+    `);
+    const insF = db.prepare(`INSERT OR IGNORE INTO flashcards(vocabulary_id,front,back,direction,category_id,next_review) VALUES(?,?,?,?,?,?)`);
+    const now = Math.floor(Date.now()/1000);
+    const preps = [
+      ['di','de / del','A1','Sono di Madrid.','Soy de Madrid.','Provenienza, possesso, argomento'],
+      ['a','a / en','A1','Vado a Roma.','Voy a Roma.','Luogo, moto a luogo, ora'],
+      ['da','de / desde / por','A1','Vengo da Parigi.','Vengo de París.','Provenienza, causa, durata, agente'],
+      ['in','en','A1','Vivo in Italia.','Vivo en Italia.','Luogo, mezzo di trasporto, mese/stagione'],
+      ['con','con','A1','Vengo con te.','Vengo contigo.','Compagnia, mezzo, modo'],
+      ['su','en / sobre','A1','Il libro è sul tavolo.','El libro está sobre la mesa.','Luogo sopra, argomento'],
+      ['per','por / para','A1','Questo è per te.','Esto es para ti.','Destinatario, scopo, causa, durata'],
+      ['tra','entre / en (tiempo)','A1','Arrivo tra due ore.','Llego en dos horas.','Distanza spaziale/temporale, relazione'],
+      ['fra','entre (variante di tra)','A1','Fra amici tutto è più facile.','Entre amigos todo es más fácil.','Equivalente di "tra", uso interchangeable'],
+      ['del (di + il)','del','A1','il sapore del caffè','el sabor del café','di + il (maschile singolare)'],
+      ['dello (di + lo)','del','A1','il profumo dello zucchero','el aroma del azúcar','di + lo (maschile, davanti a s+cons, z…)'],
+      ['della (di + la)','de la','A1','la porta della chiesa','la puerta de la iglesia','di + la (femminile singolare)'],
+      ["dell' (di + l')",'del / de la','A1',"il colore dell'arancia",'el color de la naranja',"di + l' (davanti a vocale)"],
+      ['dei (di + i)','de los','A1','la lista dei compiti','la lista de los deberes','di + i (maschile plurale)'],
+      ['degli (di + gli)','de los','A1','il nome degli studenti','el nombre de los estudiantes','di + gli (maschile plurale)'],
+      ['delle (di + le)','de las','A1','il colore delle foglie','el color de las hojas','di + le (femminile plurale)'],
+      ['al (a + il)','al','A1','Vado al mercato.','Voy al mercado.','a + il (maschile singolare)'],
+      ['allo (a + lo)','al','A1','Vado allo stadio.','Voy al estadio.','a + lo'],
+      ['alla (a + la)','a la','A1','Vado alla stazione.','Voy a la estación.','a + la (femminile singolare)'],
+      ["all' (a + l')",'al / a la','A1',"Vado all'aeroporto.",'Voy al aeropuerto.',"a + l' (davanti a vocale)"],
+      ['ai (a + i)','a los','A1','Parla ai ragazzi.','Habla a los chicos.','a + i (maschile plurale)'],
+      ['agli (a + gli)','a los','A1','Agli studenti piace.','A los estudiantes les gusta.','a + gli'],
+      ['alle (a + le)','a las','A1','Arrivo alle tre.','Llego a las tres.','a + le — usato per l\'ora'],
+      ['dal (da + il)','del / desde el','A1','Vengo dal dentista.','Vengo del dentista.','da + il'],
+      ['dallo (da + lo)','desde el','A1','Esco dallo stadio.','Salgo del estadio.','da + lo'],
+      ['dalla (da + la)','de la / desde la','A1','Vengo dalla stazione.','Vengo de la estación.','da + la (femminile singolare)'],
+      ['dai (da + i)','de los','A1','Torno dai nonni.','Vuelvo de los abuelos.','da + i'],
+      ['dagli (da + gli)','de los','A2','Dagli amici si impara.','De los amigos se aprende.','da + gli'],
+      ['dalle (da + le)','de las','A2','Arriva dalle montagne.','Viene de las montañas.','da + le (femminile plurale)'],
+      ['nel (in + il)','en el','A1','Il gatto è nel giardino.','El gato está en el jardín.','in + il'],
+      ['nello (in + lo)','en el','A1','Cammino nello stesso posto.','Camino en el mismo lugar.','in + lo'],
+      ['nella (in + la)','en la','A1','Vivo nella città.','Vivo en la ciudad.','in + la (femminile singolare)'],
+      ["nell' (in + l')",'en el/la','A1',"Nuoto nell'acqua.",'Nado en el agua.',"in + l' (davanti a vocale)"],
+      ['nei (in + i)','en los','A1','Nei weekend riposo.','Los fines de semana descanso.','in + i'],
+      ['negli (in + gli)','en los','A2',"Negli anni '90 era diverso.",'En los años 90 era diferente.','in + gli'],
+      ['nelle (in + le)','en las','A1','Nelle vacanze viaggio.','En las vacaciones viajo.','in + le (femminile plurale)'],
+      ['sul (su + il)','en el / sobre el','A1','Il libro è sul tavolo.','El libro está sobre la mesa.','su + il'],
+      ['sullo (su + lo)','en el / sobre el','A2','Scrive sullo stesso tema.','Escribe sobre el mismo tema.','su + lo'],
+      ['sulla (su + la)','en la / sobre la','A1','Siediti sulla sedia.','Siéntate en la silla.','su + la (femminile singolare)'],
+      ['sui (su + i)','en los / sobre los','A2','Sui giornali si legge.','En los periódicos se lee.','su + i'],
+      ['sugli (su + gli)','en los','A2','Sugli alberi cantano uccelli.','En los árboles cantan pájaros.','su + gli'],
+      ['sulle (su + le)','en las / sobre las','A2',"Sulle montagne c'è neve.",'En las montañas hay nieve.','su + le (femminile plurale)'],
+      ['col (con + il)','con el','A2','Mangio col cucchiaio.','Como con la cuchara.','Forma contratta di con + il (colloquiale)'],
+      ['coi (con + i)','con los','B1','Gioca coi bambini.','Juega con los niños.','Forma contratta di con + i (colloquiale/letterario)'],
+      ['sopra','encima de / sobre','A2','Il quadro è sopra il divano.','El cuadro está encima del sofá.','Indica posizione superiore'],
+      ['sotto','debajo de / bajo','A2','Il gatto è sotto il letto.','El gato está debajo de la cama.','Indica posizione inferiore'],
+      ['davanti a','delante de / ante','A2','Aspettami davanti al cinema.','Espérame delante del cine.','Posizione anteriore'],
+      ['dietro (a/di)','detrás de','A2','La chiave è dietro la porta.','La llave está detrás de la puerta.','Posizione posteriore'],
+      ['vicino a','cerca de','A2','Abito vicino alla stazione.','Vivo cerca de la estación.','Prossimità spaziale'],
+      ['lontano da','lejos de','A2','Sono lontano da casa.','Estoy lejos de casa.','Distanza spaziale'],
+      ['dentro','dentro de','A2','Il gatto è dentro la scatola.','El gato está dentro de la caja.','Interno di qualcosa'],
+      ['fuori (da)','fuera (de)','A2','Aspetta fuori dalla porta.','Espera fuera de la puerta.','Esterno di qualcosa'],
+      ['lungo','a lo largo de','B1','Cammino lungo il fiume.','Camino a lo largo del río.','Parallelo a qualcosa'],
+      ['verso','hacia','A2','Cammino verso la piazza.','Camino hacia la plaza.','Direzione approssimativa'],
+      ['contro','contra','A2','È caduto contro il muro.','Chocó contra la pared.','Opposizione, contatto violento'],
+      ['durante','durante','A1','Ho dormito durante il film.','Me dormí durante la película.','Simultaneità temporale'],
+      ['dopo','después de','A1','Ci vediamo dopo cena.','Nos vemos después de cenar.','Posteriorità temporale'],
+      ['prima (di)','antes (de)','A1','Arrivo prima delle otto.','Llego antes de las ocho.','Anteriorità temporale'],
+      ['invece di','en vez de / en lugar de','B1','Invece di urlare, parla.','En vez de gritar, habla.','Sostituzione'],
+      ['attraverso','a través de','B1','Passiamo attraverso il parco.','Pasamos a través del parque.','Attraversamento di uno spazio'],
+      ['oltre','más allá de / además de','B1',"Oltre il ponte c'è un bar.",'Más allá del puente hay un bar.','Superamento di limite spaziale o aggiunta'],
+      ['secondo','según','B1','Secondo me hai torto.','Según yo tienes razón.','Fonte, punto di vista'],
+      ['circa','aproximadamente / alrededor de','A2','Costa circa venti euro.','Cuesta aproximadamente veinte euros.','Approssimazione'],
+      ['tranne','excepto / salvo','B1','Vengono tutti tranne lui.','Vienen todos excepto él.','Esclusione. Sinonimi: eccetto, salvo'],
+      ['eccetto','excepto','B1','Tutti eccetto me.','Todos excepto yo.','Esclusione. Sinonimo di tranne'],
+      ['salvo','salvo / excepto','B1','Tutto bene, salvo un piccolo problema.','Todo bien, salvo un pequeño problema.','Esclusione, riserva'],
+      ['senza','sin','A1','Non posso vivere senza caffè.','No puedo vivir sin café.','Mancanza'],
+      ['fino a','hasta','A2','Lavoro fino alle sei.','Trabajo hasta las seis.','Limite temporale o spaziale'],
+      ['entro','antes de (plazo) / para','B1','Consegna entro venerdì.','Entrega para el viernes.','Limite massimo di tempo (scadenza)'],
+      ['insieme a','junto a / junto con','A2','Vengo insieme a te.','Vengo junto a ti.','Compagnia'],
+      ['nonostante','a pesar de','B1','Nonostante la pioggia siamo usciti.','A pesar de la lluvia salimos.','Concessione, contrasto'],
+      ['grazie a','gracias a','A2',"Grazie a te ho superato l'esame.",'Gracias a ti aprobé el examen.','Causa positiva'],
+      ['a causa di','a causa de','B1','Il volo è cancellato a causa dello sciopero.','El vuelo está cancelado a causa de la huelga.','Causa negativa'],
+      ['in mezzo a','en medio de','A2','In mezzo alla confusione non capivo nulla.','En medio del caos no entendía nada.','Posizione centrale'],
+      ['di fronte a','frente a / enfrente de','A2','Il bar è di fronte alla chiesa.','El bar está frente a la iglesia.','Posizione anteriore'],
+      ['accanto a','al lado de','A2','Siediti accanto a me.','Siéntate a mi lado.','Prossimità laterale'],
+      ['a fianco di','al lado de','B1','Cammino a fianco di mia sorella.','Camino al lado de mi hermana.','Sinonimo di accanto a (più formale)'],
+      ['in seguito a','tras / a raíz de','B2',"In seguito all'incidente ha cambiato vita.",'Tras el accidente cambió de vida.','Causa o conseguenza (formale)'],
+      ['rispetto a','respecto a / en comparación con','B1','Rispetto a ieri fa più caldo.','En comparación con ayer hace más calor.','Confronto, paragone'],
+      ['a partire da','a partir de','B1','A partire da domani tutto cambia.','A partir de mañana todo cambia.','Punto di inizio temporale'],
+      ['in base a','en base a / basándose en','B2','Decidiamo in base ai risultati.','Decidimos en base a los resultados.','Criterio, riferimento'],
+      ['a differenza di','a diferencia de','B2','A differenza di suo fratello, studia molto.','A diferencia de su hermano, estudia mucho.','Contrasto/distinzione'],
+      ['ad eccezione di','a excepción de','B2','Tutti, ad eccezione di Marco, erano d\'accordo.','Todos, a excepción de Marco, estaban de acuerdo.','Esclusione formale'],
+      ['per mezzo di','por medio de / mediante','B2','Comunicava per mezzo di lettere.','Se comunicaba por medio de cartas.','Strumento, canale'],
+      ['a proposito di','a propósito de / hablando de','B1','A proposito di Marco, lo hai visto?','A propósito de Marco, ¿lo has visto?','Introduce un argomento'],
+      ['in quanto a','en cuanto a','B2','In quanto a coraggio, non gli manca nulla.','En cuanto a valor, no le falta nada.','Riguardo a, per quanto riguarda'],
+      ['nei confronti di','respecto a / hacia (actitud)','B2','Ha un atteggiamento ostile nei confronti di tutti.','Tiene una actitud hostil hacia todos.','Relazione di comportamento/atteggiamento'],
+      ['nei pressi di','cerca de / en las inmediaciones de','B1',"L'hotel è nei pressi della stazione.",'El hotel está cerca de la estación.','Vicinanza spaziale (più formale di vicino a)'],
+      ['al di là di','más allá de','B1','Al di là delle aspettative.','Más allá de las expectativas.','Superamento di un limite (fisico o figurato)'],
+      ['al di sopra di','por encima de','B2',"È al di sopra delle possibilità.",'Está por encima de las posibilidades.','Superiore a un livello'],
+      ['al di sotto di','por debajo de','B2','È al di sotto della media.','Está por debajo de la media.','Inferiore a un livello'],
+      ['in cima a','en lo alto de / en la cima de','B1',"In cima alla montagna c'è un rifugio.",'En la cima de la montaña hay un refugio.','Punto più alto'],
+      ['in fondo a','al fondo de / al final de','A2','Il bagno è in fondo al corridoio.','El baño está al fondo del pasillo.','Punto più lontano/basso'],
+      ['per via di','por culpa de / debido a','B1','Ho perso il treno per via del traffico.','Perdí el tren debido al tráfico.','Causa (spesso negativa, colloquiale)'],
+      ['a condizione di','a condición de','B2','Ti aiuto a condizione di ricevere il tuo aiuto.','Te ayudo a condición de recibir tu ayuda.','Condizionalità'],
+      ['allo scopo di','con el fin de / con el objetivo de','B2','Studio allo scopo di migliorare.','Estudio con el fin de mejorar.','Finalità (formale)'],
+      ['in favore di','a favor de','B2','Voto in favore della proposta.','Voto a favor de la propuesta.','Sostegno, vantaggio'],
+    ];
+    preps.forEach(([it, es, lv, ex_it, ex_es, notes]) => {
+      const r = insW.run(it, es, prepCatId, 'other', null, null, null, ex_it, ex_es, lv, notes, null, '[]');
+      if (r.lastInsertRowid) insF.run(r.lastInsertRowid, it, es, 'it-es', prepCatId, now);
+    });
+  }
 }
 
 module.exports = { createSchema };
