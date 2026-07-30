@@ -1077,16 +1077,16 @@ async function renderConjugation(el) {
       <button class="tab-btn" data-tab="scores">Punteggi</button>
     </div>
 
-    <div id="conj-tab-content">
-      <div class="card mb-3" style="padding:12px 16px">
-        <div class="text-sm font-medium mb-2" style="color:var(--text-muted)">Tempi da praticare:</div>
-        <div class="flex flex-wrap gap-2" id="tense-pills">
-          ${ALL_TENSES.map(t => `
-            <button class="tense-pill ${conjState.selectedTenses.includes(t)?'active':''}" data-tense="${t}">
-              ${TENSE_LABELS[t]}
-            </button>`).join('')}
-        </div>
+    <div id="conj-pills-card" class="card mb-3" style="padding:12px 16px">
+      <div class="text-sm font-medium mb-2" style="color:var(--text-muted)">Tempi da praticare:</div>
+      <div class="flex flex-wrap gap-2" id="tense-pills">
+        ${ALL_TENSES.map(t => `
+          <button class="tense-pill ${conjState.selectedTenses.includes(t)?'active':''}" data-tense="${t}">
+            ${TENSE_LABELS[t]}
+          </button>`).join('')}
       </div>
+    </div>
+    <div id="conj-tab-content">
       <div id="conj-exercise-area"></div>
     </div>
   `;
@@ -1096,7 +1096,7 @@ async function renderConjugation(el) {
       el.querySelectorAll('[data-tab]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       const tab = btn.dataset.tab;
-      const pillsCard = document.getElementById('tense-pills').closest('.card');
+      const pillsCard = document.getElementById('conj-pills-card');
       if (tab === 'reference') {
         pillsCard.style.display = 'none';
         renderConjugationReference(el, verbs);
