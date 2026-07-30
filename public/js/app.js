@@ -687,9 +687,14 @@ function renderFlashcardTyping(container) {
       <div class="fc-typing-lang">Spagnolo → Italiano</div>
       ${card.category_icon ? `<div class="fc-typing-cat">${card.category_icon} ${card.category_name||''}</div>` : ''}
       <div class="fc-typing-word">${card.back}</div>
-      <div class="fc-typing-hint">Scrivi con l'articolo (es: <em>il cane</em>, <em>la casa</em>, <em>l'uomo</em>)</div>
+      ${card.category_name === 'Preposizioni'
+        ? `<div class="fc-typing-hint">Scrivi la preposizione in italiano</div>`
+        : card.word_type === 'verb'
+          ? `<div class="fc-typing-hint">Scrivi il verbo all'infinito</div>`
+          : `<div class="fc-typing-hint">Scrivi con l'articolo (es: <em>il cane</em>, <em>la casa</em>, <em>l'uomo</em>)</div>`
+      }
       <div class="fc-typing-input-wrap">
-        <input id="fc-type-input" class="fc-typing-input" placeholder="articolo + parola..."
+        <input id="fc-type-input" class="fc-typing-input" placeholder="${card.category_name === 'Preposizioni' ? 'preposizione...' : card.word_type === 'verb' ? 'infinito...' : 'articolo + parola...'}"
           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
         <button class="btn btn-primary" id="fc-type-check">Controlla</button>
       </div>
@@ -751,14 +756,14 @@ function renderFlashcardTyping(container) {
     document.getElementById('fc-key-hint').textContent = '→ tasto destro per avanzare';
     document.getElementById('fc-key-hint').style.display = 'block';
 
-    // ArrowRight to advance
+    // ArrowRight to advance — setTimeout prevents current Enter from immediately firing
     const onKey = (e) => {
       if (e.key === 'ArrowRight' || e.key === 'Enter') {
         document.removeEventListener('keydown', onKey);
         goNext();
       }
     };
-    document.addEventListener('keydown', onKey);
+    setTimeout(() => document.addEventListener('keydown', onKey), 50);
   }
 
   document.getElementById('fc-type-check').addEventListener('click', check);
