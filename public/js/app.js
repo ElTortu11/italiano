@@ -1531,8 +1531,8 @@ function renderDrillReview(area) {
       </div>
       <div id="drill-retry-result" style="min-height:32px;margin-bottom:12px"></div>
       <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button class="btn btn-primary" id="drill-retry-check">Controlla</button>
-        <button class="btn btn-primary" id="drill-retry-next" style="display:none">Avanti →</button>
+        <button type="button" class="btn btn-primary" id="drill-retry-check">Controlla</button>
+        <button type="button" class="btn btn-primary" id="drill-retry-next" style="display:none">Avanti →</button>
       </div>
     </div>
   `;
@@ -1552,7 +1552,7 @@ function renderDrillReview(area) {
     document.getElementById('drill-retry-check').style.display = 'none';
     document.getElementById('drill-retry-next').style.display = 'inline-flex';
     const onKey = e => { if (e.key === 'ArrowRight'||e.key==='Enter') { document.removeEventListener('keydown',onKey); goRetryNext(); } };
-    document.addEventListener('keydown', onKey);
+    setTimeout(() => document.addEventListener('keydown', onKey), 50);
   }
 
   function goRetryNext() {
