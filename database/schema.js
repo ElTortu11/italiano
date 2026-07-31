@@ -102,6 +102,20 @@ function createSchema() {
       updated_at INTEGER DEFAULT (unixepoch())
     );
 
+    CREATE TABLE IF NOT EXISTS answer_variants (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      vocabulary_id INTEGER NOT NULL REFERENCES vocabulary_items(id) ON DELETE CASCADE,
+      answer TEXT NOT NULL,
+      variant_type TEXT NOT NULL DEFAULT 'synonym',
+      accepted INTEGER DEFAULT 1,
+      note TEXT,
+      contexts TEXT DEFAULT '[]',
+      created_at INTEGER DEFAULT (unixepoch()),
+      UNIQUE(vocabulary_id, answer)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_answer_variants_vocab ON answer_variants(vocabulary_id);
+
     CREATE TABLE IF NOT EXISTS conjugation_attempts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       verb TEXT NOT NULL,
@@ -331,6 +345,9 @@ function createSchema() {
   try {
     db.exec(`ALTER TABLE vocabulary_items ADD COLUMN accepted_answers TEXT DEFAULT '[]'`);
   } catch (_) { /* column already exists */ }
+  try { db.exec(`ALTER TABLE errors ADD COLUMN vocabulary_item_id INTEGER`); } catch (_) {}
+  try { db.exec(`ALTER TABLE errors ADD COLUMN evaluation_status TEXT`); } catch (_) {}
+  try { db.exec(`ALTER TABLE errors ADD COLUMN prompt_shown TEXT`); } catch (_) {}
 
   // Fix vocabulary items that have wrong/misleading data in existing DBs
   const fixVocab = db.prepare(`
@@ -378,6 +395,31 @@ function createSchema() {
       '"Conveniente" puede significar barato/económico, pero también apropiado, ventajoso u oportuno. No equivale únicamente a "barato".',
       'conveniente'
     );
+
+  // ── Seed answer_variants (idempotent) ────────────────────────────────────
+  const insVariant = db.prepare(`
+    INSERT OR IGNORE INTO answer_variants(vocabulary_id, answer, variant_type, accepted, note, contexts)
+    VALUES(?, ?, ?, ?, ?, ?)
+  `);
+  const getVocabId = db.prepare(`SELECT id FROM vocabulary_items WHERE italian=? LIMIT 1`);
+
+  const variantSeed = [
+    ["la camera", "la stanza",   "synonym",      1, '"Stanza" è il termine più comune nel parlato; "camera" è preferito nel registro formale e per il dormitorio.',        '[]'],
+    ["veloce",    "rapido",      "synonym",      1, '"Rapido" e "veloce" sono sinonimi intercambiabili. "Rapido" è leggermente più formale.',                              '[]'],
+    ["gentile",   "cortese",     "synonym",      1, '"Cortese" è più formale; "gentile" è più affettuoso. Entrambi traducono "amable/cortés".',                           '[]'],
+    ["la gioia",  "l'allegria",  "synonym",      1, '"Allegria" = alegría/buen humor; "gioia" = júbilo/alegría profunda. Molto vicini nel significato.',                  '[]'],
+    ["la paura",  "il timore",   "register",     1, '"Timore" è più letterario e sfumato; "paura" è il termine comune. Entrambi = miedo.',                               '[]'],
+    ["la rabbia", "l'ira",       "register",     1, '"Ira" è il termine letterario e più intenso; "rabbia" è il termine colloquiale. Entrambi = rabia/ira.',             '[]'],
+    ["arancione", "arancioni",   "plural_form",  1, '"Arancione" è spesso invariabile (es: fiori arancione), ma "arancioni" è accettato in accordo con nomi plurali.',  '[]'],
+    ["bello",     "bellissimo",  "near_miss",    0, '"Bellissimo" è il superlativo assoluto (= bellísimo), non il grado base. La risposta richiesta era "bello".',       '[]'],
+    ["stare",     "essere",      "near_miss",    0, '"Stare" e "essere" hanno usi sovrapposti ma non sono sinonimi. "Stare" = estar; "essere" = ser/estar.',             '[]'],
+    ["tenere",    "avere",       "near_miss",    0, '"Avere" esprime il possesso; "tenere" = sostener/sujetar. Non sono intercambiabili.',                               '[]'],
+  ];
+
+  variantSeed.forEach(([italian, answer, type, accepted, note, contexts]) => {
+    const row = getVocabId.get(italian);
+    if (row) insVariant.run(row.id, answer, type, accepted, note, contexts);
+  });
 }
 
 module.exports = { createSchema };

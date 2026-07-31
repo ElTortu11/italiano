@@ -699,6 +699,38 @@ function renderFlashcard(container) {
   });
 }
 
+function buildFeedbackHTML(result) {
+  const esc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const { status, feedbackTitle, feedbackExplanation, userAnswer, targetAnswer } = result;
+
+  const wrongAnswer = `<s style="opacity:.7">${esc(userAnswer)}</s>`;
+  const rightAnswer = `<strong>${esc(targetAnswer)}</strong>`;
+
+  if (status === 'correct_exact' || status === 'correct_normalized') {
+    return `<div class="fc-type-feedback correct">✓ ${esc(feedbackTitle)}</div>`;
+  }
+  if (status === 'correct_synonym' || status === 'correct_contextual') {
+    const cssClass = status === 'correct_synonym' ? 'synonym' : 'contextual';
+    const exp = feedbackExplanation ? `<span class="fc-fb-note">${esc(feedbackExplanation)}</span>` : '';
+    return `<div class="fc-type-feedback ${cssClass}">✓ ${esc(feedbackTitle)}${exp ? '<br>' + exp : ''}</div>`;
+  }
+  if (status.startsWith('almost_')) {
+    const exp = feedbackExplanation ? `<br><span class="fc-fb-note">${esc(feedbackExplanation)}</span>` : '';
+    return `<div class="fc-type-feedback almost">⚠ ${esc(feedbackTitle)}${exp}
+      <br><span style="opacity:.75;font-size:.9em">Tua risposta: ${wrongAnswer} → ${rightAnswer}</span></div>`;
+  }
+  if (status === 'incorrect_related_word') {
+    const exp = feedbackExplanation ? `<br><span class="fc-fb-note">${esc(feedbackExplanation)}</span>` : '';
+    return `<div class="fc-type-feedback wrong">✗ ${esc(feedbackTitle)}${exp}
+      <br><span style="opacity:.75;font-size:.9em">Tua risposta: ${wrongAnswer} → ${rightAnswer}</span></div>`;
+  }
+  // incorrect (default)
+  return `<div class="fc-type-feedback wrong">
+    ✗ <span style="opacity:.75">La tua risposta:</span> ${wrongAnswer}<br>
+    <span style="opacity:.75">Risposta corretta:</span> ${rightAnswer}
+  </div>`;
+}
+
 function renderFlashcardTyping(container) {
   // Always remove any stale document key listener from a previous card
   if (_fcTypingKeyHandler) {
@@ -747,8 +779,6 @@ function renderFlashcardTyping(container) {
   const input = document.getElementById('fc-type-input');
   input.focus();
 
-  function normalize(s) { return (s||'').normalize('NFC').trim().toLowerCase().replace(/\s+/g,' '); }
-
   function goNext() {
     // Clean up key handler before advancing so it can't fire on the next card
     if (_fcTypingKeyHandler) {
@@ -764,37 +794,15 @@ function renderFlashcardTyping(container) {
     const typed = input.value.trim();
     if (!typed) return;
 
-    const correct = card.front;
-    // Strip trailing parenthetical e.g. "della (di + la)" → accept "della"
-    const correctBase = correct.replace(/\s*\([^)]*\)\s*$/, '').trim();
-    const typedN = normalize(typed);
-    const exactOk = typedN === normalize(correct) || typedN === normalize(correctBase);
-
-    // Check accepted_answers (synonyms / alternative valid forms)
-    let acceptedAlts = [];
-    try { acceptedAlts = JSON.parse(card.accepted_answers || '[]'); } catch(_) {}
-    const synonymOk = !exactOk && acceptedAlts.some(a => typedN === normalize(a));
-
-    const isOk = exactOk || synonymOk;
-    const quality = isOk ? 5 : 1;
+    const result = Evaluator.evaluate(typed, card);
+    const quality = Evaluator.mapToSM2Quality(result);
 
     input.disabled = true;
-    input.style.borderColor = isOk ? 'var(--accent)' : '#ef4444';
+    input.style.borderColor = result.accepted ? 'var(--accent)' : '#ef4444';
 
     const resultEl = document.getElementById('fc-type-result');
     resultEl.style.display = 'block';
-    if (exactOk) {
-      resultEl.innerHTML = `<div class="fc-type-feedback correct">✓ Corretto!</div>`;
-    } else if (synonymOk) {
-      resultEl.innerHTML = `<div class="fc-type-feedback correct">✓ Corretto! <span style="font-size:0.85em;opacity:.8">(sinonimo valido — parola obiettivo: <em>${correct}</em>)</span></div>`;
-    } else {
-      resultEl.innerHTML = `
-        <div class="fc-type-feedback wrong">
-          ✗ <span style="opacity:.75">La tua risposta:</span> <s>${typed}</s><br>
-          <span style="opacity:.75">Risposta corretta:</span> <strong>${correct}</strong>
-          ${acceptedAlts.length ? `<br><span style="font-size:0.82em;opacity:.65">Accettato anche: ${acceptedAlts.join(', ')}</span>` : ''}
-        </div>`;
-    }
+    resultEl.innerHTML = buildFeedbackHTML(result);
 
     if (card.example_it) {
       const exEl = document.getElementById('fc-type-example');
@@ -805,8 +813,22 @@ function renderFlashcardTyping(container) {
     try {
       await API.post(`/flashcards/${card.id}/review`, { quality });
       fcState.reviewed++;
-      if (isOk) fcState.correct++;
+      if (result.accepted) fcState.correct++;
     } catch(e) { toast('Errore nel salvataggio', 'error'); }
+
+    if (result.saveToErrorNotebook && card.vocabulary_id) {
+      API.post('/errors', {
+        original_text:      result.userAnswer,
+        corrected_text:     result.targetAnswer,
+        explanation:        result.feedbackExplanation || null,
+        category:           result.errorType || 'vocabulary',
+        importance:         result.status === 'incorrect' ? 3 : 2,
+        source:             `flashcard:${card.id}`,
+        vocabulary_item_id: card.vocabulary_id,
+        evaluation_status:  result.status,
+        prompt_shown:       card.back,
+      }).catch(() => {});
+    }
 
     document.getElementById('fc-type-check').style.display = 'none';
     const nextBtn = document.getElementById('fc-type-next');

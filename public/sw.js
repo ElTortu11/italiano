@@ -1,5 +1,5 @@
-const CACHE = 'italiano-v29';
-const PRECACHE = ['/', '/css/app.css', '/js/app.js', '/manifest.json'];
+const CACHE = 'italiano-v30';
+const PRECACHE = ['/', '/css/app.css', '/js/evaluator.js', '/js/app.js', '/manifest.json'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE).catch(() => {})));

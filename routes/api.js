@@ -203,10 +203,19 @@ router.delete('/vocabulary/words/:id', (req, res) => {
 });
 
 // ── Flashcards ───────────────────────────────────────────────────────────────
+const VARIANTS_SUBQUERY = `COALESCE(
+  (SELECT json_group_array(json_object(
+    'answer', av.answer, 'variant_type', av.variant_type,
+    'accepted', av.accepted, 'note', av.note, 'contexts', av.contexts
+  )) FROM answer_variants av WHERE av.vocabulary_id = vi.id),
+  '[]') as variants`;
+
 router.get('/flashcards/due', (req, res) => {
   const { category, limit = 20 } = req.query;
   let sql = `SELECT f.*, vi.italian, vi.spanish, vi.example_it, vi.example_es, vi.gender, vi.article, vi.plural,
-               vi.collocations, vi.notes, vi.word_type, vi.accepted_answers, vc.name as category_name, vc.icon as category_icon
+               vi.collocations, vi.notes, vi.word_type, vi.accepted_answers,
+               vc.name as category_name, vc.icon as category_icon,
+               ${VARIANTS_SUBQUERY}
              FROM flashcards f
              LEFT JOIN vocabulary_items vi ON vi.id = f.vocabulary_id
              LEFT JOIN vocabulary_categories vc ON vc.id = f.category_id
@@ -221,7 +230,9 @@ router.get('/flashcards/due', (req, res) => {
 router.get('/flashcards/new', (req, res) => {
   const { category, limit = 15 } = req.query;
   let sql = `SELECT f.*, vi.italian, vi.spanish, vi.example_it, vi.example_es, vi.gender, vi.article,
-               vi.collocations, vi.notes, vi.word_type, vi.accepted_answers, vc.name as category_name
+               vi.collocations, vi.notes, vi.word_type, vi.accepted_answers,
+               vc.name as category_name,
+               ${VARIANTS_SUBQUERY}
              FROM flashcards f
              LEFT JOIN vocabulary_items vi ON vi.id = f.vocabulary_id
              LEFT JOIN vocabulary_categories vc ON vc.id = f.category_id
@@ -373,10 +384,15 @@ router.get('/errors', (req, res) => {
 });
 
 router.post('/errors', (req, res) => {
-  const { original_text, corrected_text, explanation, category = 'grammar', importance = 2, source } = req.body;
+  const { original_text, corrected_text, explanation, category = 'grammar', importance = 2, source,
+          vocabulary_item_id, evaluation_status, prompt_shown } = req.body;
   if (!original_text) return res.status(400).json({ error: 'original_text required' });
-  const r = db.prepare(`INSERT INTO errors(original_text,corrected_text,explanation,category,importance,source) VALUES(?,?,?,?,?,?)`)
-    .run(original_text, corrected_text||null, explanation||null, category, importance, source||null);
+  const r = db.prepare(`
+    INSERT INTO errors(original_text,corrected_text,explanation,category,importance,source,
+                       vocabulary_item_id,evaluation_status,prompt_shown)
+    VALUES(?,?,?,?,?,?,?,?,?)
+  `).run(original_text, corrected_text||null, explanation||null, category, importance, source||null,
+         vocabulary_item_id||null, evaluation_status||null, prompt_shown||null);
   res.json({ id: r.lastInsertRowid });
 });
 
