@@ -448,6 +448,7 @@ function buildSessionPlan(due, newW) {
 // FLASHCARDS
 // ══════════════════════════════════════════════════════════════════════════════
 let fcState = { cards: [], index: 0, flipped: false, reviewed: 0, correct: 0, mode: 'due', typingMode: false, pendingCategoryId: null, pendingCategoryName: '' };
+let _fcTypingKeyHandler = null; // tracks document keydown listener; always clean up before adding new one
 
 function showModeModal(el, tab) {
   showModal('Come vuoi studiare?', `
@@ -699,6 +700,12 @@ function renderFlashcard(container) {
 }
 
 function renderFlashcardTyping(container) {
+  // Always remove any stale document key listener from a previous card
+  if (_fcTypingKeyHandler) {
+    document.removeEventListener('keydown', _fcTypingKeyHandler);
+    _fcTypingKeyHandler = null;
+  }
+
   const { cards, index } = fcState;
   const card = cards[index];
   const progress = Math.round((index / cards.length) * 100);
@@ -743,11 +750,17 @@ function renderFlashcardTyping(container) {
   function normalize(s) { return s.trim().toLowerCase().replace(/\s+/g,' '); }
 
   function goNext() {
+    // Clean up key handler before advancing so it can't fire on the next card
+    if (_fcTypingKeyHandler) {
+      document.removeEventListener('keydown', _fcTypingKeyHandler);
+      _fcTypingKeyHandler = null;
+    }
     fcState.index++;
     renderFlashcard(container);
   }
 
   async function check() {
+    if (input.disabled) return; // guard against double-tap / double-click
     const typed = input.value.trim();
     if (!typed) return;
 
@@ -786,20 +799,27 @@ function renderFlashcardTyping(container) {
     document.getElementById('fc-key-hint').textContent = '→ tasto destro per avanzare';
     document.getElementById('fc-key-hint').style.display = 'block';
 
-    // ArrowRight to advance — setTimeout prevents current Enter from immediately firing
-    const onKey = (e) => {
+    // ArrowRight/Enter to advance — setTimeout prevents the triggering Enter from firing immediately
+    _fcTypingKeyHandler = (e) => {
       if (e.key === 'ArrowRight' || e.key === 'Enter') {
-        document.removeEventListener('keydown', onKey);
+        document.removeEventListener('keydown', _fcTypingKeyHandler);
+        _fcTypingKeyHandler = null;
         goNext();
       }
     };
-    setTimeout(() => document.addEventListener('keydown', onKey), 50);
+    setTimeout(() => {
+      if (_fcTypingKeyHandler) document.addEventListener('keydown', _fcTypingKeyHandler);
+    }, 50);
   }
 
   document.getElementById('fc-type-check').addEventListener('click', check);
   input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); check(); } });
 
   document.getElementById('fc-type-skip').addEventListener('click', async () => {
+    if (_fcTypingKeyHandler) {
+      document.removeEventListener('keydown', _fcTypingKeyHandler);
+      _fcTypingKeyHandler = null;
+    }
     await API.post(`/flashcards/${card.id}/review`, { quality: 1 }).catch(()=>{});
     fcState.index++;
     renderFlashcard(container);
