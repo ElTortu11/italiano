@@ -717,6 +717,14 @@ function createSchema() {
   ].forEach(([verb, prep, constr, ex_it, ex_es, cefr]) => insVerbGov.run(verb, prep, constr, ex_it, ex_es, cefr));
 
   // ── Seed preposition_contrasts ────────────────────────────────────────────────
+  // Deduplicate preposition_contrasts (prevents duplicates from multiple createSchema() calls)
+  try {
+    db.exec(`DELETE FROM preposition_contrasts WHERE id NOT IN (SELECT MIN(id) FROM preposition_contrasts GROUP BY first_item_id, second_item_id)`);
+  } catch (_) {}
+  try {
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_prep_contrasts_pair ON preposition_contrasts(first_item_id, second_item_id)`);
+  } catch (_) {}
+
   if (prepCatId) {
     const getItemByCanon4 = db.prepare(`SELECT pi.id FROM preposition_items pi JOIN vocabulary_items vi ON vi.id=pi.vocabulary_item_id WHERE pi.canonical_form=? AND vi.category_id=? LIMIT 1`);
     const insContrast4 = db.prepare(`INSERT OR IGNORE INTO preposition_contrasts(first_item_id,second_item_id,explanation,example_first_it,example_first_es,example_second_it,example_second_es) VALUES(?,?,?,?,?,?,?)`);
@@ -781,6 +789,8 @@ function createSchema() {
     mastery_level TEXT DEFAULT 'nuovo',
     PRIMARY KEY (topic_slug, user_id)
   )`); } catch (_) {}
+  // idempotent column addition for duplicate-attempt guard
+  try { db.exec(`ALTER TABLE preposition_topic_stats ADD COLUMN last_attempt_id TEXT`); } catch (_) {}
 
   try { db.exec(`CREATE TABLE IF NOT EXISTS preposition_error_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -863,11 +873,457 @@ function createSchema() {
     ['prep_l_006', 'fill_locuzione', 'luogo_e_movimento', 'A2', 'Il bagno è ___ al corridoio.', 'El baño está al fondo del pasillo.', '["in fondo"]', '["in fondo a"]', '["in cima","di fronte","accanto"]', '"In fondo a" indica il punto più lontano o più basso. "In cima a" il punto più alto.', '"In fondo a" = al fondo de.', 2],
     ['prep_l_007', 'fill_locuzione', 'confronto_riferimento', 'B2', 'Decidiamo ___ ai risultati.', 'Decidimos según los resultados.', '["in base"]', '["in base a"]', '["rispetto","a differenza","in quanto"]', '"In base a" = según / basándose en. Preferire "in base a" o "secondo" rispetto al calco "en base a".', '"In base a" = según / basándose en.', 2],
     ['prep_l_008', 'fill_locuzione', 'causa_scopo_mezzo', 'B2', 'Studio ___ migliorare.', 'Estudio con el fin de mejorar.', '["allo scopo di","per"]', '[]', '["a causa di","grazie a","invece di"]', '"Allo scopo di + infinito" esprime finalità formale. "Per + infinito" è più comune e informale: studio per migliorare.', '"Allo scopo di" / "per" = con el fin de.', 2],
+    // ── 20 new fill_preposition ────────────────────────────────────────────────
+    ['prep_s_016','fill_preposition','preposizioni_semplici','A1','Abito ___ secondo piano.','Vivo en el segundo piso.','["al"]','["a il","a"]','["nel","del","sul"]','Con i piani si usa "al": al primo piano, al secondo piano.','Con los pisos se usa "al".',1],
+    ['prep_s_017','fill_preposition','luogo_e_movimento','A1','Vado ___ scuola.','Voy a la escuela.','["a"]','[]','["in","nella","alla"]','"A scuola" è un\'espressione fissa (senza articolo) per indicare il luogo di studio.','\"A scuola\" sin artículo.',1],
+    ['prep_s_018','fill_preposition','luogo_e_movimento','A1','Andiamo ___ spiaggia.','Vamos a la playa.','["in"]','["alla"]','["a","da","di"]','"In spiaggia" è l\'espressione più comune, ma "alla spiaggia" è accettata.','\"In spiaggia\" es lo más habitual.',1],
+    ['prep_s_019','fill_preposition','preposizioni_semplici','A1','Questo libro è ___ Marco.','Este libro es de Marco.','["di"]','[]','["da","per","a"]','"Di" indica appartenenza: è il libro di Marco.','\"Di\" indica posesión.',1],
+    ['prep_s_020','fill_preposition','preposizioni_semplici','A2','Vado ___ mia sorella.','Voy a casa de mi hermana.','["da"]','[]','["a","di","per"]','"Da + persona" indica andare a casa di quella persona o da quella persona.','\"Da + persona\" = ir a casa de.',2],
+    ['prep_s_021','fill_preposition','luogo_e_movimento','A1','La farmacia è ___ angolo.','La farmacia está en la esquina.','["all\'","a l\'"]','["all\'angolo"]','["nell\'","sull\'","dall\'"]','"All\'angolo" (a + l\') indica posizione a un punto preciso.','\"All\'angolo\" = en la esquina.',1],
+    ['prep_s_022','fill_preposition','preposizioni_semplici','A2','Parto ___ lunedì.','Salgo el lunes.','["lunedì","il lunedì","di lunedì"]','["lunedì","di lunedì"]','["a lunedì","da lunedì","in lunedì"]','Con i giorni della settimana non si usa preposizione: parto lunedì. Oppure: il lunedì (di abitudine).','Con días de la semana: sin preposición.',2],
+    ['prep_s_023','fill_preposition','tempo','A1','Sono nato ___ 2001.','Nací en 2001.','["nel"]','["in"]','["al","del","sul"]','Con gli anni si usa "nel" (in + il): nel 2001, nel 1990. In alternativa "in" senza articolo.','Con años: \"nel\" o \"in\".',1],
+    ['prep_s_024','fill_preposition','tempo','A1','La riunione è ___ tre.','La reunión es a las tres.','["alle"]','["a le"]','["delle","nell\'","ore"]','"Alle" (a + le) si usa con le ore: alle tre, alle cinque.','\"Alle\" para las horas.',1],
+    ['prep_s_025','fill_preposition','tempo','A1','Andiamo in vacanza ___ agosto.','Nos vamos de vacaciones en agosto.','["ad","in"]','["a"]','["nel","di","per"]','Con i mesi si può usare "a" (ad agosto) o "in" (in agosto). Entrambe sono corrette.','Con meses: \"a/ad\" o \"in\".',1],
+    ['prep_s_026','fill_preposition','causa_scopo_mezzo','A2','Vengo ___ macchina.','Vengo en coche.','["in"]','[]','["con","a","per"]','"In macchina" è l\'espressione standard per mezzo di trasporto privato. Eccezione: a piedi, a cavallo.','\"In macchina\" para el medio de transporte.',1],
+    ['prep_s_027','fill_preposition','causa_scopo_mezzo','A2','Scrivo ___ penna.','Escribo con bolígrafo.','["con la","con"]','[]','["in","a","di"]','"Con + articolo" indica lo strumento: scrivo con la penna. Nel parlato spesso "con" senza articolo.','\"Con\" + artículo para el instrumento.',1],
+    ['prep_s_028','fill_preposition','luogo_e_movimento','A2','Abito ___ centro.','Vivo en el centro.','["in"]','["nel"]','["al","a","di"]','"In centro" è l\'espressione più comune, usata senza articolo. "Nel centro" è più formale.','\"In centro\" sin artículo.',1],
+    ['prep_s_029','fill_preposition','preposizioni_semplici','B1','Secondo me, dipende ___ te.','Según yo, depende de ti.','["da"]','[]','["di","a","per"]','Reggenza: dipendere da qualcuno/qualcosa.','Reggencia: dipendere da.',1],
+    ['prep_s_030','fill_preposition','luogo_e_movimento','A2','Passiamo ___ via Roma.','Pasamos por la calle Roma.','["per"]','[]','["a","da","in"]','"Per" indica il passaggio attraverso un luogo.','\"Per\" = pasar por.',1],
+    ['prep_s_031','fill_preposition','preposizioni_semplici','A1','Il caffè è ___ bar.','El café está en el bar.','["al"]','["a il"]','["nel","del","dal"]','"Al bar" (a + il): luogo fisso dove si va/si trova qualcosa.','\"Al bar\" = en el bar.',1],
+    ['prep_s_032','fill_preposition','contrasto_esclusione','B1','___ Marco, vengono tutti.','Excepto Marco, vienen todos.','["tranne","eccetto","salvo"]','[]','["invece di","nonostante","grazie a"]','"Tranne/eccetto/salvo + nome" indica esclusione.','Tranne/eccetto/salvo = excepto.',1],
+    ['prep_s_033','fill_preposition','tempo','A2','Lavoro qui ___ cinque anni.','Trabajo aquí desde hace cinco años.','["da"]','[]','["per","tra","in"]','"Da + numero + anni" con il presente indica azione iniziata nel passato e ancora in corso.','\"Da\" con presente = desde hace.',1],
+    ['prep_s_034','fill_preposition','luogo_e_movimento','A1','Vado ___ banca.','Voy al banco.','["in"]','["alla"]','["al","a","da"]','"In banca" è l\'espressione più comune. "Alla banca" è usata ma meno frequente.','\"In banca\" sin artículo.',1],
+    ['prep_s_035','fill_preposition','preposizioni_semplici','A2','Ho comprato un regalo ___ mia madre.','He comprado un regalo para mi madre.','["per"]','[]','["a","di","da"]','"Per" indica il destinatario di qualcosa: un regalo per te.','\"Per\" = para (destinatario).',1],
+    // ── 35 new articolate_form ─────────────────────────────────────────────────
+    ['prep_a_016','articolate_form','preposizioni_articolate','A1','a + il = ___',null,'["al"]','[]','["dal","nel","sul"]','a + il = al. Maschile singolare davanti a consonante normale.','a + il = al',1],
+    ['prep_a_017','articolate_form','preposizioni_articolate','A1','a + la = ___',null,'["alla"]','[]','["dalla","nella","sulla"]','a + la = alla. Femminile singolare.','a + la = alla',1],
+    ['prep_a_018','articolate_form','preposizioni_articolate','A1',"a + l' = ___",null,'["all\'"]','[]','["dall\'","nell\'","sull\'"]',"a + l' = all'. Davanti a vocale.","a + l' = all'",1],
+    ['prep_a_019','articolate_form','preposizioni_articolate','A1','a + i = ___',null,'["ai"]','[]','["dai","nei","sui"]','a + i = ai. Maschile plurale.','a + i = ai',1],
+    ['prep_a_020','articolate_form','preposizioni_articolate','A1','a + le = ___',null,'["alle"]','[]','["dalle","nelle","sulle"]','a + le = alle. Femminile plurale.','a + le = alle',1],
+    ['prep_a_021','articolate_form','preposizioni_articolate','A1','di + il = ___',null,'["del"]','[]','["dal","nel","sul"]','di + il = del. Maschile singolare.','di + il = del',1],
+    ['prep_a_022','articolate_form','preposizioni_articolate','A1','di + lo = ___',null,'["dello"]','[]','["allo","nello","sullo"]','di + lo = dello. Maschile singolare speciale (s+cons, z...).','di + lo = dello',1],
+    ['prep_a_023','articolate_form','preposizioni_articolate','A1','di + la = ___',null,'["della"]','[]','["dalla","nella","sulla"]','di + la = della. Femminile singolare.','di + la = della',1],
+    ['prep_a_024','articolate_form','preposizioni_articolate','A1',"di + l' = ___",null,'["dell\'"]','[]','["all\'","dall\'","nell\'"]',"di + l' = dell'. Davanti a vocale.","di + l' = dell'",1],
+    ['prep_a_025','articolate_form','preposizioni_articolate','A1','di + i = ___',null,'["dei"]','[]','["dai","nei","sui"]','di + i = dei. Maschile plurale.','di + i = dei',1],
+    ['prep_a_026','articolate_form','preposizioni_articolate','A1','da + il = ___',null,'["dal"]','[]','["del","nel","sul"]','da + il = dal. Maschile singolare.','da + il = dal',1],
+    ['prep_a_027','articolate_form','preposizioni_articolate','A1','da + lo = ___',null,'["dallo"]','[]','["dello","nello","sullo"]','da + lo = dallo. Maschile singolare speciale.','da + lo = dallo',1],
+    ['prep_a_028','articolate_form','preposizioni_articolate','A1','da + la = ___',null,'["dalla"]','[]','["della","nella","sulla"]','da + la = dalla. Femminile singolare.','da + la = dalla',1],
+    ['prep_a_029','articolate_form','preposizioni_articolate','A1','da + gli = ___',null,'["dagli"]','[]','["degli","agli","negli"]','da + gli = dagli. Maschile plurale speciale.','da + gli = dagli',1],
+    ['prep_a_030','articolate_form','preposizioni_articolate','A1','da + le = ___',null,'["dalle"]','[]','["delle","alle","nelle"]','da + le = dalle. Femminile plurale.','da + le = dalle',1],
+    ['prep_a_031','articolate_form','preposizioni_articolate','A1','in + lo = ___',null,'["nello"]','[]','["dello","allo","sullo"]','in + lo = nello. Maschile singolare speciale.','in + lo = nello',1],
+    ['prep_a_032','articolate_form','preposizioni_articolate','A1','in + la = ___',null,'["nella"]','[]','["della","dalla","sulla"]','in + la = nella. Femminile singolare.','in + la = nella',1],
+    ['prep_a_033','articolate_form','preposizioni_articolate','A1','in + i = ___',null,'["nei"]','[]','["dei","dai","sui"]','in + i = nei. Maschile plurale.','in + i = nei',1],
+    ['prep_a_034','articolate_form','preposizioni_articolate','A1','su + il = ___',null,'["sul"]','[]','["del","dal","nel"]','su + il = sul. Maschile singolare.','su + il = sul',1],
+    ['prep_a_035','articolate_form','preposizioni_articolate','A1','su + lo = ___',null,'["sullo"]','[]','["dello","allo","nello"]','su + lo = sullo. Maschile singolare speciale.','su + lo = sullo',1],
+    ['prep_a_036','articolate_form','preposizioni_articolate','A1','su + gli = ___',null,'["sugli"]','[]','["degli","agli","dagli"]','su + gli = sugli. Maschile plurale speciale.','su + gli = sugli',1],
+    ['prep_a_037','articolate_form','preposizioni_articolate','A1','su + le = ___',null,'["sulle"]','[]','["delle","alle","dalle"]','su + le = sulle. Femminile plurale.','su + le = sulle',1],
+    ['prep_a_038','articolate_form','preposizioni_articolate','A1','al = a + ___',null,'["il"]','[]','["lo","la","i"]','al = a + il. Articolo maschile singolare regolare.','al = a + il',1],
+    ['prep_a_039','articolate_form','preposizioni_articolate','A1','alla = ___ + la',null,'["a"]','[]','["da","in","su"]','alla = a + la. Preposizione base: a.','alla = a + la',1],
+    ['prep_a_040','articolate_form','preposizioni_articolate','A1',"dell' = di + ___",null,'["l\'"]','[]','["il","lo","la"]',"dell' = di + l'. Davanti a vocale.","dell' = di + l'",1],
+    ['prep_a_041','articolate_form','preposizioni_articolate','A1','dal = ___ + il',null,'["da"]','[]','["a","in","su"]','dal = da + il. Preposizione base: da.','dal = da + il',1],
+    ['prep_a_042','articolate_form','preposizioni_articolate','A1','nello = in + ___',null,'["lo"]','[]','["il","la","i"]','nello = in + lo. Maschile singolare speciale.','nello = in + lo',1],
+    ['prep_a_043','articolate_form','preposizioni_articolate','A1','sulle = su + ___',null,'["le"]','[]','["i","gli","la"]','sulle = su + le. Femminile plurale.','sulle = su + le',1],
+    ['prep_a_044','articolate_form','preposizioni_articolate','A1','dei = ___ + i',null,'["di"]','[]','["a","da","su"]','dei = di + i. Preposizione base: di.','dei = di + i',1],
+    ['prep_a_045','articolate_form','preposizioni_articolate','A1','dagli = da + ___',null,'["gli"]','[]','["i","lo","le"]','dagli = da + gli. Maschile plurale speciale.','dagli = da + gli',1],
+    ['prep_a_046','articolate_form','preposizioni_articolate','A1','nelle = ___ + le',null,'["in"]','[]','["di","a","su"]','nelle = in + le. Preposizione base: in.','nelle = in + le',1],
+    ['prep_a_047','articolate_form','preposizioni_articolate','A1',"all' = a + ___",null,'["l\'"]','[]','["il","lo","la"]',"all' = a + l'. Davanti a vocale.","all' = a + l'",1],
+    ['prep_a_048','articolate_form','preposizioni_articolate','A1','nello = ___ + lo',null,'["in"]','[]','["di","da","su"]','nello = in + lo. Preposizione base: in.','nello = in + lo',1],
+    ['prep_a_049','articolate_form','preposizioni_articolate','A1','sugli = ___ + gli',null,'["su"]','[]','["di","a","da"]','sugli = su + gli. Preposizione base: su.','sugli = su + gli',1],
+    ['prep_a_050','articolate_form','preposizioni_articolate','A1','del = di + ___',null,'["il"]','[]','["lo","la","i"]','del = di + il. Articolo maschile singolare regolare.','del = di + il',1],
+    // ── 16 new contrast ────────────────────────────────────────────────────────
+    ['prep_c_013','contrast','luogo_e_movimento','A1','Sono ___ casa.','Estoy en casa.','["a"]','[]','["in","nella","da"]','"A casa" è un\'espressione fissa senza articolo. "In casa" si usa anche, ma "a casa" è più comune.','\"A casa\" expresión fija.',1],
+    ['prep_c_014','contrast','luogo_e_movimento','A2','Lavora ___ ufficio.','Trabaja en la oficina.','["in"]','[]','["a","all\'","nell\'"]','"In ufficio" è l\'espressione standard senza articolo. Contesto professionale.','\"In ufficio\" sin artículo.',1],
+    ['prep_c_015','contrast','luogo_e_movimento','A2','Andiamo ___ teatro stasera.','Vamos al teatro esta noche.','["a"]','["al"]','["in","nel","da"]','"A teatro" o "al teatro" sono entrambe usate. Espressioni fisse: andare a teatro, al cinema, a scuola.','\"A teatro\" / \"al teatro\" para ocio.',1],
+    ['prep_c_016','contrast','luogo_e_movimento','A2','Vai ___ piedi o in macchina?','¿Vas a pie o en coche?','["a"]','[]','["in","con","per"]','"A piedi" è l\'espressione fissa per camminare. Eccezione alla regola "in + mezzo di trasporto".','\"A piedi\" excepción: a pie.',1],
+    ['prep_c_017','contrast','preposizioni_semplici','A1','Ho ricevuto un messaggio ___ Luca.','He recibido un mensaje de Luca.','["da"]','[]','["di","per","a"]','"Da + persona" indica provenienza di qualcosa (chi l\'ha inviato). "Di + persona" indica appartenenza (il libro di Luca = gli appartiene).','\"Da\" = de (quién lo envió). \"Di\" = de (posesión).',2],
+    ['prep_c_018','contrast','preposizioni_semplici','A2','È un romanzo ___ Umberto Eco.','Es una novela de Umberto Eco.','["di"]','[]','["da","per","a"]','"Di + autore" indica autoría: un romanzo di Eco.','\"Di\" para autoría.',1],
+    ['prep_c_019','contrast','preposizioni_semplici','A2','Vado ___ dentista.','Voy al dentista.','["dal"]','["da il","da"]','["al","nel","del"]','"Da + professionista" indica andare presso quella persona: dal dentista, dal dottore, dal parrucchiere.','\"Dal + profesional\" = ir a donde trabaja.',2],
+    ['prep_c_020','contrast','preposizioni_semplici','A2','Il cellulare è ___ Marco.','El móvil es de Marco.','["di"]','[]','["da","a","per"]','"Di + persona" indica appartenenza stabile: è il cellulare di Marco.','\"Di\" = posesión.',1],
+    ['prep_c_021','contrast','tempo','A2','Il treno parte ___ dieci minuti.','El tren sale dentro de diez minutos.','["tra","fra"]','[]','["in","per","da"]','"Tra/fra + tempo" = dentro de X tiempo. Il treno parte tra dieci minuti.','\"Tra/fra\" = dentro de X tiempo.',2],
+    ['prep_c_022','contrast','tempo','A2','Ho finito il libro ___ un pomeriggio.','Terminé el libro en una tarde.','["in"]','[]','["tra","fra","per"]','"In + durata" = tiempo necesario para completar algo.','\"In\" = tiempo empleado en completar.',2],
+    ['prep_c_023','contrast','tempo','B1','Ci vediamo ___ una settimana.','Nos vemos dentro de una semana.','["tra","fra"]','[]','["in","per","da"]','"Tra/fra una settimana" = dentro de una semana (futuro). "In una settimana" = en una semana (duración).','\"Tra/fra\" = futuro. \"In\" = duración.',2],
+    ['prep_c_024','contrast','tempo','B1','Ha imparato tutto ___ tre mesi.','Aprendió todo en tres meses.','["in"]','[]','["tra","fra","per"]','"In tre mesi" = en tres meses (tiempo empleado). "Tra tre mesi" = dentro de tres meses.','\"In\" = duración empleada.',2],
+    ['prep_c_025','contrast','causa_scopo_mezzo','B1','___ alla medicina moderna, molte malattie sono curabili.','Gracias a la medicina moderna, muchas enfermedades son curables.','["grazie"]','["grazie a"]','["a causa","per via","in seguito"]','"Grazie a" introduce una causa valutata positivamente.','\"Grazie a\" = causa positiva.',2],
+    ['prep_c_026','contrast','causa_scopo_mezzo','B1','Il concerto è rinviato ___ del maltempo.','El concierto se ha pospuesto a causa del mal tiempo.','["a causa"]','["a causa di"]','["grazie","per via","nonostante"]','"A causa di" introduce una causa, spesso sfavorevole o negativa.','\"A causa di\" = causa (negativa).',2],
+    ['prep_c_027','contrast','contrasto_esclusione','B1','___ la stanchezza, ha continuato a lavorare.','A pesar del cansancio, siguió trabajando.','["nonostante"]','[]','["a causa di","grazie a","invece di"]','"Nonostante + nome" indica concessione: a pesar de.','\"Nonostante\" = a pesar de.',2],
+    ['prep_c_028','contrast','contrasto_esclusione','B1','___ riposarsi, ha continuato a lavorare.','En lugar de descansar, siguió trabajando.','["invece di"]','[]','["nonostante","a causa di","grazie a"]','"Invece di + infinito" indica sostituzione: en lugar de.','\"Invece di\" = en lugar de.',2],
+    // ── 30 new verb_government ─────────────────────────────────────────────────
+    ['prep_r_011','verb_government','preposizioni_semplici','A2','Ho cominciato ___ lavorare alle otto.','Empecé a trabajar a las ocho.','["a"]','[]','["di","per","da"]','Reggenza: cominciare a + infinito.',null,1],
+    ['prep_r_012','verb_government','preposizioni_semplici','B1','Quando cominci ___ studiare?','¿Cuándo empiezas a estudiar?','["a"]','[]','["di","per","da"]','Reggenza: cominciare a + infinito.',null,1],
+    ['prep_r_013','verb_government','preposizioni_semplici','B1','Ha smesso ___ piovere.','Ha dejado de llover.','["di"]','[]','["a","per","da"]','Reggenza: smettere di + infinito.',null,1],
+    ['prep_r_014','verb_government','preposizioni_semplici','B1','Perché non smetti ___ lamentarti?','¿Por qué no dejas de quejarte?','["di"]','[]','["a","per","da"]','Reggenza: smettere di + infinito.',null,1],
+    ['prep_r_015','verb_government','preposizioni_semplici','A2','Ho bisogno ___ una pausa.','Necesito un descanso.','["di"]','[]','["a","per","da"]','Reggenza: avere bisogno di + nome.',null,1],
+    ['prep_r_016','verb_government','preposizioni_semplici','B1','Ho bisogno ___ riposarmi.','Necesito descansar.','["di"]','[]','["a","per","da"]','Reggenza: avere bisogno di + infinito.',null,1],
+    ['prep_r_017','verb_government','preposizioni_semplici','B1','Non dipende ___ loro.','No depende de ellos.','["da"]','[]','["di","a","per"]','Reggenza: dipendere da + persona/cosa.',null,1],
+    ['prep_r_018','verb_government','preposizioni_semplici','B1','Dipende ___ molti fattori.','Depende de muchos factores.','["da"]','[]','["di","a","per"]','Reggenza: dipendere da + nome.',null,1],
+    ['prep_r_019','verb_government','preposizioni_semplici','B1','Non riesco ___ concentrarmi.','No logro concentrarme.','["a"]','[]','["di","per","in"]','Reggenza: riuscire a + infinito.',null,1],
+    ['prep_r_020','verb_government','preposizioni_semplici','B1','Riesci ___ vedere da qui?','¿Logras ver desde aquí?','["a"]','[]','["di","per","in"]','Reggenza: riuscire a + infinito.',null,1],
+    ['prep_r_021','verb_government','preposizioni_semplici','A2','Continua ___ nevicare.','Sigue nevando.','["a"]','[]','["di","per","da"]','Reggenza: continuare a + infinito.',null,1],
+    ['prep_r_022','verb_government','preposizioni_semplici','A2','Continuo ___ aspettarti.','Sigo esperándote.','["a"]','[]','["di","per","da"]','Reggenza: continuare a + infinito.',null,1],
+    ['prep_r_023','verb_government','preposizioni_semplici','B1','Ti sei dimenticata ___ prenotare?','¿Te olvidaste de reservar?','["di"]','[]','["a","da","per"]','Reggenza: dimenticarsi di + infinito.',null,2],
+    ['prep_r_024','verb_government','preposizioni_semplici','B1','Mi sono dimenticato ___ portare il documento.','Me olvidé de traer el documento.','["di"]','[]','["a","da","per"]','Reggenza: dimenticarsi di + infinito.',null,1],
+    ['prep_r_025','verb_government','preposizioni_semplici','A2','Parliamo ___ politica troppo spesso.','Hablamos de política demasiado.','["di"]','[]','["su","con","per"]','Reggenza: parlare di + argomento.',null,1],
+    ['prep_r_026','verb_government','preposizioni_semplici','A2','Ha parlato ___ suo fratello tutto il giorno.','Habló de su hermano todo el día.','["di"]','[]','["su","con","per"]','Reggenza: parlare di + persona (argomento). "Parlare con" = conversar CON alguien.',null,1],
+    ['prep_r_027','verb_government','preposizioni_semplici','B1','La ringraziano ___ la sua disponibilità.','Le agradecen su disponibilidad.','["per"]','[]','["di","a","con"]','Reggenza: ringraziare per + qualcosa.',null,2],
+    ['prep_r_028','verb_government','preposizioni_semplici','B1','Ti ringrazio ___ tutto quello che hai fatto.','Te agradezco todo lo que has hecho.','["per"]','[]','["di","a","con"]','Reggenza: ringraziare per + qualcosa.',null,1],
+    ['prep_r_029','verb_government','preposizioni_semplici','B1','Hanno deciso ___ partire presto.','Han decidido partir pronto.','["di"]','[]','["a","per","in"]','Reggenza: decidere di + infinito.',null,1],
+    ['prep_r_030','verb_government','preposizioni_semplici','B1','Ha deciso ___ restare a casa.','Ha decidido quedarse en casa.','["di"]','[]','["a","per","in"]','Reggenza: decidere di + infinito.',null,1],
+    ['prep_r_031','verb_government','preposizioni_semplici','B1','Cerco ___ capire la situazione.','Intento entender la situación.','["di"]','[]','["a","per","in"]','Reggenza: cercare di + infinito.',null,1],
+    ['prep_r_032','verb_government','preposizioni_semplici','B1','Prova ___ fare meglio la prossima volta.','Intenta hacerlo mejor la próxima vez.','["a"]','[]','["di","per","in"]','Reggenza: provare a + infinito.',null,1],
+    ['prep_r_033','verb_government','preposizioni_semplici','B1','Penso ___ mia nonna ogni giorno.','Pienso en mi abuela cada día.','["a"]','[]','["di","su","per"]','Reggenza: pensare a + persona/cosa (tenere in mente, avere affetto).',null,2],
+    ['prep_r_034','verb_government','preposizioni_semplici','B1','Penso ___ partire domani.','Pienso partir mañana.','["di"]','[]','["a","su","per"]','Reggenza: pensare di + infinito (intenzione). DIVERSO da "pensare a" (affetto/attenzione).',null,2],
+    ['prep_r_035','verb_government','preposizioni_semplici','B1','Crede molto ___ se stesso.','Cree mucho en sí mismo.','["in"]','[]','["a","di","per"]','Reggenza: credere in + qualcuno/qualcosa (avere fiducia).',null,2],
+    ['prep_r_036','verb_government','preposizioni_semplici','B1','Conta sempre ___ di noi.','Siempre cuenta con nosotros.','["su"]','[]','["di","a","per"]','Reggenza: contare su + qualcuno (fare affidamento).',null,2],
+    ['prep_r_037','verb_government','preposizioni_semplici','B1','Si è trasferito ___ Milano.','Se trasladó a Milán.','["a"]','[]','["in","da","per"]','Reggenza: trasferirsi a + città.',null,1],
+    ['prep_r_038','verb_government','preposizioni_semplici','B1','Si è trasferito ___ Spagna.','Se trasladó a España.','["in"]','[]','["a","da","per"]','Reggenza: trasferirsi in + paese.',null,1],
+    ['prep_r_039','verb_government','preposizioni_semplici','B2','Insiste ___ venire con noi.','Insiste en venir con nosotros.','["a","per"]','[]','["di","su","in"]','Reggenza: insistere a/per + infinito (entrambe accettate).',null,2],
+    ['prep_r_040','verb_government','preposizioni_semplici','B1','Mi aspetto ___ qualcosa di meglio.','Espero algo mejor.','["di"]','[]','["a","su","per"]','Reggenza: aspettarsi di + infinito.',null,2],
+    // ── 10 new fill_locuzione ──────────────────────────────────────────────────
+    ['prep_l_009','fill_locuzione','luogo_e_movimento','A2','Il supermercato è ___ alla farmacia.','El supermercado está al lado de la farmacia.','["accanto"]','["accanto a","di fianco"]','["di fronte","in fondo","in cima"]','"Accanto a" indica prossimità laterale: al lado de.','\"Accanto a\" = al lado de.',1],
+    ['prep_l_010','fill_locuzione','luogo_e_movimento','A2','La posta è ___ alla banca.','Correos está enfrente del banco.','["di fronte"]','["di fronte a"]','["accanto","in fondo","vicino"]','"Di fronte a" indica posizione opposta: enfrente de.','\"Di fronte a\" = enfrente de.',1],
+    ['prep_l_011','fill_locuzione','luogo_e_movimento','B1','Abita ___ alla città.','Vive en las afueras de la ciudad.','["in periferia","nei dintorni","ai margini"]','["fuori"]','["in centro","in fondo","vicino"]','"In periferia" o "nei dintorni" indicano zona esterna alla città.','Periferia/dintorni = afueras.',2],
+    ['prep_l_012','fill_locuzione','confronto_riferimento','B1','___ mia sorella, io sono più calma.','A diferencia de mi hermana, soy más calmada.','["a differenza"]','["a differenza di"]','["rispetto","invece di","al contrario"]','"A differenza di" introduce un contrasto: a diferencia de.','\"A differenza di\" = a diferencia de.',2],
+    ['prep_l_013','fill_locuzione','confronto_riferimento','B1','Decidiamo ___ ai prezzi.','Decidimos según los precios.','["in base"]','["in base a"]','["rispetto","a seconda","invece"]','"In base a" = según / en función de.','\"In base a\" = según.',2],
+    ['prep_l_014','fill_locuzione','confronto_riferimento','B2','___ alle previsioni, domani pioverà.','Según las previsiones, mañana lloverá.','["secondo","in base"]','["secondo le","in base a"]','["grazie a","a causa di","rispetto"]','"Secondo + nome" = según. Sinonimo formale: in base a.','\"Secondo\" = según.',1],
+    ['prep_l_015','fill_locuzione','causa_scopo_mezzo','B2','Ha agito ___ legge.','Actuó de acuerdo con la ley.','["in conformità"]','["in conformità con","conformemente a"]','["secondo","in base","grazie a"]','"In conformità con" o "conformemente a" = de acuerdo con.','\"In conformità con\" = de conformidad con.',3],
+    ['prep_l_016','fill_locuzione','contrasto_esclusione','B1','Tranne ___ Marco, tutti erano presenti.','Excepto Marco, todos estaban presentes.','["che"]','["tranne che"]','["nonostante","invece di","a causa di"]','"Tranne che" (o solo "tranne") davanti a nomi indica esclusione.','\"Tranne che\" = excepto.',2],
+    ['prep_l_017','fill_locuzione','causa_scopo_mezzo','B1','Studio ___ diventare medico.','Estudio para ser médico.','["per","allo scopo di"]','[]','["a causa di","grazie a","invece di"]','"Per + infinito" indica scopo/finalità: para + infinitivo.','\"Per\" o \"allo scopo di\" = para (finalidad).',1],
+    ['prep_l_018','fill_locuzione','luogo_e_movimento','B1','Siamo arrivati ___ al rifugio.','Llegamos hasta el refugio.','["fino"]','["fino a","fino al"]','["in cima","verso","vicino"]','"Fino a" indica il limite estremo raggiunto: hasta.','\"Fino a\" = hasta.',1],
   ];
 
   try {
     const insEx = db.prepare(`INSERT OR REPLACE INTO preposition_exercises(id,exercise_type,topic_slug,cefr,sentence_it,sentence_es,correct_answers,accepted_variants,distractors,explanation_it,explanation_es,difficulty) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`);
     exercises.forEach(e => insEx.run(...e));
+  } catch (_) {}
+
+  // ── Phase 5: Conjugation extended model ───────────────────────────────────────
+
+  try { db.exec(`CREATE TABLE IF NOT EXISTS verbs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    infinitive TEXT UNIQUE NOT NULL,
+    translation TEXT,
+    auxiliary TEXT DEFAULT 'avere',
+    past_participle TEXT,
+    gerund TEXT,
+    conjugation_group TEXT,
+    is_regular INTEGER DEFAULT 1,
+    is_isc INTEGER DEFAULT 0,
+    reflexive_form TEXT,
+    irregularity_tags TEXT DEFAULT '[]',
+    grammar_notes TEXT,
+    orthographic_pattern TEXT,
+    transitivity TEXT DEFAULT 'transitive',
+    review_status TEXT DEFAULT 'ok'
+  )`); } catch (_) {}
+  try { db.exec(`CREATE TABLE IF NOT EXISTS verb_conjugations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    verb_id INTEGER REFERENCES verbs(id),
+    tense TEXT NOT NULL,
+    person TEXT NOT NULL,
+    form TEXT NOT NULL,
+    irregularity_type TEXT,
+    accepted_variants TEXT DEFAULT '[]',
+    auxiliary TEXT,
+    participle TEXT,
+    explanation TEXT
+  )`); } catch (_) {}
+  try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_verb_conj_unique ON verb_conjugations(verb_id, tense, person)`); } catch (_) {}
+  try { db.exec(`CREATE TABLE IF NOT EXISTS conjugation_exercises (
+    id TEXT PRIMARY KEY,
+    exercise_type TEXT NOT NULL,
+    verb_id INTEGER REFERENCES verbs(id),
+    tense_id TEXT NOT NULL,
+    person TEXT,
+    prompt_it TEXT NOT NULL,
+    prompt_es TEXT,
+    correct_answers TEXT NOT NULL DEFAULT '[]',
+    accepted_variants TEXT DEFAULT '[]',
+    distractors TEXT DEFAULT '[]',
+    explanation_it TEXT,
+    explanation_es TEXT,
+    difficulty INTEGER DEFAULT 1,
+    cefr TEXT DEFAULT 'A1',
+    context_sentence TEXT,
+    target_form TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_conj_ex_verb ON conjugation_exercises(verb_id);
+  CREATE INDEX IF NOT EXISTS idx_conj_ex_tense ON conjugation_exercises(tense_id);`); } catch (_) {}
+  try { db.exec(`CREATE TABLE IF NOT EXISTS conjugation_topic_stats (
+    verb_id INTEGER NOT NULL,
+    tense_id TEXT NOT NULL,
+    user_id TEXT NOT NULL DEFAULT 'default',
+    attempts INTEGER DEFAULT 0,
+    correct INTEGER DEFAULT 0,
+    almost_correct INTEGER DEFAULT 0,
+    incorrect INTEGER DEFAULT 0,
+    last_attempted INTEGER,
+    streak INTEGER DEFAULT 0,
+    mastery_level TEXT DEFAULT 'nuovo',
+    PRIMARY KEY (verb_id, tense_id, user_id)
+  )`); } catch (_) {}
+  try { db.exec(`CREATE TABLE IF NOT EXISTS conjugation_error_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    verb_id INTEGER REFERENCES verbs(id),
+    tense_id TEXT NOT NULL,
+    person TEXT,
+    prompt TEXT,
+    user_answer TEXT,
+    correct_answer TEXT,
+    evaluation_status TEXT,
+    error_type TEXT,
+    explanation TEXT,
+    created_at INTEGER DEFAULT (unixepoch())
+  )`); } catch (_) {}
+
+  // ── Phase 5B: Seed verbs table ────────────────────────────────────────────────
+  const insVerb = db.prepare(`INSERT OR IGNORE INTO verbs(infinitive,translation,auxiliary,past_participle,conjugation_group,is_regular,is_isc) VALUES(?,?,?,?,?,?,?)`);
+  [
+    // [infinitive, translation, auxiliary, past_participle, group, is_regular, is_isc]
+    ['essere','ser / estar','essere','stato','ere',0,0],
+    ['avere','tener / haber','avere','avuto','ere',0,0],
+    ['fare','hacer','avere','fatto','are',0,0],
+    ['andare','ir','essere','andato','are',0,0],
+    ['venire','venir','essere','venuto','ire',0,0],
+    ['potere','poder','avere','potuto','ere',0,0],
+    ['volere','querer','avere','voluto','ere',0,0],
+    ['sapere','saber','avere','saputo','ere',0,0],
+    ['dovere','deber','avere','dovuto','ere',0,0],
+    ['stare','estar','essere','stato','are',0,0],
+    ['dare','dar','avere','dato','are',0,0],
+    ['dire','decir','avere','detto','ere',0,0],
+    ['parlare','hablar','avere','parlato','are',1,0],
+    ['capire','entender','avere','capito','ire',1,1],
+    ['finire','terminar','avere','finito','ire_isc',1,1],
+    ['preferire','preferir','avere','preferito','ire_isc',1,1],
+    ['pulire','limpiar','avere','pulito','ire_isc',1,1],
+    ['spedire','enviar','avere','spedito','ire_isc',1,1],
+    ['partire','salir / partir','essere','partito','ire',1,0],
+    ['dormire','dormir','avere','dormito','ire',1,0],
+    ['sentire','sentir','avere','sentito','ire',1,0],
+    ['seguire','seguir','avere','seguito','ire',1,0],
+    ['uscire','salir','essere','uscito','ire',0,0],
+    ['salire','subir','essere','salito','ire',0,0],
+    ['morire','morir','essere','morto','ire',0,0],
+    ['nascere','nacer','essere','nato','ere',0,0],
+    ['crescere','crecer','essere','cresciuto','ere',1,0],
+    ['leggere','leer','avere','letto','ere',0,0],
+    ['scrivere','escribir','avere','scritto','ere',0,0],
+    ['vedere','ver','avere','visto','ere',0,0],
+    ['prendere','tomar','avere','preso','ere',0,0],
+    ['mettere','poner','avere','messo','ere',0,0],
+    ['chiedere','preguntar','avere','chiesto','ere',0,0],
+    ['rispondere','responder','avere','risposto','ere',0,0],
+    ['decidere','decidir','avere','deciso','ere',1,0],
+    ['conoscere','conocer','avere','conosciuto','ere',1,0],
+    ['correre','correr','avere','corso','ere',0,0],
+    ['perdere','perder','avere','perso','ere',0,0],
+    ['spendere','gastar','avere','speso','ere',0,0],
+    ['vincere','ganar','avere','vinto','ere',0,0],
+    ['rimanere','quedarse','essere','rimasto','ere',0,0],
+    ['piacere','gustar','essere','piaciuto','ere',0,0],
+    ['mancare','faltar','essere','mancato','are',0,0],
+    ['scegliere','elegir','avere','scelto','ere',0,0],
+    ['tenere','tener','avere','tenuto','ere',0,0],
+    ['bere','beber','avere','bevuto','ere',0,0],
+    ['mangiare','comer','avere','mangiato','are',1,0],
+    ['lavorare','trabajar','avere','lavorato','are',1,0],
+    ['abitare','vivir','avere','abitato','are',1,0],
+    ['trovare','encontrar','avere','trovato','are',1,0],
+    ['tornare','volver','essere','tornato','are',1,0],
+    ['arrivare','llegar','essere','arrivato','are',1,0],
+    ['entrare','entrar','essere','entrato','are',1,0],
+    ['diventare','convertirse','essere','diventato','are',1,0],
+    ['restare','quedarse','essere','restato','are',1,0],
+    ['sembrare','parecer','essere','sembrato','are',1,0],
+    ['aspettare','esperar','avere','aspettato','are',1,0],
+    ['chiamare','llamar','avere','chiamato','are',1,0],
+    ['comprare','comprar','avere','comprato','are',1,0],
+    ['portare','llevar','avere','portato','are',1,0],
+    ['pensare','pensar','avere','pensato','are',1,0],
+    ['guardare','mirar','avere','guardato','are',1,0],
+    ['giocare','jugar','avere','giocato','are',1,0],
+    ['cercare','buscar','avere','cercato','are',1,0],
+    ['pagare','pagar','avere','pagato','are',1,0],
+    ['studiare','estudiar','avere','studiato','are',1,0],
+    ['lasciare','dejar','avere','lasciato','are',1,0],
+    ['credere','creer','avere','creduto','ere',1,0],
+    ['ricevere','recibir','avere','ricevuto','ere',1,0],
+    ['ridere','reír','avere','riso','ere',0,0],
+    ['aprire','abrir','avere','aperto','ire',0,0],
+    ['offrire','ofrecer','avere','offerto','ire',0,0],
+    ['togliere','quitar','avere','tolto','ere',0,0],
+    ['vivere','vivir','avere','vissuto','ere',0,0],
+  ].forEach(row => { try { insVerb.run(...row); } catch (_) {} });
+
+  // ── Phase 5C: Tense ID migration ─────────────────────────────────────────────
+  try {
+    db.exec(`UPDATE verb_conjugations SET tense='present_indicative' WHERE tense IN ('presente','present','indicativo_presente')`);
+    db.exec(`UPDATE verb_conjugations SET tense='passato_prossimo' WHERE tense IN ('passato','past','passato prossimo')`);
+    db.exec(`UPDATE verb_conjugations SET tense='imperfect_indicative' WHERE tense IN ('imperfetto','imperfect','indicativo_imperfetto')`);
+    db.exec(`UPDATE verb_conjugations SET tense='future_simple' WHERE tense IN ('futuro','future','futuro_semplice')`);
+    db.exec(`UPDATE verb_conjugations SET tense='conditional_present' WHERE tense IN ('condizionale','conditional','condizionale_presente')`);
+    db.exec(`UPDATE verb_conjugations SET tense='subjunctive_present' WHERE tense IN ('congiuntivo','subjunctive','congiuntivo_presente')`);
+  } catch (_) {}
+
+  // ── Phase 5D: Apply auxiliary/participle/group corrections ────────────────────
+  try {
+    const setAux = db.prepare(`UPDATE verbs SET auxiliary=? WHERE infinitive=?`);
+    ['andare','venire','partire','arrivare','tornare','uscire','entrare','nascere','morire','essere',
+     'stare','restare','rimanere','diventare','crescere','piacere','mancare','salire','sedere'].forEach(inf => {
+      try { setAux.run('essere', inf); } catch (_) {}
+    });
+    const setPP = db.prepare(`UPDATE verbs SET past_participle=? WHERE infinitive=?`);
+    [['andare','andato'],['venire','venuto'],['essere','stato'],['avere','avuto'],['fare','fatto'],
+     ['dire','detto'],['stare','stato'],['dare','dato'],['sapere','saputo'],['potere','potuto'],
+     ['volere','voluto'],['dovere','dovuto'],['piacere','piaciuto'],['nascere','nato'],['morire','morto'],
+     ['rimanere','rimasto'],['scegliere','scelto'],['togliere','tolto'],['bere','bevuto'],['tenere','tenuto'],
+     ['leggere','letto'],['scrivere','scritto'],['aprire','aperto'],['offrire','offerto'],['perdere','perso'],
+     ['vedere','visto'],['rispondere','risposto'],['mettere','messo'],['chiedere','chiesto'],['prendere','preso'],
+     ['correre','corso'],['vivere','vissuto'],['decidere','deciso'],['accendere','acceso'],['spendere','speso'],
+    ].forEach(([inf,pp]) => { try { setPP.run(pp, inf); } catch (_) {} });
+    const setIsc = db.prepare(`UPDATE verbs SET is_isc=1 WHERE infinitive=?`);
+    ['capire','finire','preferire','pulire','spedire'].forEach(inf => { try { setIsc.run(inf); } catch (_) {} });
+  } catch (_) {}
+
+  // ── Phase 5E: Seed critical verb_conjugations ─────────────────────────────────
+  const getVerbId = db.prepare(`SELECT id FROM verbs WHERE infinitive=?`);
+  const insConj = db.prepare(`INSERT OR IGNORE INTO verb_conjugations(verb_id,tense,person,form) VALUES(?,?,?,?)`);
+  const seedForms = (infinitive, tense, forms) => {
+    const v = getVerbId.get(infinitive);
+    if (!v) return;
+    Object.entries(forms).forEach(([person, form]) => {
+      try { insConj.run(v.id, tense, person, form); } catch (_) {}
+    });
+  };
+  // essere — present_indicative
+  seedForms('essere','present_indicative',{io:'sono',tu:'sei','lui/lei':'è',noi:'siamo',voi:'siete',loro:'sono'});
+  // avere — present_indicative
+  seedForms('avere','present_indicative',{io:'ho',tu:'hai','lui/lei':'ha',noi:'abbiamo',voi:'avete',loro:'hanno'});
+  // andare — present_indicative
+  seedForms('andare','present_indicative',{io:'vado',tu:'vai','lui/lei':'va',noi:'andiamo',voi:'andate',loro:'vanno'});
+  // fare — present_indicative
+  seedForms('fare','present_indicative',{io:'faccio',tu:'fai','lui/lei':'fa',noi:'facciamo',voi:'fate',loro:'fanno'});
+  // parlare — present_indicative
+  seedForms('parlare','present_indicative',{io:'parlo',tu:'parli','lui/lei':'parla',noi:'parliamo',voi:'parlate',loro:'parlano'});
+  // capire — present_indicative
+  seedForms('capire','present_indicative',{io:'capisco',tu:'capisci','lui/lei':'capisce',noi:'capiamo',voi:'capite',loro:'capiscono'});
+  // finire — present_indicative
+  seedForms('finire','present_indicative',{io:'finisco',tu:'finisci','lui/lei':'finisce',noi:'finiamo',voi:'finite',loro:'finiscono'});
+  // venire — present_indicative
+  seedForms('venire','present_indicative',{io:'vengo',tu:'vieni','lui/lei':'viene',noi:'veniamo',voi:'venite',loro:'vengono'});
+  // sapere — present_indicative
+  seedForms('sapere','present_indicative',{io:'so',tu:'sai','lui/lei':'sa',noi:'sappiamo',voi:'sapete',loro:'sanno'});
+  // potere — present_indicative
+  seedForms('potere','present_indicative',{io:'posso',tu:'puoi','lui/lei':'può',noi:'possiamo',voi:'potete',loro:'possono'});
+  // dovere — present_indicative
+  seedForms('dovere','present_indicative',{io:'devo',tu:'devi','lui/lei':'deve',noi:'dobbiamo',voi:'dovete',loro:'devono'});
+  // volere — present_indicative
+  seedForms('volere','present_indicative',{io:'voglio',tu:'vuoi','lui/lei':'vuole',noi:'vogliamo',voi:'volete',loro:'vogliono'});
+  // parlare — imperfect_indicative
+  seedForms('parlare','imperfect_indicative',{io:'parlavo',tu:'parlavi','lui/lei':'parlava',noi:'parlavamo',voi:'parlavate',loro:'parlavano'});
+  // andare — future_simple
+  seedForms('andare','future_simple',{io:'andrò',tu:'andrai','lui/lei':'andrà',noi:'andremo',voi:'andrete',loro:'andranno'});
+  // andare — passato_prossimo
+  seedForms('andare','passato_prossimo',{io:'sono andato',tu:'sei andato','lui/lei':'è andato',noi:'siamo andati',voi:'siete andati',loro:'sono andati'});
+  // piacere — present_indicative
+  seedForms('piacere','present_indicative',{io:'piaccio',tu:'piaci','lui/lei':'piace',noi:'piacciamo',voi:'piacete',loro:'piacciono'});
+  // mancare — present_indicative
+  seedForms('mancare','present_indicative',{io:'manco',tu:'manchi','lui/lei':'manca',noi:'manchiamo',voi:'mancate',loro:'mancano'});
+
+  // ── Phase 5F: Seed conjugation_exercises ─────────────────────────────────────
+  try {
+    const insConjEx = db.prepare(`INSERT OR REPLACE INTO conjugation_exercises(id,exercise_type,verb_id,tense_id,person,prompt_it,prompt_es,correct_answers,accepted_variants,distractors,explanation_it,explanation_es,difficulty,cefr) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+    const getVId = (inf) => { const r = getVerbId.get(inf); return r ? r.id : null; };
+    const conjExercises = [
+      // ── single_form (30) ──────────────────────────────────────────────────────
+      ['cex_sf_001','single_form',getVId('essere'),'present_indicative','io','essere — presente indicativo — io',null,'["sono"]','[]','["ero","sarò","sia"]','"Essere" al presente: io sono.','Ser/Estar presente: io sono.',1,'A1'],
+      ['cex_sf_002','single_form',getVId('essere'),'present_indicative','tu','essere — presente indicativo — tu',null,'["sei"]','[]','["eri","sarai","sia"]','"Essere" al presente: tu sei.','Ser/Estar presente: tu sei.',1,'A1'],
+      ['cex_sf_003','single_form',getVId('essere'),'present_indicative','lui/lei','essere — presente indicativo — lui/lei',null,'["è"]','[]','["era","sarà","sia"]','"Essere" al presente: lui/lei è. Attenzione all\'accento!','Ser/Estar presente: lui/lei è.',1,'A1'],
+      ['cex_sf_004','single_form',getVId('essere'),'present_indicative','noi','essere — presente indicativo — noi',null,'["siamo"]','[]','["eravamo","saremo","siamo stati"]','"Essere" al presente: noi siamo.','Ser/Estar presente: noi siamo.',1,'A1'],
+      ['cex_sf_005','single_form',getVId('essere'),'present_indicative','voi','essere — presente indicativo — voi',null,'["siete"]','[]','["eravate","sarete","siate"]','"Essere" al presente: voi siete.','Ser/Estar presente: voi siete.',1,'A1'],
+      ['cex_sf_006','single_form',getVId('essere'),'present_indicative','loro','essere — presente indicativo — loro',null,'["sono"]','[]','["erano","saranno","siano"]','"Essere" al presente: loro sono. Uguale a "io sono".',null,1,'A1'],
+      ['cex_sf_007','single_form',getVId('avere'),'present_indicative','io','avere — presente indicativo — io',null,'["ho"]','[]','["avevo","avrò","abbia"]','"Avere" al presente: io ho. Niente "h" pronunciata!',null,1,'A1'],
+      ['cex_sf_008','single_form',getVId('avere'),'present_indicative','tu','avere — presente indicativo — tu',null,'["hai"]','[]','["avevi","avrai","abbia"]','"Avere" al presente: tu hai.',null,1,'A1'],
+      ['cex_sf_009','single_form',getVId('avere'),'present_indicative','lui/lei','avere — presente indicativo — lui/lei',null,'["ha"]','[]','["aveva","avrà","abbia"]','"Avere" al presente: lui/lei ha.',null,1,'A1'],
+      ['cex_sf_010','single_form',getVId('andare'),'present_indicative','io','andare — presente indicativo — io',null,'["vado"]','[]','["andavo","andrò","vada"]','"Andare" è irregolare: io vado (non "ando").',null,1,'A1'],
+      ['cex_sf_011','single_form',getVId('andare'),'present_indicative','tu','andare — presente indicativo — tu',null,'["vai"]','[]','["andavi","andrai","vada"]','"Andare" al presente: tu vai.',null,1,'A1'],
+      ['cex_sf_012','single_form',getVId('andare'),'present_indicative','lui/lei','andare — presente indicativo — lui/lei',null,'["va"]','[]','["andava","andrà","vada"]','"Andare" al presente: lui/lei va.',null,1,'A1'],
+      ['cex_sf_013','single_form',getVId('andare'),'present_indicative','loro','andare — presente indicativo — loro',null,'["vanno"]','[]','["andavano","andranno","vadano"]','"Andare" al presente: loro vanno (irregolare!).','Andare presente: loro vanno.',1,'A1'],
+      ['cex_sf_014','single_form',getVId('fare'),'present_indicative','io','fare — presente indicativo — io',null,'["faccio"]','[]','["facevo","farò","faccia"]','"Fare" al presente: io faccio (derivato da "facere").','Fare presente: faccio.',1,'A1'],
+      ['cex_sf_015','single_form',getVId('fare'),'present_indicative','lui/lei','fare — presente indicativo — lui/lei',null,'["fa"]','[]','["faceva","farà","faccia"]','"Fare" al presente: lui/lei fa.','Fare presente: fa.',1,'A1'],
+      ['cex_sf_016','single_form',getVId('venire'),'present_indicative','io','venire — presente indicativo — io',null,'["vengo"]','[]','["venivo","verrò","venga"]','"Venire" al presente: io vengo.',null,1,'A2'],
+      ['cex_sf_017','single_form',getVId('venire'),'present_indicative','loro','venire — presente indicativo — loro',null,'["vengono"]','[]','["venivano","verranno","vengano"]','"Venire" al presente: loro vengono.',null,1,'A2'],
+      ['cex_sf_018','single_form',getVId('sapere'),'present_indicative','io','sapere — presente indicativo — io',null,'["so"]','[]','["sapevo","saprò","sappia"]','"Sapere" al presente: io so (molto breve!).','Sapere presente: io so.',1,'A2'],
+      ['cex_sf_019','single_form',getVId('potere'),'present_indicative','io','potere — presente indicativo — io',null,'["posso"]','[]','["potevo","potrò","possa"]','"Potere" al presente: io posso.',null,1,'A2'],
+      ['cex_sf_020','single_form',getVId('potere'),'present_indicative','lui/lei','potere — presente indicativo — lui/lei',null,'["può"]','[]','["poteva","potrà","possa"]','"Potere" al presente: lui/lei può. Attenzione all\'accento!',null,1,'A2'],
+      ['cex_sf_021','single_form',getVId('dovere'),'present_indicative','io','dovere — presente indicativo — io',null,'["devo"]','["debbo"]','["dovevo","dovrò","debba"]','"Dovere" al presente: devo (o debbo, più formale).',null,1,'A2'],
+      ['cex_sf_022','single_form',getVId('parlare'),'imperfect_indicative','io','parlare — imperfetto indicativo — io',null,'["parlavo"]','[]','["parlo","parlerò","parli"]','Imperfetto regolare -ARE: io parlavo.',null,1,'A2'],
+      ['cex_sf_023','single_form',getVId('parlare'),'imperfect_indicative','lui/lei','parlare — imperfetto indicativo — lui/lei',null,'["parlava"]','[]','["parla","parlerà","parli"]','Imperfetto regolare -ARE: lui/lei parlava.',null,1,'A2'],
+      ['cex_sf_024','single_form',getVId('andare'),'future_simple','io','andare — futuro semplice — io',null,'["andrò"]','[]','["vado","andavo","vada"]','Futuro di "andare": andrò (radice irregolare "andr-").',null,2,'A2'],
+      ['cex_sf_025','single_form',getVId('andare'),'passato_prossimo','io','andare — passato prossimo — io (maschile)',null,'["sono andato"]','["andato"]','["ho andato","ero andato","sono andato/a"]','Andare usa "essere" come ausiliare. Participio concorda: andato (m), andata (f).',null,2,'A2'],
+      ['cex_sf_026','single_form',getVId('capire'),'present_indicative','io','capire — presente indicativo — io',null,'["capisco"]','[]','["capivo","capirò","capisca"]','Capire è un verbo -ISC: io capisco, tu capisci, lui capisce.',null,1,'A2'],
+      ['cex_sf_027','single_form',getVId('finire'),'present_indicative','noi','finire — presente indicativo — noi',null,'["finiamo"]','[]','["finisco","finiremo","finiamo"]','Verbi -ISC: la forma noi NON usa -isc: noi finiamo (non "finisciamo").',null,2,'A2'],
+      ['cex_sf_028','single_form',getVId('volere'),'present_indicative','io','volere — presente indicativo — io',null,'["voglio"]','[]','["voler","vorrò","voglia"]','"Volere" al presente: io voglio.',null,1,'A2'],
+      ['cex_sf_029','single_form',getVId('essere'),'passato_prossimo','io','essere — passato prossimo — io (stato/a)',null,'["sono stato","sono stata"]','["stato","stata"]','["ero stato","ho stato","fui stato"]','"Essere" al passato prossimo: sono stato/stata (si usa "essere" come ausiliare).',null,2,'A2'],
+      ['cex_sf_030','single_form',getVId('avere'),'passato_prossimo','lui/lei','avere — passato prossimo — lui/lei',null,'["ha avuto"]','[]','["è avuto","aveva avuto","abbia avuto"]','"Avere" al passato prossimo: ha avuto (ausiliare: avere).',null,1,'A2'],
+      // ── full_paradigm (5) ──────────────────────────────────────────────────────
+      ['cex_fp_001','full_paradigm',getVId('parlare'),'present_indicative',null,'parlare — presente indicativo — completa tutte le persone',null,'["parlo","parli","parla","parliamo","parlate","parlano"]','[]','[]','Parlare è un verbo regolare -ARE. Terminazioni: -o, -i, -a, -iamo, -ate, -ano.',null,1,'A1'],
+      ['cex_fp_002','full_paradigm',getVId('andare'),'present_indicative',null,'andare — presente indicativo — completa tutte le persone',null,'["vado","vai","va","andiamo","andate","vanno"]','[]','[]','Andare è irregolare: vado, vai, va, andiamo, andate, vanno.',null,2,'A1'],
+      ['cex_fp_003','full_paradigm',getVId('essere'),'present_indicative',null,'essere — presente indicativo — completa tutte le persone',null,'["sono","sei","è","siamo","siete","sono"]','[]','[]','Essere è molto irregolare: sono, sei, è, siamo, siete, sono.',null,2,'A1'],
+      ['cex_fp_004','full_paradigm',getVId('avere'),'present_indicative',null,'avere — presente indicativo — completa tutte le persone',null,'["ho","hai","ha","abbiamo","avete","hanno"]','[]','[]','Avere è irregolare: ho, hai, ha, abbiamo, avete, hanno.',null,2,'A1'],
+      ['cex_fp_005','full_paradigm',getVId('fare'),'present_indicative',null,'fare — presente indicativo — completa tutte le persone',null,'["faccio","fai","fa","facciamo","fate","fanno"]','[]','[]','Fare è irregolare: faccio, fai, fa, facciamo, fate, fanno.',null,2,'A1'],
+      // ── auxiliary_participle (10) ──────────────────────────────────────────────
+      ['cex_ap_001','auxiliary_participle',getVId('andare'),'passato_prossimo',null,"andare — passato prossimo — qual è l'ausiliare?",null,'["essere"]','[]','["avere"]','Andare usa "essere": sono andato.',null,1,'A2'],
+      ['cex_ap_002','auxiliary_participle',getVId('mangiare'),'passato_prossimo',null,"mangiare — passato prossimo — qual è l'ausiliare?",null,'["avere"]','[]','["essere"]','Mangiare usa "avere": ho mangiato.',null,1,'A2'],
+      ['cex_ap_003','auxiliary_participle',getVId('nascere'),'passato_prossimo',null,"nascere — passato prossimo — qual è l'ausiliare?",null,'["essere"]','[]','["avere"]','Nascere usa "essere": sono nato/a.',null,1,'A2'],
+      ['cex_ap_004','auxiliary_participle',getVId('prendere'),'passato_prossimo',null,"prendere — passato prossimo — qual è l'ausiliare?",null,'["avere"]','[]','["essere"]','Prendere usa "avere": ho preso.',null,1,'A2'],
+      ['cex_ap_005','auxiliary_participle',getVId('uscire'),'passato_prossimo',null,"uscire — passato prossimo — qual è l'ausiliare?",null,'["essere"]','[]','["avere"]','Uscire usa "essere": sono uscito.',null,1,'A2'],
+      ['cex_ap_006','auxiliary_participle',getVId('venire'),'passato_prossimo',null,"venire — passato prossimo — qual è l'ausiliare?",null,'["essere"]','[]','["avere"]','Venire usa "essere": sono venuto.',null,1,'A2'],
+      ['cex_ap_007','auxiliary_participle',getVId('fare'),'passato_prossimo',null,"fare — passato prossimo — qual è l'ausiliare?",null,'["avere"]','[]','["essere"]','Fare usa "avere": ho fatto.',null,1,'A2'],
+      ['cex_ap_008','auxiliary_participle',getVId('leggere'),'passato_prossimo',null,"leggere — passato prossimo — qual è l'ausiliare?",null,'["avere"]','[]','["essere"]','Leggere usa "avere": ho letto.',null,1,'A2'],
+      ['cex_ap_009','auxiliary_participle',getVId('morire'),'passato_prossimo',null,"morire — passato prossimo — qual è l'ausiliare?",null,'["essere"]','[]','["avere"]','Morire usa "essere": è morto.',null,1,'A2'],
+      ['cex_ap_010','auxiliary_participle',getVId('tornare'),'passato_prossimo',null,"tornare — passato prossimo — qual è l'ausiliare?",null,'["essere"]','[]','["avere"]','Tornare usa "essere": sono tornato.',null,1,'A2'],
+      // ── choose_tense (10) ──────────────────────────────────────────────────────
+      ['cex_ct_001','choose_tense',getVId('andare'),'imperfect_indicative',null,'Da bambino ___ sempre al parco. (andare)','De niño siempre iba al parque.','["andavo"]','[]','["sono andato","andrò","vado"]','L\'imperfetto indica un\'abitudine nel passato.',null,2,'B1'],
+      ['cex_ct_002','choose_tense',getVId('mangiare'),'passato_prossimo',null,'Ieri ___ la pizza. (mangiare)','Ayer comí pizza.','["ho mangiato"]','[]','["mangiavo","mangerò","mangio"]','Il passato prossimo indica un\'azione puntuale nel passato recente.',null,1,'A2'],
+      ['cex_ct_003','choose_tense',getVId('studiare'),'future_simple',null,'Domani ___ tutto il giorno. (studiare)','Mañana estudiaré todo el día.','["studierò"]','[]','["studiavo","ho studiato","studio"]','Il futuro semplice si usa per azioni future.',null,1,'A2'],
+      ['cex_ct_004','choose_tense',getVId('essere'),'imperfect_indicative',null,'Quando ___ piccola, sognavo di diventare medico. (essere)','Cuando era pequeña, soñaba con ser médica.','["ero"]','[]','["sono","sarò","sia"]','L\'imperfetto descrive stati ed abitudini nel passato.',null,2,'B1'],
+      ['cex_ct_005','choose_tense',getVId('partire'),'passato_prossimo',null,'Luca ___ ieri mattina. (partire)','Luca partió ayer por la mañana.','["è partito"]','[]','["partiva","partirà","parta"]','Il passato prossimo con "essere" per i verbi di movimento.',null,2,'A2'],
+      ['cex_ct_006','choose_tense',getVId('lavorare'),'imperfect_indicative',null,'Prima ___ in banca. (lavorare)','Antes trabajaba en un banco.','["lavoravo"]','[]','["ho lavorato","lavorerò","lavoro"]','L\'imperfetto per azioni abituali o stati nel passato.',null,1,'B1'],
+      ['cex_ct_007','choose_tense',getVId('fare'),'future_simple',null,'Se piove, ___ una torta. (fare)','Si llueve, haré un pastel.','["farò"]','[]','["faccio","facevo","ho fatto"]','Il futuro nella frase ipotetica con "se + presente indicativo".',null,2,'B1'],
+      ['cex_ct_008','choose_tense',getVId('vedere'),'passato_prossimo',null,'Non ___ quel film. (vedere)','No he visto esa película.','["ho visto"]','[]','["vedevo","vedrò","veda"]','Il passato prossimo per esperienze fino al presente.',null,1,'A2'],
+      ['cex_ct_009','choose_tense',getVId('parlare'),'imperfect_indicative',null,'Mentre ___ con Marco, è arrivata Sara. (parlare)','Mientras hablaba con Marco, llegó Sara.','["parlavo"]','[]','["ho parlato","parlerò","parli"]','L\'imperfetto per azione in corso interrotta da un\'altra.',null,2,'B1'],
+      ['cex_ct_010','choose_tense',getVId('arrivare'),'future_simple',null,'Il treno ___ alle tre. (arrivare)','El tren llegará a las tres.','["arriverà"]','[]','["arrivava","è arrivato","arrivi"]','Il futuro per previsioni/programmi futuri.',null,1,'A2'],
+      // ── prossimo_vs_imperfetto (10) ────────────────────────────────────────────
+      ['cex_pi_001','prossimo_vs_imperfetto',getVId('studiare'),'imperfect_indicative',null,'Mentre ___ (studiare), il telefono ha squillato.','Mientras estudiaba, sonó el teléfono.','["studiavo"]','[]','["ho studiato","studierò","studio"]','L\'imperfetto descrive un\'azione in corso interrotta.',null,2,'B1'],
+      ['cex_pi_002','prossimo_vs_imperfetto',getVId('leggere'),'passato_prossimo',null,'Ieri sera ___ (leggere) un articolo interessante.','Ayer por la noche leí un artículo interesante.','["ho letto"]','[]','["leggevo","leggerò","leggo"]','Il passato prossimo per azione completata nel passato.',null,1,'A2'],
+      ['cex_pi_003','prossimo_vs_imperfetto',getVId('dormire'),'imperfect_indicative',null,'Ogni sera ___ (dormire) presto quando ero giovane.','Cada noche dormía temprano cuando era joven.','["dormivo"]','[]','["ho dormito","dormirò","dormo"]','L\'imperfetto per abitudine nel passato.',null,2,'B1'],
+      ['cex_pi_004','prossimo_vs_imperfetto',getVId('mangiare'),'passato_prossimo',null,'Stanotte non ___ (mangiare) niente.','Esta noche no comí nada.','["ho mangiato"]','[]','["mangiavo","mangerò","mangio"]','Il passato prossimo per azione puntuale nel passato recente.',null,1,'A2'],
+      ['cex_pi_005','prossimo_vs_imperfetto',getVId('lavorare'),'imperfect_indicative',null,'Da bambino mio padre ___ (lavorare) in campagna.','De niño, mi padre trabajaba en el campo.','["lavorava"]','[]','["ha lavorato","lavorerà","lavora"]','L\'imperfetto per descrizione o stato nel passato.',null,1,'B1'],
+      ['cex_pi_006','prossimo_vs_imperfetto',getVId('uscire'),'passato_prossimo',null,'Ieri sera ___ (uscire) con gli amici.','Ayer por la noche salí con los amigos.','["sono uscito","sono uscita"]','[]','["uscivo","uscirò","esca"]','Il passato prossimo per azione completata ieri sera.',null,2,'A2'],
+      ['cex_pi_007','prossimo_vs_imperfetto',getVId('guardare'),'imperfect_indicative',null,'___ (guardare) la TV quando ha telefonato.','Estaba viendo la tele cuando llamó.','["guardavo"]','[]','["ho guardato","guarderò","guardo"]','L\'imperfetto per azione in corso al passato.',null,2,'B1'],
+      ['cex_pi_008','prossimo_vs_imperfetto',getVId('arrivare'),'passato_prossimo',null,'Il treno ___ (arrivare) con tre ore di ritardo.','El tren llegó con tres horas de retraso.','["è arrivato"]','[]','["arrivava","arriverà","arrivi"]','Il passato prossimo per evento puntuale.',null,1,'A2'],
+      ['cex_pi_009','prossimo_vs_imperfetto',getVId('pensare'),'imperfect_indicative',null,'___ (pensare) a te tutto il giorno.','Pensaba en ti todo el día.','["pensavo"]','[]','["ho pensato","penserò","penso"]','L\'imperfetto per stato mentale prolungato nel passato.',null,2,'B1'],
+      ['cex_pi_010','prossimo_vs_imperfetto',getVId('tornare'),'passato_prossimo',null,'Ieri ___ (tornare) a casa tardi.','Ayer volví a casa tarde.','["sono tornato","sono tornata"]','[]','["tornavo","tornerò","torni"]','Il passato prossimo per azione puntuale compiuta.',null,2,'A2'],
+      // ── verbi_speciali (10) ────────────────────────────────────────────────────
+      ['cex_vs_001','verbi_speciali',getVId('piacere'),'present_indicative',null,'Mi ___ (piacere) il libro.','Me gusta el libro.','["piace"]','[]','["piaccio","piacete","piacevano"]','"Piacere" si coniuga con il soggetto grammaticale (il libro). "Mi" è il complemento indiretto.',null,2,'A2'],
+      ['cex_vs_002','verbi_speciali',getVId('piacere'),'present_indicative',null,'Mi ___ (piacere) i libri.','Me gustan los libros.','["piacciono"]','[]','["piace","piacevo","piaccia"]','"Piacere" al plurale: mi piacciono i libri (soggetto: i libri).',null,2,'A2'],
+      ['cex_vs_003','verbi_speciali',getVId('mancare'),'present_indicative',null,'Mi ___ (mancare) la famiglia.','Echo de menos a mi familia.','["manca"]','[]','["manco","mancate","mancherebbe"]','"Mancare" funziona come "piacere": mi manca la famiglia (soggetto: la famiglia).',null,2,'B1'],
+      ['cex_vs_004','verbi_speciali',getVId('piacere'),'imperfect_indicative',null,'Da bambino mi ___ (piacere) il cioccolato.','De niño me gustaba el chocolate.','["piaceva"]','[]','["piacevo","piacesse","piace"]','"Piacere" all\'imperfetto: mi piaceva.',null,2,'B1'],
+      ['cex_vs_005','verbi_speciali',getVId('piacere'),'passato_prossimo',null,'Ti ___ (piacere) il film?','¿Te ha gustado la película?','["è piaciuto"]','["piaciuto"]','["hai piaciuto","ha piaciuto","è piaciuta"]','"Piacere" al passato prossimo usa "essere". Il participio concorda con il soggetto.',null,3,'B1'],
+      ['cex_vs_006','verbi_speciali',getVId('mancare'),'present_indicative',null,'Mi ___ (mancare) i tuoi abbracci.','Echo de menos tus abrazos.','["mancano"]','[]','["manca","mancavo","mancherei"]','"Mancare" al plurale: mi mancano i tuoi abbracci.',null,2,'B1'],
+      ['cex_vs_007','verbi_speciali',getVId('piacere'),'present_indicative',null,'Gli ___ (piacere) correre.','Le gusta correr.','["piace"]','[]','["piacciono","piaccia","piaceva"]','"Piacere" + infinito → sempre singolare: gli piace correre.',null,2,'A2'],
+      ['cex_vs_008','verbi_speciali',getVId('piacere'),'present_indicative',null,'Ci ___ (piacere) viaggiare.','Nos gusta viajar.','["piace"]','[]','["piacciono","piaccia","piacevano"]','"Piacere" + infinito → sempre singolare: ci piace viaggiare.',null,2,'A2'],
+      ['cex_vs_009','verbi_speciali',getVId('mancare'),'imperfect_indicative',null,'Mi ___ (mancare) molto la casa.','Echaba mucho de menos casa.','["mancava"]','[]','["mancavo","mancherebbe","mancano"]','"Mancare" all\'imperfetto: mi mancava la casa.',null,2,'B1'],
+      ['cex_vs_010','verbi_speciali',getVId('piacere'),'present_indicative',null,'Non mi ___ (piacere) le verdure.','No me gustan las verduras.','["piacciono"]','[]','["piace","piacevo","piaccia"]','"Piacere" al plurale in negativo: non mi piacciono le verdure.',null,2,'A2'],
+      // ── 5 extra single_form ───────────────────────────────────────────────────
+      ['cex_sf_031','single_form',getVId('essere'),'imperfect_indicative','io','essere — imperfetto — io',null,'["ero"]','[]','["sono","sarò","fossi"]','Imperfetto di essere: io ero.',null,1,'A2'],
+      ['cex_sf_032','single_form',getVId('avere'),'imperfect_indicative','lui/lei','avere — imperfetto — lui/lei',null,'["aveva"]','[]','["ha","avrà","avesse"]','Imperfetto di avere: lui/lei aveva.',null,1,'A2'],
+      ['cex_sf_033','single_form',getVId('fare'),'imperfect_indicative','noi','fare — imperfetto — noi',null,'["facevamo"]','[]','["facciamo","faremo","facessimo"]','Imperfetto di fare: noi facevamo.',null,1,'A2'],
+      ['cex_sf_034','single_form',getVId('andare'),'conditional_present','io','andare — condizionale presente — io',null,'["andrei"]','[]','["andrò","andavo","vada"]','Condizionale di andare: io andrei.',null,2,'B1'],
+      ['cex_sf_035','single_form',getVId('essere'),'future_simple','lui/lei','essere — futuro semplice — lui/lei',null,'["sarà"]','[]','["è","era","sia"]','Futuro di essere: lui/lei sarà.',null,1,'A2'],
+    ];
+    conjExercises.forEach(e => { try { insConjEx.run(...e); } catch (_) {} });
   } catch (_) {}
 }
 

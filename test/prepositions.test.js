@@ -278,7 +278,7 @@ if (db) {
     exRows = db.prepare('SELECT * FROM preposition_exercises').all();
     exCount = exRows.length;
   } catch (_) {}
-  assert(exCount >= 60, `At least 60 exercises seeded (got ${exCount})`);
+  assert(exCount >= 170, `At least 170 exercises seeded (got ${exCount})`);
 
   // All 5 exercise types present
   const types = new Set(exRows.map(e => e.exercise_type));
@@ -287,6 +287,18 @@ if (db) {
   assert(types.has('contrast'), 'exercise type contrast present');
   assert(types.has('verb_government'), 'exercise type verb_government present');
   assert(types.has('fill_locuzione'), 'exercise type fill_locuzione present');
+
+  // Per-type minimums
+  const fpRows = exRows.filter(e => e.exercise_type === 'fill_preposition');
+  assert(fpRows.length >= 35, `At least 35 fill_preposition exercises (got ${fpRows.length})`);
+  const artRows = exRows.filter(e => e.exercise_type === 'articolate_form');
+  assert(artRows.length >= 50, `At least 50 articolate_form exercises (got ${artRows.length})`);
+  const contrastRowsCount = exRows.filter(e => e.exercise_type === 'contrast').length;
+  assert(contrastRowsCount >= 28, `At least 28 contrast exercises (got ${contrastRowsCount})`);
+  const vgRows = exRows.filter(e => e.exercise_type === 'verb_government').length;
+  assert(vgRows >= 40, `At least 40 verb_government exercises (got ${vgRows})`);
+  const locRows = exRows.filter(e => e.exercise_type === 'fill_locuzione').length;
+  assert(locRows >= 18, `At least 18 fill_locuzione exercises (got ${locRows})`);
 
   // All exercises have non-empty correct_answers
   const missingAnswers = exRows.filter(e => {
@@ -301,10 +313,6 @@ if (db) {
   // No exercise has empty sentence_it
   const emptySentence = exRows.filter(e => !e.sentence_it || e.sentence_it.trim() === '');
   assert(emptySentence.length === 0, `No exercise has empty sentence_it (${emptySentence.length} empty)`);
-
-  // Mode 2 (articolate_form) exercises check
-  const artRows = exRows.filter(e => e.exercise_type === 'articolate_form');
-  assert(artRows.length >= 15, `At least 15 articolate_form exercises (got ${artRows.length})`);
 
   // Mode 3 (contrast) have at least 2 distractors
   const contrastRows = exRows.filter(e => e.exercise_type === 'contrast');

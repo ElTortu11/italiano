@@ -1375,29 +1375,43 @@ router.get('/prepositions/topic-stats', (req, res) => {
 
 router.post('/prepositions/topic-stats', (req, res) => {
   try {
-    const { topic_slug, result } = req.body;
+    const { topic_slug, result, attempt_id } = req.body;
     if (!topic_slug || !result) return res.status(400).json({ error: 'topic_slug and result required' });
 
     // Upsert row
     db.prepare(`INSERT OR IGNORE INTO preposition_topic_stats(topic_slug, user_id) VALUES(?, 'default')`).run(topic_slug);
 
+    // Reject duplicate submissions for the same attempt
+    if (attempt_id) {
+      const existing = db.prepare(`SELECT last_attempt_id FROM preposition_topic_stats WHERE topic_slug=? AND user_id='default'`).get(topic_slug);
+      if (existing && existing.last_attempt_id === attempt_id) {
+        return res.json({ ok: true, skipped: true });
+      }
+    }
+
     const inc = result === 'correct' ? 'correct=correct+1'
               : result === 'almost'  ? 'almost_correct=almost_correct+1'
               : 'incorrect=incorrect+1';
 
-    db.prepare(`UPDATE preposition_topic_stats SET attempts=attempts+1, ${inc}, last_attempted=? WHERE topic_slug=? AND user_id='default'`).run(now(), topic_slug);
+    const attemptIdSql = attempt_id ? `, last_attempt_id=?` : '';
+    const attemptIdVal = attempt_id ? [attempt_id] : [];
+    db.prepare(`UPDATE preposition_topic_stats SET attempts=attempts+1, ${inc}, last_attempted=?${attemptIdSql} WHERE topic_slug=? AND user_id='default'`).run(now(), ...attemptIdVal, topic_slug);
 
     // Recalculate mastery
-    const stats = db.prepare(`SELECT * FROM preposition_topic_stats WHERE topic_slug=? AND user_id='default'`).get(topic_slug);
-    if (stats) {
-      const accuracy = stats.attempts > 0 ? stats.correct / stats.attempts : 0;
-      const lastAttempted = stats.last_attempted || 0;
-      const daysSinceLast = (now() - lastAttempted) / 86400;
-      let mastery = 'nuovo';
-      if (stats.attempts >= 10 && accuracy >= 0.85 && daysSinceLast <= 30) mastery = 'padroneggiato';
-      else if (stats.attempts >= 5 && accuracy >= 0.6) mastery = 'in_consolidamento';
-      else if (stats.attempts >= 5) mastery = 'in_apprendimento';
-      db.prepare(`UPDATE preposition_topic_stats SET mastery_level=? WHERE topic_slug=? AND user_id='default'`).run(mastery, topic_slug);
+    const row = db.prepare(`SELECT * FROM preposition_topic_stats WHERE topic_slug=? AND user_id='default'`).get(topic_slug);
+    if (row) {
+      let mastery_level = 'nuovo';
+      if (row.attempts >= 1) {
+        const accuracy = row.attempts > 0 ? row.correct / row.attempts : 0;
+        if (row.attempts >= 8 && accuracy >= 0.85) {
+          mastery_level = 'padroneggiato';
+        } else if (row.attempts >= 5 && accuracy >= 0.70) {
+          mastery_level = 'in_consolidamento';
+        } else {
+          mastery_level = 'in_apprendimento';
+        }
+      }
+      db.prepare(`UPDATE preposition_topic_stats SET mastery_level=? WHERE topic_slug=? AND user_id='default'`).run(mastery_level, topic_slug);
     }
     res.json({ ok: true });
   } catch (e) {
@@ -1435,6 +1449,97 @@ router.get('/prepositions/error-log', (req, res) => {
   } catch (_) {
     res.json([]);
   }
+});
+
+// ── Phase 5: Conjugation routes ───────────────────────────────────────────────
+
+router.get('/verbs/details', (req, res) => {
+  try {
+    const rows = db.prepare(`SELECT * FROM verbs ORDER BY infinitive`).all();
+    res.json(rows);
+  } catch (_) { res.json([]); }
+});
+
+router.get('/conjugations/exercises', (req, res) => {
+  try {
+    const { verb_id, tense_id, type } = req.query;
+    let sql = 'SELECT ce.*, v.infinitive FROM conjugation_exercises ce LEFT JOIN verbs v ON ce.verb_id=v.id WHERE 1=1';
+    const params = [];
+    if (verb_id) { sql += ' AND ce.verb_id=?'; params.push(verb_id); }
+    if (tense_id) { sql += ' AND ce.tense_id=?'; params.push(tense_id); }
+    if (type) { sql += ' AND ce.exercise_type=?'; params.push(type); }
+    sql += ' ORDER BY ce.difficulty, ce.id';
+    res.json(db.prepare(sql).all(...params));
+  } catch (_) { res.json([]); }
+});
+
+router.get('/conjugations/topic-stats', (req, res) => {
+  try {
+    const rows = db.prepare(`SELECT ts.*, v.infinitive FROM conjugation_topic_stats ts LEFT JOIN verbs v ON ts.verb_id=v.id WHERE ts.user_id='default'`).all();
+    res.json(rows);
+  } catch (_) { res.json([]); }
+});
+
+router.post('/conjugations/topic-stats', (req, res) => {
+  try {
+    const { verb_id, tense_id, result, attempt_id } = req.body;
+    if (!verb_id || !tense_id || !result) return res.status(400).json({ error: 'verb_id, tense_id and result required' });
+
+    db.prepare(`INSERT OR IGNORE INTO conjugation_topic_stats(verb_id,tense_id,user_id) VALUES(?,?,'default')`).run(verb_id, tense_id);
+
+    if (attempt_id) {
+      const existing = db.prepare(`SELECT last_attempt_id FROM conjugation_topic_stats WHERE verb_id=? AND tense_id=? AND user_id='default'`).get(verb_id, tense_id);
+      if (existing && existing.last_attempt_id === attempt_id) {
+        return res.json({ ok: true, skipped: true });
+      }
+    }
+
+    const inc = result === 'correct'       ? 'correct=correct+1'
+              : result === 'almost_correct' ? 'almost_correct=almost_correct+1'
+              : 'incorrect=incorrect+1';
+
+    db.prepare(`UPDATE conjugation_topic_stats SET attempts=attempts+1, ${inc}, last_attempted=? WHERE verb_id=? AND tense_id=? AND user_id='default'`).run(now(), verb_id, tense_id);
+
+    const row = db.prepare(`SELECT * FROM conjugation_topic_stats WHERE verb_id=? AND tense_id=? AND user_id='default'`).get(verb_id, tense_id);
+    if (row) {
+      let mastery_level = 'nuovo';
+      if (row.attempts >= 1) {
+        const accuracy = row.attempts > 0 ? row.correct / row.attempts : 0;
+        if (row.attempts >= 8 && accuracy >= 0.85) mastery_level = 'padroneggiato';
+        else if (row.attempts >= 5 && accuracy >= 0.70) mastery_level = 'in_consolidamento';
+        else mastery_level = 'in_apprendimento';
+      }
+      db.prepare(`UPDATE conjugation_topic_stats SET mastery_level=? WHERE verb_id=? AND tense_id=? AND user_id='default'`).run(mastery_level, verb_id, tense_id);
+    }
+
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/conjugations/error-log', (req, res) => {
+  try {
+    const { verb_id, tense_id, person, prompt, user_answer, correct_answer, evaluation_status, error_type, explanation } = req.body;
+    if (!tense_id) return res.status(400).json({ error: 'tense_id required' });
+    db.prepare(`INSERT INTO conjugation_error_log(verb_id,tense_id,person,prompt,user_answer,correct_answer,evaluation_status,error_type,explanation) VALUES(?,?,?,?,?,?,?,?,?)`)
+      .run(verb_id||null, tense_id, person||null, prompt||null, user_answer||null, correct_answer||null, evaluation_status||null, error_type||null, explanation||null);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/conjugations/error-log', (req, res) => {
+  try {
+    const { verb_id, tense_id } = req.query;
+    let sql = 'SELECT * FROM conjugation_error_log WHERE 1=1';
+    const params = [];
+    if (verb_id) { sql += ' AND verb_id=?'; params.push(verb_id); }
+    if (tense_id) { sql += ' AND tense_id=?'; params.push(tense_id); }
+    sql += ' ORDER BY created_at DESC LIMIT 100';
+    res.json(db.prepare(sql).all(...params));
+  } catch (_) { res.json([]); }
 });
 
 module.exports = router;

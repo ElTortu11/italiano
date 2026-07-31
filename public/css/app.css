@@ -1468,3 +1468,95 @@ body  { min-height: 100vh; min-height: 100dvh; }
   .prep-topic-grid { grid-template-columns: 1fr 1fr; }
   .prep-summary-stats { gap: 8px; }
 }
+
+/* ── Phase 5: Conjugation ────────────────────────────────────────────────────── */
+.conj-session-wrap {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+.conj-verb-header {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+  color: var(--text);
+}
+.conj-verb-header .conj-tense-label {
+  font-size: 0.95rem;
+  font-weight: 400;
+  color: var(--muted);
+  margin-left: 8px;
+}
+.conj-person-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+.conj-aux-highlight {
+  color: var(--accent);
+  font-weight: 600;
+}
+.conj-accent-bar {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  margin-top: 2px;
+  width: 0;
+  transition: width 0.3s ease;
+}
+.conj-paradigm-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+  margin: 16px 0;
+}
+.conj-paradigm-grid .conj-person-label {
+  align-self: center;
+}
+.conj-paradigm-grid input {
+  background: var(--card);
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 1rem;
+  color: var(--text);
+  width: 100%;
+}
+.conj-paradigm-grid input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.conj-ex-prompt {
+  font-size: 1.1rem;
+  margin-bottom: 16px;
+  color: var(--text);
+}
+.conj-choice-btn {
+  background: var(--card);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 1rem;
+  cursor: pointer;
+  color: var(--text);
+  transition: border-color 0.15s, background 0.15s;
+}
+.conj-choice-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--hover);
+}
+.conj-choice-btn:disabled { opacity: 0.7; cursor: default; }
+.conj-choice-btn.is-correct { border-color: var(--accent); background: var(--accent-dim, color-mix(in srgb, var(--accent) 15%, transparent)); }
+.conj-choice-btn.is-wrong   { border-color: var(--red); background: var(--red-dim, color-mix(in srgb, var(--red) 15%, transparent)); }
+.conj-aux-row {
+  display: flex;
+  gap: 12px;
+  margin: 12px 0;
+}
+@media (max-width: 600px) {
+  .conj-paradigm-grid { grid-template-columns: 2.5rem 1fr; gap: 6px 10px; }
+  .conj-session-wrap { padding: 16px 10px; }
+}

@@ -26,6 +26,14 @@ const API = {
   },
 };
 
+// ── Utility helpers ───────────────────────────────────────────────────────
+function escHtml(str) {
+  return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function safeJson(str, fallback) {
+  try { return str ? JSON.parse(str) : fallback; } catch (_) { return fallback; }
+}
+
 // ── Toast ─────────────────────────────────────────────────────────────────
 function toast(msg, type = 'success') {
   const c = document.getElementById('toast-container');
@@ -1149,49 +1157,105 @@ function expandForms(form) {
 
 // ── Adattatore coniugazione → oggetto Evaluator-compatibile ──────────────────
 // Centralizza la costruzione di oggetti evaluation per tutte le sezioni
-// di coniugazione (pratica singola, drill review, retry).
-// L'architettura è predisposta per riconoscere in futuro: accento, radice
-// irregolare, persona sbagliata, ausiliare, participio, pronome riflessivo.
-function buildConjugationEvaluation({ verb, tense, person, userAnswer, correctAnswer }) {
-  const norm = s => (s||'').normalize('NFC').toLowerCase().trim();
-  const forms = expandForms(correctAnswer || '');
-  const typed = norm(userAnswer);
-  const ok = forms.includes(typed);
+function getTenseLabel(tense) {
+  const labels = {
+    present_indicative:   'Presente indicativo',
+    passato_prossimo:     'Passato prossimo',
+    imperfect_indicative: 'Imperfetto indicativo',
+    future_simple:        'Futuro semplice',
+    conditional_present:  'Condizionale presente',
+    subjunctive_present:  'Congiuntivo presente',
+  };
+  return labels[tense] || tense || '';
+}
 
-  const tenseLabel = (typeof TENSE_LABELS !== 'undefined' && TENSE_LABELS[tense]) || tense || '';
+function buildConjugationEvaluation({ verb, tense, person, userAnswer, correctAnswer, allCorrectForms, explanation }) {
+  const norm = s => (s||'').normalize('NFC').toLowerCase().trim().replace(/['']/g, "'");
+  const stripAcc = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const typedN = norm(userAnswer);
+  const tenseLabel = getTenseLabel(tense);
 
-  if (ok) {
+  // Build full candidate set: primary + all accepted variants
+  const primaryForms = expandForms(correctAnswer || '');
+  const extraForms = Array.isArray(allCorrectForms)
+    ? allCorrectForms.flatMap(f => expandForms(f))
+    : [];
+  const allForms = [...new Set([...primaryForms, ...extraForms])].map(norm);
+
+  if (allForms.includes(typedN)) {
     return {
       status: 'correct_exact', accepted: true, score: 1.0,
       userAnswer, targetAnswer: correctAnswer, matchedAnswer: correctAnswer,
-      feedbackTitle: 'Corretto!', feedbackExplanation: null,
+      feedbackTitle: 'Corretto!', feedbackExplanation: explanation || null,
       saveToErrorNotebook: false, secondaryIssues: [], needsContentReview: false, errorType: null,
       metadata: { verb, tense, person },
     };
   }
 
-  // Accento: stesse lettere ma accenti diversi
-  const stripAcc = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
-  if (forms.some(f => stripAcc(f) === stripAcc(typed) && f !== typed)) {
+  // Accent-only error
+  if (allForms.some(f => stripAcc(f) === stripAcc(typedN) && f !== typedN)) {
     return {
       status: 'almost_correct_spelling', accepted: false, score: 0.5,
       userAnswer, targetAnswer: correctAnswer, matchedAnswer: null,
       feedbackTitle: 'Accento mancante',
-      feedbackExplanation: `La forma corretta è "${correctAnswer}" (controlla gli accenti).`,
+      feedbackExplanation: `La forma corretta è "${correctAnswer}". Controlla l'accento.`,
       saveToErrorNotebook: false, secondaryIssues: [], needsContentReview: false, errorType: 'accent',
       metadata: { verb, tense, person },
     };
   }
 
-  // TODO (fasi future): rilevare radice irregolare, persona sbagliata,
-  // ausiliare errato (avere/essere), participio, pronome riflessivo.
+  // Auxiliary error: typed bare participle when compound form expected (passato prossimo)
+  if (tense === 'passato_prossimo') {
+    const participleForms = allForms.map(f => f.split(' ').slice(-1)[0]);
+    if (participleForms.includes(typedN)) {
+      return {
+        status: 'almost_correct_auxiliary', accepted: false, score: 0.4,
+        userAnswer, targetAnswer: correctAnswer, matchedAnswer: null,
+        feedbackTitle: 'Manca l\'ausiliare',
+        feedbackExplanation: `Usa la forma completa: "${correctAnswer}". Il passato prossimo richiede l\'ausiliare.`,
+        saveToErrorNotebook: true, secondaryIssues: [], needsContentReview: false, errorType: 'auxiliary_error',
+        metadata: { verb, tense, person },
+      };
+    }
+    // Typed with wrong auxiliary
+    const typedParts = typedN.split(' ');
+    if (typedParts.length >= 2) {
+      const typedPP = typedParts.slice(1).join(' ');
+      if (participleForms.includes(typedPP)) {
+        return {
+          status: 'almost_correct_auxiliary', accepted: false, score: 0.4,
+          userAnswer, targetAnswer: correctAnswer, matchedAnswer: null,
+          feedbackTitle: 'Ausiliare sbagliato',
+          feedbackExplanation: `La forma corretta è "${correctAnswer}". Controlla l\'ausiliare (essere / avere).`,
+          saveToErrorNotebook: true, secondaryIssues: [], needsContentReview: false, errorType: 'auxiliary_error',
+          metadata: { verb, tense, person },
+        };
+      }
+    }
+  }
+
+  // Wrong person: typed answer matches a form of the same verb in a different person
+  // (detect by checking if answer is in any of the sibling allForms — heuristic via endings)
+  const knownEndingsIT = ['o','i','a','iamo','ate','ono','evo','evi','eva','evamo','evate','evano','isco','isci','isce','iscono'];
+  const typedEnding = knownEndingsIT.find(e => typedN.endsWith(e));
+  const correctEnding = knownEndingsIT.find(e => allForms[0] && allForms[0].endsWith(e));
+  if (typedEnding && correctEnding && typedEnding !== correctEnding) {
+    return {
+      status: 'almost_correct_person', accepted: false, score: 0.35,
+      userAnswer, targetAnswer: correctAnswer, matchedAnswer: null,
+      feedbackTitle: 'Persona sbagliata',
+      feedbackExplanation: `La forma per "${person}" è "${correctAnswer}", non "${userAnswer}".`,
+      saveToErrorNotebook: true, secondaryIssues: [], needsContentReview: false, errorType: 'wrong_person',
+      metadata: { verb, tense, person },
+    };
+  }
 
   return {
     status: 'incorrect', accepted: false, score: 0.0,
     userAnswer, targetAnswer: correctAnswer, matchedAnswer: null,
     feedbackTitle: 'Non corretto',
-    feedbackExplanation: `${verb} — ${tenseLabel} — ${person}: "${correctAnswer}".`,
-    saveToErrorNotebook: false, secondaryIssues: [], needsContentReview: false, errorType: 'wrong_conjugation',
+    feedbackExplanation: explanation || `${verb} — ${tenseLabel} — ${person}: "${correctAnswer}".`,
+    saveToErrorNotebook: true, secondaryIssues: [], needsContentReview: false, errorType: 'wrong_conjugation',
     metadata: { verb, tense, person },
   };
 }
@@ -1325,6 +1389,7 @@ async function renderConjugation(el) {
 
     <div class="tabs">
       <button class="tab-btn active" data-tab="practice">Pratica</button>
+      <button class="tab-btn" data-tab="esercizi">Esercizi</button>
       <button class="tab-btn" data-tab="drill">Per verbo</button>
       <button class="tab-btn" data-tab="endings">Terminazioni</button>
       <button class="tab-btn" data-tab="reference">Riferimento</button>
@@ -1364,6 +1429,9 @@ async function renderConjugation(el) {
       } else if (tab === 'scores') {
         pillsCard.style.display = 'none';
         renderVerbScores(document.getElementById('conj-tab-content'));
+      } else if (tab === 'esercizi') {
+        pillsCard.style.display = 'none';
+        renderConjEserciziTab(document.getElementById('conj-tab-content'));
       } else {
         pillsCard.style.display = '';
         loadConjugationExercise(el);
@@ -1400,6 +1468,147 @@ async function loadConjugationExercise(el) {
   } catch(e) {
     area.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
   }
+}
+
+// ── Phase 5: DB-driven conjugation exercises tab ──────────────────────────────
+let conjEsState = { exercises: [], index: 0, isEvaluating: false, results: [] };
+
+async function renderConjEserciziTab(container) {
+  container.innerHTML = `<div class="conj-session-wrap"><div class="loading"><div class="spinner"></div></div></div>`;
+  try {
+    const exercises = await API.get('/conjugations/exercises');
+    if (!exercises.length) {
+      container.innerHTML = `<div class="conj-session-wrap"><div class="alert">Nessun esercizio trovato.</div></div>`;
+      return;
+    }
+    // Fisher-Yates shuffle
+    for (let i = exercises.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [exercises[i], exercises[j]] = [exercises[j], exercises[i]];
+    }
+    conjEsState = { exercises: exercises.slice(0, 10), index: 0, isEvaluating: false, results: [] };
+    renderConjEsExercise(container);
+  } catch (e) {
+    container.innerHTML = `<div class="conj-session-wrap"><div class="alert alert-error">${escHtml(e.message)}</div></div>`;
+  }
+}
+
+function renderConjEsExercise(container) {
+  conjEsState.isEvaluating = false;
+  const { exercises, index } = conjEsState;
+  if (index >= exercises.length) { renderConjEsSummary(container); return; }
+  const ex = exercises[index];
+  const correctAnswers = safeJson(ex.correct_answers, []);
+  const distractors = safeJson(ex.distractors, []);
+  const isChoice = distractors.length > 0;
+  const person = ex.person || '';
+
+  let inputHtml = '';
+  if (isChoice) {
+    const options = [...correctAnswers.slice(0, 1), ...distractors].sort(() => Math.random() - 0.5);
+    inputHtml = `<div class="flex flex-wrap gap-2 mt-3">${options.map(o =>
+      `<button class="conj-choice-btn" data-answer="${escHtml(o)}">${escHtml(o)}</button>`
+    ).join('')}</div>`;
+  } else {
+    inputHtml = `<div class="mt-3 flex gap-2">
+      <input id="conj-es-input" type="text" autocomplete="off" autocorrect="off" spellcheck="false"
+        placeholder="${escHtml(person ? person + '...' : 'Risposta...')}"
+        class="input" style="max-width:260px">
+      <button class="btn btn-primary" id="conj-es-check">Verifica</button>
+    </div>`;
+  }
+
+  container.innerHTML = `<div class="conj-session-wrap">
+    <div style="color:var(--muted);font-size:0.85rem;margin-bottom:12px">${index + 1} / ${exercises.length}</div>
+    <div class="conj-verb-header">${escHtml(ex.infinitive || '')}<span class="conj-tense-label">${escHtml(getTenseLabel(ex.tense_id))}</span></div>
+    ${person ? `<div class="conj-person-label">${escHtml(person)}</div>` : ''}
+    <div class="conj-ex-prompt">${escHtml(ex.prompt_it)}</div>
+    ${inputHtml}
+    <div id="conj-es-feedback"></div>
+  </div>`;
+
+  const feedbackWrap = container.querySelector('#conj-es-feedback');
+
+  function submitConjEs(typed) {
+    if (conjEsState.isEvaluating) return;
+    conjEsState.isEvaluating = true;
+    container.querySelectorAll('.conj-choice-btn').forEach(b => { b.disabled = true; });
+    const inp = container.querySelector('#conj-es-input');
+    const checkBtn = container.querySelector('#conj-es-check');
+    if (inp) inp.disabled = true;
+    if (checkBtn) checkBtn.disabled = true;
+
+    const correctAnswer = correctAnswers[0] || '';
+    const accepted = safeJson(ex.accepted_variants, []);
+    const evaluation = buildConjugationEvaluation({
+      verb: ex.infinitive || '',
+      tense: ex.tense_id,
+      person,
+      userAnswer: typed,
+      correctAnswer,
+      allCorrectForms: [...correctAnswers, ...accepted],
+      explanation: ex.explanation_it || null,
+    });
+    conjEsState.results.push({ ex, evaluation, typed });
+
+    if (isChoice) {
+      container.querySelectorAll('.conj-choice-btn').forEach(btn => {
+        if (btn.dataset.answer === correctAnswer) btn.classList.add('is-correct');
+        else if (btn.dataset.answer === typed && !evaluation.accepted) btn.classList.add('is-wrong');
+      });
+    }
+
+    const result = evaluation.accepted ? 'correct' : (evaluation.score >= 0.4 ? 'almost_correct' : 'incorrect');
+    if (ex.verb_id) {
+      API.post('/conjugations/topic-stats', { verb_id: ex.verb_id, tense_id: ex.tense_id, result }).catch(() => {});
+    }
+
+    Feedback.render({
+      container: feedbackWrap,
+      evaluation,
+      context: { exerciseType: 'single_form' },
+      actions: { onContinue: () => {
+        conjEsState.index++;
+        renderConjEsExercise(container);
+      }},
+      focusStrategy: 'primary-action',
+    });
+  }
+
+  if (isChoice) {
+    container.querySelectorAll('.conj-choice-btn').forEach(btn => {
+      btn.addEventListener('click', () => submitConjEs(btn.dataset.answer));
+    });
+  } else {
+    const inp = container.querySelector('#conj-es-input');
+    const checkBtn = container.querySelector('#conj-es-check');
+    if (checkBtn) checkBtn.addEventListener('click', () => {
+      const typed = (inp ? inp.value : '').trim();
+      if (!typed) { inp && inp.focus(); return; }
+      submitConjEs(typed);
+    });
+    if (inp) inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !inp.disabled) checkBtn && checkBtn.click();
+    });
+    setTimeout(() => inp && inp.focus(), 50);
+  }
+}
+
+function renderConjEsSummary(container) {
+  const { results } = conjEsState;
+  const correct = results.filter(r => r.evaluation.accepted).length;
+  const total = results.length;
+  const pct = total > 0 ? Math.round(correct / total * 100) : 0;
+  container.innerHTML = `<div class="conj-session-wrap">
+    <div class="section-title mb-2">Riepilogo</div>
+    <div class="prep-summary-stats">
+      <div class="prep-stat-card prep-stat-correct"><div class="prep-stat-num">${correct}</div><div class="prep-stat-lbl">Corretti</div></div>
+      <div class="prep-stat-card prep-stat-wrong"><div class="prep-stat-num">${total - correct}</div><div class="prep-stat-lbl">Errati</div></div>
+      <div class="prep-stat-card"><div class="prep-stat-num">${pct}%</div><div class="prep-stat-lbl">Precisione</div></div>
+    </div>
+    <button class="btn btn-primary mt-4" id="conj-es-restart">Ricomincia</button>
+  </div>`;
+  container.querySelector('#conj-es-restart').addEventListener('click', () => renderConjEserciziTab(container));
 }
 
 function renderExerciseUI(area, ex) {
@@ -3026,6 +3235,7 @@ let prepState = {
   sessionSize: 10,
   errorReviewMode: false,
   topicStats: {},
+  isEvaluating: false,
 };
 
 // ── Preposizioni section ──────────────────────────────────────────────────────
@@ -3315,6 +3525,7 @@ async function renderPreposizioniSection(el) {
 
   // ── SESSION ─────────────────────────────────────────────────────────────────
   function renderPrepSession() {
+    prepState.isEvaluating = false;
     const exercises = prepState.exercises;
     const idx = prepState.sessionIndex;
     if (idx >= exercises.length) { prepState.subview = 'summary'; renderPrepSummary(); return; }
@@ -3365,12 +3576,19 @@ async function renderPreposizioniSection(el) {
     const feedbackWrap = el.querySelector('#prep-feedback-wrap');
 
     function submitAnswer(typed) {
+      if (prepState.isEvaluating) return;
+      prepState.isEvaluating = true;
+
+      // Disable choice buttons immediately to prevent double-submission
+      el.querySelectorAll('.prep-choice-btn').forEach(btn => { btn.disabled = true; });
+
       const evaluation = buildPrepositionEvaluation(typed, exercise);
       const result = evaluation.accepted ? 'correct' : (evaluation.score >= 0.4 ? 'almost' : 'incorrect');
       prepState.sessionResults.push({ exercise, evaluation, userAnswer: typed });
 
+      const attempt_id = `${exercise.id}_${Date.now()}`;
       // Post stats
-      API.post('/prepositions/topic-stats', { topic_slug: exercise.topic_slug, result }).catch(() => {});
+      API.post('/prepositions/topic-stats', { topic_slug: exercise.topic_slug, result, attempt_id }).catch(() => {});
 
       // Log errors
       if (evaluation.saveToErrorNotebook) {
@@ -3416,6 +3634,7 @@ async function renderPreposizioniSection(el) {
     }
 
     function goNext() {
+      prepState.isEvaluating = false;
       prepState.sessionIndex++;
       if (prepState.sessionIndex >= prepState.exercises.length) {
         prepState.subview = 'summary';
