@@ -1250,4 +1250,95 @@ router.post('/verb-scores', (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Prepositions ─────────────────────────────────────────────────────────────
+router.get('/prepositions/topics', (req, res) => {
+  try {
+    const topics = db.prepare(`SELECT * FROM preposition_topics ORDER BY display_order`).all();
+    res.json(topics);
+  } catch (_) {
+    res.json([]);
+  }
+});
+
+router.get('/prepositions/topics/:slug', (req, res) => {
+  try {
+    const topic = db.prepare(`SELECT * FROM preposition_topics WHERE slug=?`).get(req.params.slug);
+    if (!topic) return res.status(404).json({ error: 'not found' });
+    const items = db.prepare(`
+      SELECT pi.*, vi.italian, vi.spanish, vi.example_it, vi.example_es, vi.cefr_level, vi.notes
+      FROM preposition_items pi
+      JOIN vocabulary_items vi ON vi.id = pi.vocabulary_item_id
+      WHERE pi.primary_topic_id = ?
+      ORDER BY vi.cefr_level, vi.italian
+    `).all(topic.id);
+    res.json({ topic, items });
+  } catch (_) {
+    res.status(500).json({ error: 'query failed' });
+  }
+});
+
+router.get('/prepositions/articolate', (req, res) => {
+  const prepositions = ['di', 'a', 'da', 'in', 'su'];
+  const articles = {
+    'il': 'm.sg', 'lo': 'm.sg.sp', 'la': 'f.sg', "l'": 'vow',
+    'i': 'm.pl', 'gli': 'm.pl.sp', 'le': 'f.pl',
+  };
+  const forms = {
+    'di': { 'il':'del',  'lo':'dello', 'la':'della', "l'":"dell'", 'i':'dei',  'gli':'degli', 'le':'delle' },
+    'a':  { 'il':'al',   'lo':'allo',  'la':'alla',  "l'":"all'",  'i':'ai',   'gli':'agli',  'le':'alle'  },
+    'da': { 'il':'dal',  'lo':'dallo', 'la':'dalla', "l'":"dall'", 'i':'dai',  'gli':'dagli', 'le':'dalle' },
+    'in': { 'il':'nel',  'lo':'nello', 'la':'nella', "l'":"nell'", 'i':'nei',  'gli':'negli', 'le':'nelle' },
+    'su': { 'il':'sul',  'lo':'sullo', 'la':'sulla', "l'":"sull'", 'i':'sui',  'gli':'sugli', 'le':'sulle' },
+  };
+  const examples = {
+    'del':   { it: 'il sapore del caffè',              es: 'el sabor del café' },
+    'dello': { it: 'il profumo dello zucchero',        es: 'el aroma del azúcar' },
+    'della': { it: 'la porta della chiesa',            es: 'la puerta de la iglesia' },
+    "dell'": { it: "il colore dell'arancia",           es: 'el color de la naranja' },
+    'dei':   { it: 'la lista dei compiti',             es: 'la lista de los deberes' },
+    'degli': { it: 'il nome degli studenti',           es: 'el nombre de los estudiantes' },
+    'delle': { it: 'il colore delle foglie',           es: 'el color de las hojas' },
+    'al':    { it: 'Vado al mercato.',                 es: 'Voy al mercado.' },
+    'allo':  { it: 'Vado allo stadio.',                es: 'Voy al estadio.' },
+    'alla':  { it: 'Vado alla stazione.',              es: 'Voy a la estación.' },
+    "all'":  { it: "Vado all'aeroporto.",              es: 'Voy al aeropuerto.' },
+    'ai':    { it: 'Parla ai ragazzi.',                es: 'Habla a los chicos.' },
+    'agli':  { it: 'Agli studenti piace.',             es: 'A los estudiantes les gusta.' },
+    'alle':  { it: 'Arrivo alle tre.',                 es: 'Llego a las tres.' },
+    'dal':   { it: 'Vengo dal dentista.',              es: 'Vengo del dentista.' },
+    'dallo': { it: 'Esco dallo stadio.',               es: 'Salgo del estadio.' },
+    'dalla': { it: 'Vengo dalla stazione.',            es: 'Vengo de la estación.' },
+    "dall'": { it: "Vengo dall'aeroporto.",            es: 'Vengo del aeropuerto.' },
+    'dai':   { it: 'Torno dai nonni.',                 es: 'Vuelvo a casa de mis abuelos.' },
+    'dagli': { it: 'Dagli amici si impara.',           es: 'De los amigos se aprende.' },
+    'dalle': { it: 'Arriva dalle montagne.',           es: 'Viene de las montañas.' },
+    'nel':   { it: 'Il gatto è nel giardino.',         es: 'El gato está en el jardín.' },
+    'nello': { it: 'Cammino nello stesso posto.',      es: 'Camino en el mismo lugar.' },
+    'nella': { it: 'Vivo nella città.',                es: 'Vivo en la ciudad.' },
+    "nell'": { it: "Nuoto nell'acqua.",                es: 'Nado en el agua.' },
+    'nei':   { it: 'Nei weekend riposo.',              es: 'Los fines de semana descanso.' },
+    'negli': { it: "Negli anni '90 era diverso.",      es: 'En los años 90 era diferente.' },
+    'nelle': { it: 'Viaggio nelle vacanze estive.',    es: 'Viajo en las vacaciones de verano.' },
+    'sul':   { it: 'Il libro è sul tavolo.',           es: 'El libro está sobre la mesa.' },
+    'sullo': { it: 'Scrive sullo stesso tema.',        es: 'Escribe sobre el mismo tema.' },
+    'sulla': { it: 'Siediti sulla sedia.',             es: 'Siéntate en la silla.' },
+    "sull'": { it: "Il gatto è sull'armadio.",         es: 'El gato está encima del armario.' },
+    'sui':   { it: 'Sui giornali si leggono molte notizie.', es: 'En los periódicos se leen muchas noticias.' },
+    'sugli': { it: 'Gli uccelli cantano sugli alberi.', es: 'Los pájaros cantan en los árboles.' },
+    'sulle': { it: "Sulle montagne c'è neve.",         es: 'En las montañas hay nieve.' },
+    'col':   { it: 'Mangio col cucchiaio.',            es: 'Como con la cuchara.' },
+    'coi':   { it: 'Gioca coi bambini.',               es: 'Juega con los niños.' },
+  };
+  res.json({ prepositions, articles, forms, examples });
+});
+
+router.get('/prepositions/verb-government', (req, res) => {
+  try {
+    const rows = db.prepare(`SELECT * FROM preposition_verb_government ORDER BY cefr, verb`).all();
+    res.json(rows);
+  } catch (_) {
+    res.json([]);
+  }
+});
+
 module.exports = router;

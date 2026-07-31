@@ -2943,12 +2943,204 @@ const CLOZE = {
 };
 
 let clozeState = { type: null, index: 0, highWater: -1, score: { correct: 0, total: 0 } };
+let prepSubview = null; // 'topics' | 'articolate' | null
+
+// ── Preposizioni section ──────────────────────────────────────────────────────
+const ARTICOLATE_FORMS = {
+  prepositions: ['di', 'a', 'da', 'in', 'su'],
+  articles: ['il', 'lo', 'la', "l'", 'i', 'gli', 'le'],
+  forms: {
+    'di': { 'il':'del',  'lo':'dello', 'la':'della', "l'":"dell'", 'i':'dei',  'gli':'degli', 'le':'delle' },
+    'a':  { 'il':'al',   'lo':'allo',  'la':'alla',  "l'":"all'",  'i':'ai',   'gli':'agli',  'le':'alle'  },
+    'da': { 'il':'dal',  'lo':'dallo', 'la':'dalla', "l'":"dall'", 'i':'dai',  'gli':'dagli', 'le':'dalle' },
+    'in': { 'il':'nel',  'lo':'nello', 'la':'nella', "l'":"nell'", 'i':'nei',  'gli':'negli', 'le':'nelle' },
+    'su': { 'il':'sul',  'lo':'sullo', 'la':'sulla', "l'":"sull'", 'i':'sui',  'gli':'sugli', 'le':'sulle' },
+  },
+  examples: {
+    'del':   { it: 'il sapore del caffè',               es: 'el sabor del café' },
+    'dello': { it: 'il profumo dello zucchero',         es: 'el aroma del azúcar' },
+    'della': { it: 'la porta della chiesa',             es: 'la puerta de la iglesia' },
+    "dell'": { it: "il colore dell'arancia",            es: 'el color de la naranja' },
+    'dei':   { it: 'la lista dei compiti',              es: 'la lista de los deberes' },
+    'degli': { it: 'il nome degli studenti',            es: 'el nombre de los estudiantes' },
+    'delle': { it: 'il colore delle foglie',            es: 'el color de las hojas' },
+    'al':    { it: 'Vado al mercato.',                  es: 'Voy al mercado.' },
+    'allo':  { it: 'Vado allo stadio.',                 es: 'Voy al estadio.' },
+    'alla':  { it: 'Vado alla stazione.',               es: 'Voy a la estación.' },
+    "all'":  { it: "Vado all'aeroporto.",               es: 'Voy al aeropuerto.' },
+    'ai':    { it: 'Parla ai ragazzi.',                 es: 'Habla a los chicos.' },
+    'agli':  { it: 'Agli studenti piace.',              es: 'A los estudiantes les gusta.' },
+    'alle':  { it: 'Arrivo alle tre.',                  es: 'Llego a las tres.' },
+    'dal':   { it: 'Vengo dal dentista.',               es: 'Vengo del dentista.' },
+    'dallo': { it: 'Esco dallo stadio.',                es: 'Salgo del estadio.' },
+    'dalla': { it: 'Vengo dalla stazione.',             es: 'Vengo de la estación.' },
+    "dall'": { it: "Vengo dall'aeroporto.",             es: 'Vengo del aeropuerto.' },
+    'dai':   { it: 'Torno dai nonni.',                  es: 'Vuelvo a casa de mis abuelos.' },
+    'dagli': { it: 'Dagli amici si impara.',            es: 'De los amigos se aprende.' },
+    'dalle': { it: 'Arriva dalle montagne.',            es: 'Viene de las montañas.' },
+    'nel':   { it: 'Il gatto è nel giardino.',          es: 'El gato está en el jardín.' },
+    'nello': { it: 'Cammino nello stesso posto.',       es: 'Camino en el mismo lugar.' },
+    'nella': { it: 'Vivo nella città.',                 es: 'Vivo en la ciudad.' },
+    "nell'": { it: "Nuoto nell'acqua.",                 es: 'Nado en el agua.' },
+    'nei':   { it: 'Nei weekend riposo.',               es: 'Los fines de semana descanso.' },
+    'negli': { it: "Negli anni '90 era diverso.",       es: 'En los años 90 era diferente.' },
+    'nelle': { it: 'Viaggio nelle vacanze estive.',     es: 'Viajo en las vacaciones de verano.' },
+    'sul':   { it: 'Il libro è sul tavolo.',            es: 'El libro está sobre la mesa.' },
+    'sullo': { it: 'Scrive sullo stesso tema.',         es: 'Escribe sobre el mismo tema.' },
+    'sulla': { it: 'Siediti sulla sedia.',              es: 'Siéntate en la silla.' },
+    "sull'": { it: "Il gatto è sull'armadio.",          es: 'El gato está encima del armario.' },
+    'sui':   { it: 'Sui giornali si leggono molte notizie.', es: 'En los periódicos se leen muchas noticias.' },
+    'sugli': { it: 'Gli uccelli cantano sugli alberi.', es: 'Los pájaros cantan en los árboles.' },
+    'sulle': { it: "Sulle montagne c'è neve.",          es: 'En las montañas hay nieve.' },
+  },
+};
+
+const TOPIC_ICONS = {
+  preposizioni_semplici:   '🔤',
+  preposizioni_articolate: '🔗',
+  luogo_e_movimento:       '📍',
+  tempo:                   '⏱️',
+  causa_scopo_mezzo:       '⚙️',
+  confronto_riferimento:   '⚖️',
+  contrasto_esclusione:    '🚫',
+};
+
+function renderArticolateTable(container) {
+  const { prepositions, articles, forms, examples } = ARTICOLATE_FORMS;
+  let selectedCell = null;
+
+  const tableHtml = `
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+      <table class="conj-table" id="art-table" style="min-width:380px;border-collapse:collapse">
+        <thead>
+          <tr>
+            <th style="position:sticky;left:0;background:var(--surface);z-index:2;min-width:44px">Prep.</th>
+            ${articles.map(art => `<th style="min-width:54px;text-align:center">${art}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${prepositions.map(prep => `
+            <tr>
+              <td style="position:sticky;left:0;background:var(--surface);z-index:1;font-weight:700;color:var(--accent)">${prep}</td>
+              ${articles.map(art => {
+                const form = forms[prep][art];
+                return `<td class="art-cell" data-prep="${prep}" data-art="${art}" data-form="${form}"
+                  style="text-align:center;cursor:pointer;padding:8px 6px;border-radius:4px;transition:background 0.15s"
+                  tabindex="0" role="button" aria-label="${prep} + ${art} = ${form}">
+                  <strong>${form}</strong>
+                </td>`;
+              }).join('')}
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div id="art-detail" style="margin-top:12px;min-height:80px"></div>
+  `;
+  container.innerHTML = tableHtml;
+
+  function showDetail(prep, art, form) {
+    const ex = examples[form];
+    const detail = container.querySelector('#art-detail');
+    detail.innerHTML = `
+      <div class="card" style="padding:14px 16px;border-left:3px solid var(--accent)">
+        <div style="font-size:1.25rem;font-weight:700;margin-bottom:4px">${form} <span style="font-weight:400;color:var(--text-muted);font-size:0.9rem">= ${prep} + ${art}</span></div>
+        ${ex ? `<div style="margin-top:6px;font-size:0.95rem">${ex.it}</div>
+        <div style="color:var(--text-muted);font-size:0.88rem;margin-top:2px">${ex.es}</div>` : ''}
+      </div>
+    `;
+  }
+
+  container.querySelectorAll('.art-cell').forEach(cell => {
+    const activate = () => {
+      container.querySelectorAll('.art-cell').forEach(c => c.style.background = '');
+      cell.style.background = 'var(--accent-light, rgba(16,185,129,0.15))';
+      selectedCell = cell;
+      showDetail(cell.dataset.prep, cell.dataset.art, cell.dataset.form);
+    };
+    cell.addEventListener('click', activate);
+    cell.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); }});
+  });
+
+  // Show first cell by default on desktop
+  if (window.innerWidth >= 600) {
+    const first = container.querySelector('.art-cell');
+    if (first) { first.style.background = 'var(--accent-light, rgba(16,185,129,0.15))'; showDetail('di','il','del'); }
+  }
+}
+
+async function renderPreposizioniSection(el) {
+  const tab = prepSubview || 'articolate';
+  el.innerHTML = `
+    <div class="section-header">
+      <div class="section-title">Preposizioni</div>
+      <div class="section-sub">Tavola delle articolate e argomenti per tema</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+      <button type="button" class="btn ${tab==='articolate'?'btn-primary':'btn-outline'}" id="tab-articolate">Articolate</button>
+      <button type="button" class="btn ${tab==='topics'?'btn-primary':'btn-outline'}" id="tab-topics">Argomenti</button>
+      <button type="button" class="btn btn-ghost" id="prep-back" style="margin-left:auto">← Indietro</button>
+    </div>
+    <div id="prep-content"></div>
+  `;
+
+  const content = el.querySelector('#prep-content');
+
+  function showTab(t) {
+    prepSubview = t;
+    el.querySelector('#tab-articolate').className = `btn ${t==='articolate'?'btn-primary':'btn-outline'}`;
+    el.querySelector('#tab-topics').className = `btn ${t==='topics'?'btn-primary':'btn-outline'}`;
+    if (t === 'articolate') {
+      content.innerHTML = `
+        <div class="card" style="padding:16px">
+          <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px">Clicca su una cella per vedere la composizione e un esempio.</div>
+          <div id="art-table-wrap"></div>
+        </div>
+        <div class="card mt-3" style="padding:14px">
+          <div style="font-size:0.82rem;color:var(--text-muted)">
+            <strong>con + il = col</strong> (colloquiale) &nbsp;|&nbsp; <strong>con + i = coi</strong> (colloquiale)<br>
+            Le altre contrazioni (colla, collo, cogli…) sono rare o letterarie.
+          </div>
+        </div>
+      `;
+      renderArticolateTable(content.querySelector('#art-table-wrap'));
+    } else {
+      content.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text-muted)">Caricamento...</div>`;
+      API.get('/prepositions/topics').then(topics => {
+        if (!topics || !topics.length) { content.innerHTML = '<div class="card" style="padding:16px">Nessun argomento trovato.</div>'; return; }
+        content.innerHTML = `
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px">
+            ${topics.map(t => `
+              <div class="card" style="padding:14px 16px;cursor:default">
+                <div style="font-size:1.4rem;margin-bottom:6px">${TOPIC_ICONS[t.slug] || '📌'}</div>
+                <div style="font-weight:600;font-size:0.95rem">${t.name_it}</div>
+                <div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px">${t.name_es}</div>
+                <div style="margin-top:6px"><span class="badge badge-blue">${t.cefr_min}</span></div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }).catch(() => { content.innerHTML = '<div class="card" style="padding:16px;color:var(--error)">Errore nel caricamento degli argomenti.</div>'; });
+    }
+  }
+
+  el.querySelector('#tab-articolate').addEventListener('click', () => showTab('articolate'));
+  el.querySelector('#tab-topics').addEventListener('click', () => showTab('topics'));
+  el.querySelector('#prep-back').addEventListener('click', () => {
+    prepSubview = null;
+    clozeState.type = null;
+    renderCompletamento(el);
+  });
+
+  showTab(tab);
+}
 
 function normCloze(s) {
   return (s || '').normalize('NFC').toLowerCase().trim().replace(/[''`‘’]/g, "'");
 }
 
 function renderCompletamento(el) {
+  if (prepSubview) { renderPreposizioniSection(el); return; }
   if (!clozeState.type) {
     el.innerHTML = `
       <div class="section-header">
@@ -2966,6 +3158,10 @@ function renderCompletamento(el) {
             <span style="font-size:1.3rem">📍</span>
             <span><strong>Preposizioni</strong><br><small style="font-weight:400;opacity:0.8">di, a, da, nel, alla… — 20 testi</small></span>
           </button>
+          <button type="button" class="btn btn-outline" id="pick-prep-theory" style="justify-content:flex-start;gap:12px">
+            <span style="font-size:1.3rem">🔗</span>
+            <span><strong>Preposizioni — tavola e argomenti</strong><br><small style="font-weight:400;opacity:0.8">Articolate interattive, 7 argomenti</small></span>
+          </button>
         </div>
       </div>
     `;
@@ -2976,6 +3172,10 @@ function renderCompletamento(el) {
     el.querySelector('#pick-prep').onclick = () => {
       clozeState = { type:'preposizioni', index:0, highWater:-1, score:{correct:0,total:0} };
       renderClozeEx(el);
+    };
+    el.querySelector('#pick-prep-theory').onclick = () => {
+      prepSubview = 'articolate';
+      renderPreposizioniSection(el);
     };
     return;
   }

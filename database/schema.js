@@ -420,6 +420,333 @@ function createSchema() {
     const row = getVocabId.get(italian);
     if (row) insVariant.run(row.id, answer, type, accepted, note, contexts);
   });
+
+  // ── Phase 4: Preposition extended tables ─────────────────────────────────────
+  try { db.exec(`CREATE TABLE IF NOT EXISTS preposition_topics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug TEXT UNIQUE,
+    name_it TEXT,
+    name_es TEXT,
+    description TEXT,
+    display_order INTEGER,
+    cefr_min TEXT
+  )`); } catch (_) {}
+  try { db.exec(`CREATE TABLE IF NOT EXISTS preposition_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    vocabulary_item_id INTEGER UNIQUE REFERENCES vocabulary_items(id),
+    canonical_form TEXT,
+    item_type TEXT,
+    primary_topic_id INTEGER REFERENCES preposition_topics(id),
+    cefr TEXT,
+    register TEXT,
+    explanation_it TEXT,
+    explanation_es TEXT,
+    common_errors TEXT DEFAULT '{}',
+    review_status TEXT DEFAULT 'ok'
+  )`); } catch (_) {}
+  try { db.exec(`CREATE TABLE IF NOT EXISTS preposition_item_topics (
+    preposition_item_id INTEGER REFERENCES preposition_items(id),
+    topic_id INTEGER REFERENCES preposition_topics(id),
+    is_primary INTEGER DEFAULT 0,
+    PRIMARY KEY (preposition_item_id, topic_id)
+  )`); } catch (_) {}
+  try { db.exec(`CREATE TABLE IF NOT EXISTS preposition_examples (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    preposition_item_id INTEGER REFERENCES preposition_items(id),
+    sentence_it TEXT,
+    sentence_es TEXT,
+    context TEXT,
+    cefr TEXT
+  )`); } catch (_) {}
+  try { db.exec(`CREATE TABLE IF NOT EXISTS preposition_contrasts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    first_item_id INTEGER REFERENCES preposition_items(id),
+    second_item_id INTEGER REFERENCES preposition_items(id),
+    explanation TEXT,
+    example_first_it TEXT,
+    example_first_es TEXT,
+    example_second_it TEXT,
+    example_second_es TEXT
+  )`); } catch (_) {}
+  try { db.exec(`CREATE TABLE IF NOT EXISTS preposition_verb_government (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    verb TEXT,
+    preposition TEXT,
+    construction TEXT UNIQUE,
+    example_it TEXT,
+    example_es TEXT,
+    cefr TEXT,
+    notes TEXT
+  )`); } catch (_) {}
+
+  // ── Seed preposition_topics ───────────────────────────────────────────────────
+  const insTopic = db.prepare(`INSERT OR IGNORE INTO preposition_topics(slug,name_it,name_es,display_order,cefr_min) VALUES(?,?,?,?,?)`);
+  [
+    ['preposizioni_semplici',   'Preposizioni semplici',     'Preposiciones simples',        1, 'A1'],
+    ['preposizioni_articolate', 'Preposizioni articolate',   'Preposiciones articuladas',    2, 'A1'],
+    ['luogo_e_movimento',       'Luogo e movimento',         'Lugar y movimiento',           3, 'A2'],
+    ['tempo',                   'Tempo',                     'Tiempo',                       4, 'A1'],
+    ['causa_scopo_mezzo',       'Causa, scopo e mezzo',      'Causa, fin y medio',           5, 'A2'],
+    ['confronto_riferimento',   'Confronto e riferimento',   'Comparación y referencia',     6, 'B1'],
+    ['contrasto_esclusione',    'Contrasto ed esclusione',   'Contraste y exclusión',        7, 'B1'],
+  ].forEach(([slug, name_it, name_es, order, cefr_min]) => insTopic.run(slug, name_it, name_es, order, cefr_min));
+
+  // ── Add missing articulated prepositions (dall', sull') ──────────────────────
+  if (prepCatId) {
+    const now3 = Math.floor(Date.now()/1000);
+    const missingPreps2 = [
+      ["dall' (da + l')", 'de la / del',       'A1', "Vengo dall'aeroporto.", 'Vengo del aeropuerto.',               "da + l' (davanti a vocale)"],
+      ["sull' (su + l')", 'en el / sobre el',  'A1', "Il gatto è sull'armadio.", 'El gato está encima del armario.', "su + l' (davanti a vocale)"],
+    ];
+    const insW2 = db.prepare(`INSERT OR IGNORE INTO vocabulary_items(italian,spanish,category_id,word_type,example_it,example_es,cefr_level,notes,collocations) VALUES(?,?,?,?,?,?,?,?,?)`);
+    const insF2 = db.prepare(`INSERT OR IGNORE INTO flashcards(vocabulary_id,front,back,direction,category_id,next_review) VALUES(?,?,?,?,?,?)`);
+    missingPreps2.forEach(([it, es, lv, ex_it, ex_es, notes]) => {
+      const r = insW2.run(it, es, prepCatId, 'other', ex_it, ex_es, lv, notes, '[]');
+      if (r.lastInsertRowid) insF2.run(r.lastInsertRowid, it, es, 'it-es', prepCatId, now3);
+    });
+
+    // ── Linguistic fixes (Phase 4, idempotent) ───────────────────────────────
+    const fixN  = db.prepare(`UPDATE vocabulary_items SET notes=?      WHERE italian=? AND category_id=? AND notes != ?`);
+    const fixEs = db.prepare(`UPDATE vocabulary_items SET spanish=?    WHERE italian=? AND category_id=? AND spanish != ?`);
+    const fixEX = db.prepare(`UPDATE vocabulary_items SET example_es=? WHERE italian=? AND category_id=? AND example_es != ?`);
+
+    // 1. fra
+    const fraNote = '"Fra" e "tra" hanno lo stesso significato e sono generalmente intercambiabili. La scelta dipende spesso dall\'eufonia: "tra fratelli" (preferito), "fra tre giorni" (preferito).';
+    fixN.run(fraNote, 'fra', prepCatId, fraNote);
+
+    // 2. col
+    const colNote = 'col e coi sono contrazioni accettate di con il e con i, comuni nel parlato. Le altre contrazioni di "con" (colla, collo, cogli, colle) sono rare o letterarie e non si insegnano come forme produttive moderne.';
+    fixN.run(colNote, 'col (con + il)', prepCatId, colNote);
+
+    // 3. coi
+    const coiNote = 'Contrazione accettata di "con i". Meno frequente di "con i" nel parlato contemporaneo. "Gioco coi bambini" = "Gioco con i bambini".';
+    fixN.run(coiNote, 'coi (con + i)', prepCatId, coiNote);
+
+    // 4. in base a — spanish and example_es
+    fixEs.run('basándose en / según / con base en', 'in base a', prepCatId, 'basándose en / según / con base en');
+    fixEX.run('Decidimos según los resultados.', 'in base a', prepCatId, 'Decidimos según los resultados.');
+
+    // 5. secondo — example_es
+    fixEX.run('En mi opinión, estás equivocado.', 'secondo', prepCatId, 'En mi opinión, estás equivocado.');
+
+    // 6. entro — spanish and notes
+    fixEs.run('a más tardar / antes de (plazo)', 'entro', prepCatId, 'a más tardar / antes de (plazo)');
+    fixN.run('Indica un limite massimo di tempo (scadenza). Entro venerdì = a más tardar el viernes, no después del viernes.', 'entro', prepCatId, 'Indica un limite massimo di tempo (scadenza). Entro venerdì = a más tardar el viernes, no después del viernes.');
+
+    // 7. dentro — notes
+    fixN.run('Uso avverbiale: "Il gatto è dentro" (= adentro). Uso preposizionale: "dentro la scatola" o "dentro alla scatola". Entrambe le costruzioni sono corrette.', 'dentro', prepCatId, 'Uso avverbiale: "Il gatto è dentro" (= adentro). Uso preposizionale: "dentro la scatola" o "dentro alla scatola". Entrambe le costruzioni sono corrette.');
+
+    // 8. dietro (a/di) — notes
+    fixN.run('Con sostantivi: "dietro la porta" (più comune) o "dietro alla porta". Con pronomi personali si usa "dietro di": "dietro di me", "dietro di te". Il lemma include le varianti costruttive.', 'dietro (a/di)', prepCatId, 'Con sostantivi: "dietro la porta" (più comune) o "dietro alla porta". Con pronomi personali si usa "dietro di": "dietro di me", "dietro di te". Il lemma include le varianti costruttive.');
+
+    // 9. fuori (da) — notes
+    fixN.run('Uso avverbiale: "Sono fuori" (= estoy afuera). Uso preposizionale: "fuori dalla porta", "fuori città" (senza preposizione in locuzioni fisse).', 'fuori (da)', prepCatId, 'Uso avverbiale: "Sono fuori" (= estoy afuera). Uso preposizionale: "fuori dalla porta", "fuori città" (senza preposizione in locuzioni fisse).');
+
+    // 10. prima (di) — notes
+    fixN.run('Con sostantivo o infinito: "prima di cena", "prima di uscire". Con frase verbale: "prima che arrivi" (+ congiuntivo). Non: *prima che + indicativo nelle frasi standard.', 'prima (di)', prepCatId, 'Con sostantivo o infinito: "prima di cena", "prima di uscire". Con frase verbale: "prima che arrivi" (+ congiuntivo). Non: *prima che + indicativo nelle frasi standard.');
+
+    // 11. dopo — notes
+    fixN.run('Con sostantivo: "dopo cena". Con infinito passato: "dopo aver mangiato". Con frase: "dopo che sei partito" (+ indicativo). Non confondere con "prima che" che richiede il congiuntivo.', 'dopo', prepCatId, 'Con sostantivo: "dopo cena". Con infinito passato: "dopo aver mangiato". Con frase: "dopo che sei partito" (+ indicativo). Non confondere con "prima che" che richiede il congiuntivo.');
+
+    // 12. durante — notes
+    fixN.run('Introduce normalmente un sostantivo: "durante il film", "durante la notte". Non equivale a "mientras" nel senso di simultaneità con verbo: usare "mentre" per quello.', 'durante', prepCatId, 'Introduce normalmente un sostantivo: "durante il film", "durante la notte". Non equivale a "mientras" nel senso di simultaneità con verbo: usare "mentre" per quello.');
+  }
+
+  // ── Seed preposition_items classification ─────────────────────────────────────
+  if (prepCatId) {
+    const getTopicId4   = db.prepare(`SELECT id FROM preposition_topics WHERE slug=?`);
+    const getVocabByIt4 = db.prepare(`SELECT id, cefr_level FROM vocabulary_items WHERE italian=? AND category_id=?`);
+    const insPrepItem4  = db.prepare(`INSERT OR IGNORE INTO preposition_items(vocabulary_item_id,canonical_form,item_type,primary_topic_id,cefr) VALUES(?,?,?,?,?)`);
+    const insPrepTopic4 = db.prepare(`INSERT OR IGNORE INTO preposition_item_topics(preposition_item_id,topic_id,is_primary) VALUES(?,?,?)`);
+    const getPrepItemId4 = db.prepare(`SELECT id FROM preposition_items WHERE vocabulary_item_id=?`);
+
+    const seedPrepItem = (itForm, canonical, item_type, primarySlug, secondarySlugs = []) => {
+      const vocab = getVocabByIt4.get(itForm, prepCatId);
+      if (!vocab) return;
+      const topicRow = getTopicId4.get(primarySlug);
+      if (!topicRow) return;
+      insPrepItem4.run(vocab.id, canonical, item_type, topicRow.id, vocab.cefr_level);
+      const itemRow = getPrepItemId4.get(vocab.id);
+      if (!itemRow) return;
+      insPrepTopic4.run(itemRow.id, topicRow.id, 1);
+      secondarySlugs.forEach(slug => {
+        const secRow = getTopicId4.get(slug);
+        if (secRow) insPrepTopic4.run(itemRow.id, secRow.id, 0);
+      });
+    };
+
+    const seedAllPrepItems = db.transaction(() => {
+      // Simple prepositions
+      seedPrepItem('di',         'di',         'preposizione_semplice',       'preposizioni_semplici');
+      seedPrepItem('a',          'a',           'preposizione_semplice',       'preposizioni_semplici');
+      seedPrepItem('da',         'da',          'preposizione_semplice',       'preposizioni_semplici');
+      seedPrepItem('in',         'in',          'preposizione_semplice',       'preposizioni_semplici');
+      seedPrepItem('con',        'con',         'preposizione_semplice',       'preposizioni_semplici');
+      seedPrepItem('su',         'su',          'preposizione_semplice',       'preposizioni_semplici');
+      seedPrepItem('per',        'per',         'preposizione_semplice',       'preposizioni_semplici');
+      seedPrepItem('tra',        'tra',         'preposizione_semplice',       'preposizioni_semplici', ['tempo']);
+      seedPrepItem('fra',        'fra',         'preposizione_semplice',       'preposizioni_semplici', ['tempo']);
+      seedPrepItem('senza',      'senza',       'preposizione_semplice',       'preposizioni_semplici');
+      seedPrepItem('insieme a',  'insieme a',   'locuzione_preposizionale',    'preposizioni_semplici');
+      // di articolate
+      seedPrepItem('del (di + il)',    'del',    'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('dello (di + lo)',  'dello',  'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('della (di + la)',  'della',  'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem("dell' (di + l')", "dell'",  'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('dei (di + i)',     'dei',    'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('degli (di + gli)', 'degli', 'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('delle (di + le)', 'delle',  'preposizione_articolata',    'preposizioni_articolate');
+      // a articolate
+      seedPrepItem('al (a + il)',      'al',     'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('allo (a + lo)',    'allo',   'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('alla (a + la)',    'alla',   'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem("all' (a + l')",   "all'",   'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('ai (a + i)',       'ai',     'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('agli (a + gli)',   'agli',   'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('alle (a + le)',    'alle',   'preposizione_articolata',    'preposizioni_articolate');
+      // da articolate
+      seedPrepItem('dal (da + il)',    'dal',    'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('dallo (da + lo)', 'dallo',  'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('dalla (da + la)', 'dalla',  'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem("dall' (da + l')", "dall'",  'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('dai (da + i)',     'dai',    'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('dagli (da + gli)', 'dagli', 'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('dalle (da + le)', 'dalle',  'preposizione_articolata',    'preposizioni_articolate');
+      // in articolate
+      seedPrepItem('nel (in + il)',    'nel',    'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('nello (in + lo)', 'nello',  'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('nella (in + la)', 'nella',  'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem("nell' (in + l')", "nell'",  'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('nei (in + i)',     'nei',    'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('negli (in + gli)', 'negli', 'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('nelle (in + le)', 'nelle',  'preposizione_articolata',    'preposizioni_articolate');
+      // su articolate
+      seedPrepItem('sul (su + il)',    'sul',    'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('sullo (su + lo)', 'sullo',  'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('sulla (su + la)', 'sulla',  'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem("sull' (su + l')", "sull'",  'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('sui (su + i)',     'sui',    'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('sugli (su + gli)', 'sugli', 'preposizione_articolata',    'preposizioni_articolate');
+      seedPrepItem('sulle (su + le)', 'sulle',  'preposizione_articolata',    'preposizioni_articolate');
+      // con contractions
+      seedPrepItem('col (con + il)',   'col',    'forma_contratta',            'preposizioni_articolate');
+      seedPrepItem('coi (con + i)',    'coi',    'forma_contratta',            'preposizioni_articolate');
+      // Spatial
+      seedPrepItem('sopra',           'sopra',         'avverbio_o_locuzione_spaziale', 'luogo_e_movimento');
+      seedPrepItem('sotto',           'sotto',         'avverbio_o_locuzione_spaziale', 'luogo_e_movimento');
+      seedPrepItem('davanti a',       'davanti a',     'locuzione_preposizionale',      'luogo_e_movimento');
+      seedPrepItem('dietro (a/di)',   'dietro',        'locuzione_preposizionale',      'luogo_e_movimento');
+      seedPrepItem('vicino a',        'vicino a',      'locuzione_preposizionale',      'luogo_e_movimento');
+      seedPrepItem('lontano da',      'lontano da',    'locuzione_preposizionale',      'luogo_e_movimento');
+      seedPrepItem('dentro',          'dentro',        'avverbio_o_locuzione_spaziale', 'luogo_e_movimento');
+      seedPrepItem('fuori (da)',      'fuori',         'avverbio_o_locuzione_spaziale', 'luogo_e_movimento');
+      seedPrepItem('lungo',           'lungo',         'locuzione_preposizionale',      'luogo_e_movimento');
+      seedPrepItem('verso',           'verso',         'preposizione_semplice',         'luogo_e_movimento');
+      seedPrepItem('contro',          'contro',        'preposizione_semplice',         'luogo_e_movimento');
+      seedPrepItem('attraverso',      'attraverso',    'locuzione_preposizionale',      'luogo_e_movimento');
+      seedPrepItem('oltre',           'oltre',         'locuzione_preposizionale',      'luogo_e_movimento', ['contrasto_esclusione']);
+      seedPrepItem('in mezzo a',      'in mezzo a',    'locuzione_preposizionale',      'luogo_e_movimento');
+      seedPrepItem('di fronte a',     'di fronte a',   'locuzione_preposizionale',      'luogo_e_movimento');
+      seedPrepItem('accanto a',       'accanto a',     'locuzione_preposizionale',      'luogo_e_movimento');
+      seedPrepItem('a fianco di',     'a fianco di',   'locuzione_preposizionale',      'luogo_e_movimento');
+      seedPrepItem('in cima a',       'in cima a',     'locuzione_preposizionale',      'luogo_e_movimento');
+      seedPrepItem('in fondo a',      'in fondo a',    'locuzione_preposizionale',      'luogo_e_movimento');
+      seedPrepItem('nei pressi di',   'nei pressi di', 'locuzione_preposizionale',      'luogo_e_movimento');
+      seedPrepItem('al di là di',     'al di là di',   'locuzione_preposizionale',      'luogo_e_movimento', ['confronto_riferimento']);
+      seedPrepItem('al di sopra di',  'al di sopra di','espressione_di_confronto',      'confronto_riferimento', ['luogo_e_movimento']);
+      seedPrepItem('al di sotto di',  'al di sotto di','espressione_di_confronto',      'confronto_riferimento', ['luogo_e_movimento']);
+      // Temporal
+      seedPrepItem('durante',         'durante',       'espressione_temporale',         'tempo');
+      seedPrepItem('dopo',            'dopo',          'espressione_temporale',         'tempo');
+      seedPrepItem('prima (di)',      'prima',         'espressione_temporale',         'tempo');
+      seedPrepItem('fino a',          'fino a',        'espressione_temporale',         'tempo');
+      seedPrepItem('entro',           'entro',         'espressione_temporale',         'tempo');
+      seedPrepItem('a partire da',    'a partire da',  'espressione_temporale',         'tempo');
+      // Causa, scopo, mezzo
+      seedPrepItem('grazie a',        'grazie a',      'espressione_di_causa',          'causa_scopo_mezzo');
+      seedPrepItem('a causa di',      'a causa di',    'espressione_di_causa',          'causa_scopo_mezzo');
+      seedPrepItem('in seguito a',    'in seguito a',  'espressione_di_causa',          'causa_scopo_mezzo');
+      seedPrepItem('per via di',      'per via di',    'espressione_di_causa',          'causa_scopo_mezzo');
+      seedPrepItem('a condizione di', 'a condizione di','espressione_di_scopo',         'causa_scopo_mezzo');
+      seedPrepItem('allo scopo di',   'allo scopo di', 'espressione_di_scopo',          'causa_scopo_mezzo');
+      seedPrepItem('per mezzo di',    'per mezzo di',  'espressione_di_mezzo',          'causa_scopo_mezzo');
+      // Confronto, riferimento
+      seedPrepItem('rispetto a',      'rispetto a',    'espressione_di_confronto',      'confronto_riferimento');
+      seedPrepItem('in base a',       'in base a',     'espressione_di_confronto',      'confronto_riferimento');
+      seedPrepItem('a differenza di', 'a differenza di','espressione_di_confronto',     'confronto_riferimento');
+      seedPrepItem('a proposito di',  'a proposito di','locuzione_preposizionale',      'confronto_riferimento');
+      seedPrepItem('in quanto a',     'in quanto a',   'locuzione_preposizionale',      'confronto_riferimento');
+      seedPrepItem('nei confronti di','nei confronti di','espressione_di_confronto',    'confronto_riferimento');
+      seedPrepItem('secondo',         'secondo',       'preposizione_semplice',         'confronto_riferimento');
+      seedPrepItem('circa',           'circa',         'locuzione_preposizionale',      'confronto_riferimento');
+      seedPrepItem('in favore di',    'in favore di',  'locuzione_preposizionale',      'confronto_riferimento');
+      // Contrasto, esclusione
+      seedPrepItem('nonostante',      'nonostante',    'locuzione_preposizionale',      'contrasto_esclusione');
+      seedPrepItem('invece di',       'invece di',     'espressione_di_esclusione',     'contrasto_esclusione');
+      seedPrepItem('tranne',          'tranne',        'espressione_di_esclusione',     'contrasto_esclusione');
+      seedPrepItem('eccetto',         'eccetto',       'espressione_di_esclusione',     'contrasto_esclusione');
+      seedPrepItem('salvo',           'salvo',         'espressione_di_esclusione',     'contrasto_esclusione');
+      seedPrepItem('ad eccezione di', 'ad eccezione di','espressione_di_esclusione',   'contrasto_esclusione');
+    });
+    seedAllPrepItems();
+  }
+
+  // ── Seed preposition_verb_government ─────────────────────────────────────────
+  const insVerbGov = db.prepare(`INSERT OR IGNORE INTO preposition_verb_government(verb,preposition,construction,example_it,example_es,cefr) VALUES(?,?,?,?,?,?)`);
+  [
+    ['cominciare',    'a',   'cominciare a + inf',       'Comincio a studiare.',                   'Empiezo a estudiar.',                'A2'],
+    ['iniziare',      'a',   'iniziare a + inf',         'Inizio a lavorare.',                     'Empiezo a trabajar.',                'A2'],
+    ['riuscire',      'a',   'riuscire a + inf',         'Non riesco a dormire.',                  'No logro dormir.',                   'B1'],
+    ['continuare',    'a',   'continuare a + inf',       'Continua a parlare.',                    'Sigue hablando.',                    'A2'],
+    ['imparare',      'a',   'imparare a + inf',         'Sto imparando a cucinare.',              'Estoy aprendiendo a cocinar.',       'A2'],
+    ['abituarsi',     'a',   'abituarsi a + inf/sost',   'Mi abituo al freddo.',                   'Me acostumbro al frío.',             'B1'],
+    ['pensare',       'a',   'pensare a + sost',         'Penso a te.',                            'Pienso en ti.',                      'A2'],
+    ['tenere',        'a',   'tenere a + inf/sost',      'Tiene molto alla famiglia.',             'Le importa mucho la familia.',       'B1'],
+    ['smettere',      'di',  'smettere di + inf',        'Smetti di fumare.',                      'Deja de fumar.',                     'B1'],
+    ['decidere',      'di',  'decidere di + inf',        'Ha deciso di partire.',                  'Ha decidido partir.',                'B1'],
+    ['cercare',       'di',  'cercare di + inf',         'Cerco di capire.',                       'Intento entender.',                  'B1'],
+    ['finire',        'di',  'finire di + inf',          'Finisco di lavorare alle sei.',          'Termino de trabajar a las seis.',    'A2'],
+    ['avere bisogno', 'di',  'avere bisogno di + sost',  'Ho bisogno di aiuto.',                   'Necesito ayuda.',                    'A2'],
+    ['dimenticarsi',  'di',  'dimenticarsi di + inf',    'Mi sono dimenticato di chiamare.',       'Me olvidé de llamar.',               'B1'],
+    ['dipendere',     'da',  'dipendere da + sost',      'Dipende da te.',                         'Depende de ti.',                     'B1'],
+    ['parlare',       'di',  'parlare di + sost',        'Parliamo di calcio.',                    'Hablamos de fútbol.',                'A1'],
+    ['parlare',       'con', 'parlare con + sost',       'Parlo con Marco.',                       'Hablo con Marco.',                   'A1'],
+    ['chiedere',      'a',   'chiedere a + persona',     'Chiedo al professore.',                  'Le pregunto al profesor.',           'A1'],
+    ['credere',       'in',  'credere in + sost',        'Credo in te.',                           'Creo en ti.',                        'B1'],
+    ['ringraziare',   'per', 'ringraziare per + sost',   "Ti ringrazio per l'aiuto.",              'Te agradezco la ayuda.',             'A2'],
+  ].forEach(([verb, prep, constr, ex_it, ex_es, cefr]) => insVerbGov.run(verb, prep, constr, ex_it, ex_es, cefr));
+
+  // ── Seed preposition_contrasts ────────────────────────────────────────────────
+  if (prepCatId) {
+    const getItemByCanon4 = db.prepare(`SELECT pi.id FROM preposition_items pi JOIN vocabulary_items vi ON vi.id=pi.vocabulary_item_id WHERE pi.canonical_form=? AND vi.category_id=? LIMIT 1`);
+    const insContrast4 = db.prepare(`INSERT OR IGNORE INTO preposition_contrasts(first_item_id,second_item_id,explanation,example_first_it,example_first_es,example_second_it,example_second_es) VALUES(?,?,?,?,?,?,?)`);
+    [
+      ['a', 'in',
+       'Con luoghi: "a" si usa con città e piccole isole, "in" con regioni, paesi, continenti e ambienti.',
+       'Vado a Roma.', 'Voy a Roma.',
+       'Vivo in Italia.', 'Vivo en Italia.'],
+      ['da', 'di',
+       '"Da" indica provenienza o punto di partenza, "di" indica appartenenza o materia.',
+       'Vengo da Parigi.', 'Vengo de París.',
+       'Il libro è di Marco.', 'El libro es de Marco.'],
+      ['tra', 'in',
+       '"Tra" esprime distanza temporale futura ("tra due ore"), "in" esprime durata ("in un\'ora").',
+       'Arrivo tra due ore.', 'Llego dentro de dos horas.',
+       "Lo studio in un'ora.", 'Lo estudio en una hora.'],
+      ['grazie a', 'a causa di',
+       '"Grazie a" introduce una causa positiva, "a causa di" introduce una causa negativa.',
+       "Grazie a te ho superato l'esame.", 'Gracias a ti aprobé el examen.',
+       'Il volo è cancellato a causa dello sciopero.', 'El vuelo está cancelado a causa de la huelga.'],
+      ['vicino a', 'nei pressi di',
+       '"Vicino a" è colloquiale e comune, "nei pressi di" è più formale e indica prossimità geografica precisa.',
+       'Abito vicino alla stazione.', 'Vivo cerca de la estación.',
+       "L'hotel è nei pressi della stazione.", 'El hotel está en las inmediaciones de la estación.'],
+    ].forEach(([c1, c2, expl, e1it, e1es, e2it, e2es]) => {
+      const item1 = getItemByCanon4.get(c1, prepCatId);
+      const item2 = getItemByCanon4.get(c2, prepCatId);
+      if (item1 && item2) insContrast4.run(item1.id, item2.id, expl, e1it, e1es, e2it, e2es);
+    });
+  }
 }
 
 module.exports = { createSchema };
