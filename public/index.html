@@ -19,6 +19,12 @@
   <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
+<!-- Banner aggiornamento SW (nascosto per default) -->
+<div id="sw-update-banner" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:9999;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 16px;box-shadow:0 4px 20px rgba(0,0,0,.18);display:none;align-items:center;gap:12px;white-space:nowrap;font-size:0.9rem" role="status" aria-live="polite">
+  <span>È disponibile una nuova versione.</span>
+  <button id="sw-update-btn" class="btn btn-primary" style="font-size:0.85rem;padding:4px 12px">Aggiorna</button>
+  <button id="sw-dismiss-btn" class="btn btn-outline" style="font-size:0.85rem;padding:4px 10px" aria-label="Ignora aggiornamento">×</button>
+</div>
 <div class="app">
   <!-- Sidebar (desktop) -->
   <aside class="sidebar" id="sidebar">

