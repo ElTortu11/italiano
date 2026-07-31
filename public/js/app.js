@@ -55,6 +55,26 @@ function updateThemeIcon() {
 }
 applyTheme(currentTheme);
 
+// ── Mobile drawer helpers ─────────────────────────────────────────────────
+const MORE_ROUTES = new Set(['session','completamento','grammar','writing','reading','errors','rewards','settings']);
+
+function closeMobileMoreDrawer() {
+  document.getElementById('mobile-more-drawer')?.classList.remove('open');
+  document.getElementById('mobile-more-backdrop')?.classList.remove('active');
+}
+
+function closeMobileSidebar() {
+  document.getElementById('sidebar')?.classList.remove('mobile-open');
+  document.getElementById('sidebar-backdrop')?.classList.remove('active');
+  document.body.classList.remove('sidebar-open');
+}
+
+function openMobileSidebar() {
+  document.getElementById('sidebar')?.classList.add('mobile-open');
+  document.getElementById('sidebar-backdrop')?.classList.add('active');
+  document.body.classList.add('sidebar-open');
+}
+
 // ── Router ────────────────────────────────────────────────────────────────
 const ROUTES = {
   dashboard: { title:'Bacheca', render: renderDashboard },
@@ -149,15 +169,23 @@ window.addEventListener('beforeunload', () => studyTimer._flush());
 function navigate(route) {
   if (!ROUTES[route]) route = 'dashboard';
 
+  // Close mobile drawers on any navigation
+  closeMobileMoreDrawer();
+  closeMobileSidebar();
+
   if (STUDY_ROUTES.has(currentRoute) && !STUDY_ROUTES.has(route)) studyTimer.stop();
   if (!STUDY_ROUTES.has(currentRoute) && STUDY_ROUTES.has(route)) studyTimer.start();
 
   currentRoute = route;
   document.getElementById('topbar-title').textContent = ROUTES[route].title;
 
-  document.querySelectorAll('.nav-item, .mobile-nav-item').forEach(el => {
+  // Update active state in sidebar, mobile bottom nav, and more-drawer
+  document.querySelectorAll('.nav-item, .mobile-nav-item, .mobile-more-item').forEach(el => {
     el.classList.toggle('active', el.dataset.route === route);
   });
+  // Highlight the "Più" button when on a more-drawer route
+  const moreBtn = document.getElementById('mobile-more-btn');
+  if (moreBtn) moreBtn.classList.toggle('active', MORE_ROUTES.has(route));
 
   const content = document.getElementById('app-content');
   content.innerHTML = `<div class="loading"><div class="spinner"></div> Caricamento...</div>`;
@@ -3071,10 +3099,38 @@ document.addEventListener('DOMContentLoaded', async () => {
     applyTheme(next);
   });
 
-  // Nav items
+  // Nav items (sidebar, bottom nav, more-drawer)
   document.querySelectorAll('[data-route]').forEach(el => {
     el.addEventListener('click', () => navigate(el.dataset.route));
   });
+
+  // ── Mobile hamburger — opens sidebar as drawer ───────────────────────────
+  document.getElementById('topbar-hamburger')?.addEventListener('click', () => {
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar?.classList.contains('mobile-open')) {
+      closeMobileSidebar();
+    } else {
+      openMobileSidebar();
+    }
+  });
+  document.getElementById('sidebar-backdrop')?.addEventListener('click', closeMobileSidebar);
+
+  // ── Mobile more drawer ───────────────────────────────────────────────────
+  document.getElementById('mobile-more-btn')?.addEventListener('click', () => {
+    document.getElementById('mobile-more-drawer')?.classList.add('open');
+    document.getElementById('mobile-more-backdrop')?.classList.add('active');
+  });
+  document.getElementById('mobile-more-backdrop')?.addEventListener('click', closeMobileMoreDrawer);
+
+  // Swipe down on handle to close more drawer
+  const moreDrawer = document.getElementById('mobile-more-drawer');
+  if (moreDrawer) {
+    let touchStartY = 0;
+    moreDrawer.addEventListener('touchstart', e => { touchStartY = e.touches[0].clientY; }, { passive: true });
+    moreDrawer.addEventListener('touchend', e => {
+      if (e.changedTouches[0].clientY - touchStartY > 60) closeMobileMoreDrawer();
+    }, { passive: true });
+  }
 
   // Init study timer (loads today's saved time)
   studyTimer.init();
