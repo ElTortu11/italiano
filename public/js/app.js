@@ -699,37 +699,6 @@ function renderFlashcard(container) {
   });
 }
 
-function buildFeedbackHTML(result) {
-  const esc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const { status, feedbackTitle, feedbackExplanation, userAnswer, targetAnswer } = result;
-
-  const wrongAnswer = `<s style="opacity:.7">${esc(userAnswer)}</s>`;
-  const rightAnswer = `<strong>${esc(targetAnswer)}</strong>`;
-
-  if (status === 'correct_exact' || status === 'correct_normalized') {
-    return `<div class="fc-type-feedback correct">✓ ${esc(feedbackTitle)}</div>`;
-  }
-  if (status === 'correct_synonym' || status === 'correct_contextual') {
-    const cssClass = status === 'correct_synonym' ? 'synonym' : 'contextual';
-    const exp = feedbackExplanation ? `<span class="fc-fb-note">${esc(feedbackExplanation)}</span>` : '';
-    return `<div class="fc-type-feedback ${cssClass}">✓ ${esc(feedbackTitle)}${exp ? '<br>' + exp : ''}</div>`;
-  }
-  if (status.startsWith('almost_')) {
-    const exp = feedbackExplanation ? `<br><span class="fc-fb-note">${esc(feedbackExplanation)}</span>` : '';
-    return `<div class="fc-type-feedback almost">⚠ ${esc(feedbackTitle)}${exp}
-      <br><span style="opacity:.75;font-size:.9em">Tua risposta: ${wrongAnswer} → ${rightAnswer}</span></div>`;
-  }
-  if (status === 'incorrect_related_word') {
-    const exp = feedbackExplanation ? `<br><span class="fc-fb-note">${esc(feedbackExplanation)}</span>` : '';
-    return `<div class="fc-type-feedback wrong">✗ ${esc(feedbackTitle)}${exp}
-      <br><span style="opacity:.75;font-size:.9em">Tua risposta: ${wrongAnswer} → ${rightAnswer}</span></div>`;
-  }
-  // incorrect (default)
-  return `<div class="fc-type-feedback wrong">
-    ✗ <span style="opacity:.75">La tua risposta:</span> ${wrongAnswer}<br>
-    <span style="opacity:.75">Risposta corretta:</span> ${rightAnswer}
-  </div>`;
-}
 
 function renderFlashcardTyping(container) {
   // Always remove any stale document key listener from a previous card
@@ -790,7 +759,7 @@ function renderFlashcardTyping(container) {
   }
 
   async function check() {
-    if (input.disabled) return; // guard against double-tap / double-click
+    if (input.disabled) return;
     const typed = input.value.trim();
     if (!typed) return;
 
@@ -802,19 +771,66 @@ function renderFlashcardTyping(container) {
 
     const resultEl = document.getElementById('fc-type-result');
     resultEl.style.display = 'block';
-    resultEl.innerHTML = buildFeedbackHTML(result);
 
-    if (card.example_it) {
-      const exEl = document.getElementById('fc-type-example');
-      exEl.style.display = 'block';
-      exEl.innerHTML = `<em>${card.example_it}</em> <span class="text-muted">— ${card.example_es||''}</span>`;
+    function doGoNext() {
+      if (_fcTypingKeyHandler) {
+        document.removeEventListener('keydown', _fcTypingKeyHandler);
+        _fcTypingKeyHandler = null;
+      }
+      goNext();
     }
 
-    try {
-      await API.post(`/flashcards/${card.id}/review`, { quality });
+    function doRetry() {
+      if (_fcTypingKeyHandler) {
+        document.removeEventListener('keydown', _fcTypingKeyHandler);
+        _fcTypingKeyHandler = null;
+      }
+      input.disabled = false;
+      input.value = '';
+      input.style.borderColor = '';
+      input.focus();
+      resultEl.style.display = 'none';
+      resultEl.innerHTML = '';
+      document.getElementById('fc-type-check').style.display = '';
+      document.getElementById('fc-type-skip').style.display = '';
+      document.getElementById('fc-key-hint').style.display = 'none';
+    }
+
+    Feedback.render({
+      container: resultEl,
+      evaluation: result,
+      context: {
+        example: card.example_it ? `${card.example_it} — ${card.example_es || ''}` : null,
+      },
+      actions: {
+        onContinue: doGoNext,
+        onRetry: doRetry,
+        onOpenNotebook: result.saveToErrorNotebook
+          ? () => { doGoNext(); setTimeout(() => showSection('errors'), 0); }
+          : null,
+      },
+      compact: false,
+    });
+
+    // L'esempio ora è nella feedback card — nascondi il div separato
+    const exEl = document.getElementById('fc-type-example');
+    if (exEl) exEl.style.display = 'none';
+
+    document.getElementById('fc-type-check').style.display = 'none';
+    document.getElementById('fc-type-skip').style.display = 'none';
+    document.getElementById('fc-key-hint').textContent = 'Enter / → per avanzare';
+    document.getElementById('fc-key-hint').style.display = 'block';
+
+    // SM-2: salta la chiamata API per ambiguous (quality === null)
+    if (quality !== null) {
+      try {
+        await API.post(`/flashcards/${card.id}/review`, { quality });
+        fcState.reviewed++;
+        if (result.accepted) fcState.correct++;
+      } catch(e) { toast('Errore nel salvataggio', 'error'); }
+    } else {
       fcState.reviewed++;
-      if (result.accepted) fcState.correct++;
-    } catch(e) { toast('Errore nel salvataggio', 'error'); }
+    }
 
     if (result.saveToErrorNotebook && card.vocabulary_id) {
       API.post('/errors', {
@@ -830,15 +846,9 @@ function renderFlashcardTyping(container) {
       }).catch(() => {});
     }
 
-    document.getElementById('fc-type-check').style.display = 'none';
-    const nextBtn = document.getElementById('fc-type-next');
-    nextBtn.style.display = 'inline-flex';
-    document.getElementById('fc-key-hint').textContent = '→ tasto destro per avanzare';
-    document.getElementById('fc-key-hint').style.display = 'block';
-
-    // ArrowRight/Enter to advance — setTimeout prevents the triggering Enter from firing immediately
+    // ArrowRight / Enter per avanzare; non intercetta Enter su un bottone (evita double-fire)
     _fcTypingKeyHandler = (e) => {
-      if (e.key === 'ArrowRight' || e.key === 'Enter') {
+      if ((e.key === 'ArrowRight' || e.key === 'Enter') && e.target.tagName !== 'BUTTON') {
         document.removeEventListener('keydown', _fcTypingKeyHandler);
         _fcTypingKeyHandler = null;
         goNext();
@@ -1640,17 +1650,47 @@ function renderDrillReview(area) {
 
   function doRetryCheck() {
     const typed = inp.value.normalize('NFC').toLowerCase().trim();
-    const expected = expandForms(mistake.correct||'')[0];
     const ok = expandForms(mistake.correct||'').includes(typed);
     inp.disabled = true;
     inp.style.borderColor = ok ? 'var(--accent)' : '#ef4444';
+
+    const synEval = {
+      status: ok ? 'correct_exact' : 'incorrect',
+      accepted: ok,
+      score: ok ? 1.0 : 0.0,
+      userAnswer: inp.value.trim(),
+      targetAnswer: mistake.correct,
+      matchedAnswer: ok ? mistake.correct : null,
+      feedbackTitle: ok ? 'Corretto!' : 'Non corretto',
+      feedbackExplanation: ok ? null : `La forma corretta è "${mistake.correct}".`,
+      saveToErrorNotebook: false,
+      secondaryIssues: [],
+      needsContentReview: false,
+      errorType: ok ? null : 'wrong_conjugation',
+    };
+
     const res = document.getElementById('drill-retry-result');
-    if (ok) res.innerHTML = `<span style="color:var(--accent);font-weight:600">✓ Corretto!</span>`;
-    else res.innerHTML = `<span style="color:#ef4444">✗ Risposta: <strong>${mistake.correct}</strong></span>`;
+    let retryOnKey;
+    Feedback.render({
+      container: res,
+      evaluation: synEval,
+      actions: {
+        onContinue: () => {
+          document.removeEventListener('keydown', retryOnKey);
+          goRetryNext();
+        },
+      },
+      compact: true,
+    });
+
     document.getElementById('drill-retry-check').style.display = 'none';
-    document.getElementById('drill-retry-next').style.display = 'inline-flex';
-    const onKey = e => { if (e.key === 'ArrowRight'||e.key==='Enter') { document.removeEventListener('keydown',onKey); goRetryNext(); } };
-    setTimeout(() => document.addEventListener('keydown', onKey), 50);
+    retryOnKey = e => {
+      if ((e.key === 'ArrowRight'||e.key==='Enter') && e.target.tagName !== 'BUTTON') {
+        document.removeEventListener('keydown', retryOnKey);
+        goRetryNext();
+      }
+    };
+    setTimeout(() => document.addEventListener('keydown', retryOnKey), 50);
   }
 
   function goRetryNext() {
