@@ -1341,4 +1341,100 @@ router.get('/prepositions/verb-government', (req, res) => {
   }
 });
 
+// ── Preposition exercises ─────────────────────────────────────────────────────
+router.get('/prepositions/exercises', (req, res) => {
+  try {
+    const { topic, cefr, limit = 20 } = req.query;
+    let sql = 'SELECT * FROM preposition_exercises WHERE 1=1';
+    const params = [];
+    if (topic) { sql += ' AND topic_slug=?'; params.push(topic); }
+    if (cefr)  { sql += ' AND cefr=?'; params.push(cefr); }
+    sql += ' ORDER BY RANDOM() LIMIT ?';
+    params.push(parseInt(limit));
+    const rows = db.prepare(sql).all(...params);
+    // Fisher-Yates shuffle (server-side)
+    for (let i = rows.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [rows[i], rows[j]] = [rows[j], rows[i]];
+    }
+    res.json(rows);
+  } catch (_) {
+    res.json([]);
+  }
+});
+
+// ── Preposition topic stats ───────────────────────────────────────────────────
+router.get('/prepositions/topic-stats', (req, res) => {
+  try {
+    const rows = db.prepare(`SELECT * FROM preposition_topic_stats WHERE user_id='default'`).all();
+    res.json(rows);
+  } catch (_) {
+    res.json([]);
+  }
+});
+
+router.post('/prepositions/topic-stats', (req, res) => {
+  try {
+    const { topic_slug, result } = req.body;
+    if (!topic_slug || !result) return res.status(400).json({ error: 'topic_slug and result required' });
+
+    // Upsert row
+    db.prepare(`INSERT OR IGNORE INTO preposition_topic_stats(topic_slug, user_id) VALUES(?, 'default')`).run(topic_slug);
+
+    const inc = result === 'correct' ? 'correct=correct+1'
+              : result === 'almost'  ? 'almost_correct=almost_correct+1'
+              : 'incorrect=incorrect+1';
+
+    db.prepare(`UPDATE preposition_topic_stats SET attempts=attempts+1, ${inc}, last_attempted=? WHERE topic_slug=? AND user_id='default'`).run(now(), topic_slug);
+
+    // Recalculate mastery
+    const stats = db.prepare(`SELECT * FROM preposition_topic_stats WHERE topic_slug=? AND user_id='default'`).get(topic_slug);
+    if (stats) {
+      const accuracy = stats.attempts > 0 ? stats.correct / stats.attempts : 0;
+      const lastAttempted = stats.last_attempted || 0;
+      const daysSinceLast = (now() - lastAttempted) / 86400;
+      let mastery = 'nuovo';
+      if (stats.attempts >= 10 && accuracy >= 0.85 && daysSinceLast <= 30) mastery = 'padroneggiato';
+      else if (stats.attempts >= 5 && accuracy >= 0.6) mastery = 'in_consolidamento';
+      else if (stats.attempts >= 5) mastery = 'in_apprendimento';
+      db.prepare(`UPDATE preposition_topic_stats SET mastery_level=? WHERE topic_slug=? AND user_id='default'`).run(mastery, topic_slug);
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Preposition error log ─────────────────────────────────────────────────────
+router.post('/prepositions/error-log', (req, res) => {
+  try {
+    const { exercise_id, topic_slug, exercise_type, cefr, user_answer, correct_answer, evaluation_status, error_type, explanation } = req.body;
+    if (!topic_slug || !exercise_type) return res.status(400).json({ error: 'topic_slug and exercise_type required' });
+
+    db.prepare(`INSERT INTO preposition_error_log(exercise_id,topic_slug,exercise_type,cefr,user_answer,correct_answer,evaluation_status,error_type,explanation) VALUES(?,?,?,?,?,?,?,?,?)`)
+      .run(exercise_id||null, topic_slug, exercise_type, cefr||null, user_answer||null, correct_answer||null, evaluation_status||null, error_type||null, explanation||null);
+
+    // Also insert into errors table for quaderno integration
+    db.prepare(`INSERT INTO errors(original_text,corrected_text,explanation,category,importance,source,evaluation_status) VALUES(?,?,?,?,?,?,?)`)
+      .run(user_answer||'(vuoto)', correct_answer||null, explanation||null, 'preposizione', 2, `preposition:${topic_slug}:${exercise_type}`, evaluation_status||null);
+
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/prepositions/error-log', (req, res) => {
+  try {
+    const { topic } = req.query;
+    let sql = 'SELECT * FROM preposition_error_log WHERE 1=1';
+    const params = [];
+    if (topic) { sql += ' AND topic_slug=?'; params.push(topic); }
+    sql += ' ORDER BY created_at DESC LIMIT 50';
+    res.json(db.prepare(sql).all(...params));
+  } catch (_) {
+    res.json([]);
+  }
+});
+
 module.exports = router;

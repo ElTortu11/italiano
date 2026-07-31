@@ -1196,6 +1196,78 @@ function buildConjugationEvaluation({ verb, tense, person, userAnswer, correctAn
   };
 }
 
+// ── Adattatore preposizione → oggetto Evaluator-compatibile ──────────────────
+function buildPrepositionEvaluation(typed, exercise) {
+  const norm = s => (s || '').normalize('NFC').toLowerCase().trim()
+    .replace(/['']/g, "'");
+  const typedN = norm(typed);
+
+  let correct = [];
+  let variants = [];
+  try { correct = JSON.parse(exercise.correct_answers || '[]'); } catch (_) {}
+  try { variants = JSON.parse(exercise.accepted_variants || '[]'); } catch (_) {}
+  const allCorrect = [...correct, ...variants];
+
+  // Exact match
+  if (allCorrect.some(a => norm(a) === typedN)) {
+    return {
+      status: 'correct_exact', accepted: true, score: 1.0,
+      userAnswer: typed, targetAnswer: correct[0], matchedAnswer: typedN,
+      feedbackTitle: 'Corretto!',
+      feedbackExplanation: exercise.explanation_it || null,
+      saveToErrorNotebook: false, secondaryIssues: [], needsContentReview: false,
+      errorType: null,
+    };
+  }
+
+  // Check if it's a valid partial locuzione
+  if (exercise.exercise_type === 'fill_locuzione') {
+    if (allCorrect.some(a => norm(a).startsWith(typedN) && typedN.length >= norm(a).length * 0.6)) {
+      return {
+        status: 'almost_correct_missing_article', accepted: false, score: 0.5,
+        userAnswer: typed, targetAnswer: correct[0], matchedAnswer: null,
+        feedbackTitle: 'Espressione incompleta',
+        feedbackExplanation: `La locuzione completa è "${correct[0]}". ${exercise.explanation_it || ''}`,
+        saveToErrorNotebook: true, secondaryIssues: [], needsContentReview: false,
+        errorType: 'incomplete_expression',
+      };
+    }
+  }
+
+  // Typo detection (simple Levenshtein-like)
+  const isClose = allCorrect.some(a => {
+    const target = norm(a);
+    if (Math.abs(typedN.length - target.length) > 2) return false;
+    let diff = 0;
+    const minLen = Math.min(typedN.length, target.length);
+    for (let i = 0; i < minLen; i++) if (typedN[i] !== target[i]) diff++;
+    diff += Math.abs(typedN.length - target.length);
+    return diff <= 1 && typedN.length >= 2;
+  });
+
+  if (isClose) {
+    return {
+      status: 'almost_correct_spelling', accepted: false, score: 0.5,
+      userAnswer: typed, targetAnswer: correct[0], matchedAnswer: null,
+      feedbackTitle: 'Quasi corretto',
+      feedbackExplanation: exercise.explanation_it || null,
+      saveToErrorNotebook: false, secondaryIssues: [], needsContentReview: false,
+      errorType: 'spelling',
+    };
+  }
+
+  return {
+    status: 'incorrect', accepted: false, score: 0.0,
+    userAnswer: typed, targetAnswer: correct[0], matchedAnswer: null,
+    feedbackTitle: 'Non corretto',
+    feedbackExplanation: exercise.explanation_it || null,
+    saveToErrorNotebook: true, secondaryIssues: [], needsContentReview: false,
+    errorType: exercise.exercise_type === 'contrast' ? 'contrast_confusion'
+             : exercise.exercise_type === 'verb_government' ? 'verb_regency'
+             : 'simple_preposition',
+  };
+}
+
 // ── Adattatore cloze → oggetto Evaluator-compatibile ────────────────────────
 function buildClozeGapEvaluation(typed, correctAnswer, exerciseType) {
   const norm = s => (s||'').normalize('NFC').toLowerCase().trim();
@@ -2944,6 +3016,17 @@ const CLOZE = {
 
 let clozeState = { type: null, index: 0, highWater: -1, score: { correct: 0, total: 0 } };
 let prepSubview = null; // 'topics' | 'articolate' | null
+let prepState = {
+  subview: 'home',       // 'home' | 'articolate' | 'session' | 'summary'
+  topicFilter: null,
+  cefrFilter: null,
+  exercises: [],
+  sessionIndex: 0,
+  sessionResults: [],
+  sessionSize: 10,
+  errorReviewMode: false,
+  topicStats: {},
+};
 
 // ── Preposizioni section ──────────────────────────────────────────────────────
 const ARTICOLATE_FORMS = {
@@ -3069,70 +3152,355 @@ function renderArticolateTable(container) {
   }
 }
 
+// ── Fisher-Yates shuffle (in-place) ─────────────────────────────────────────
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 async function renderPreposizioniSection(el) {
-  const tab = prepSubview || 'articolate';
-  el.innerHTML = `
-    <div class="section-header">
-      <div class="section-title">Preposizioni</div>
-      <div class="section-sub">Tavola delle articolate e argomenti per tema</div>
-    </div>
-    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-      <button type="button" class="btn ${tab==='articolate'?'btn-primary':'btn-outline'}" id="tab-articolate">Articolate</button>
-      <button type="button" class="btn ${tab==='topics'?'btn-primary':'btn-outline'}" id="tab-topics">Argomenti</button>
-      <button type="button" class="btn btn-ghost" id="prep-back" style="margin-left:auto">← Indietro</button>
-    </div>
-    <div id="prep-content"></div>
-  `;
+  // Load topic stats on entry
+  try {
+    const stats = await API.get('/prepositions/topic-stats');
+    prepState.topicStats = {};
+    stats.forEach(s => { prepState.topicStats[s.topic_slug] = s; });
+  } catch (_) {}
 
-  const content = el.querySelector('#prep-content');
-
-  function showTab(t) {
-    prepSubview = t;
-    el.querySelector('#tab-articolate').className = `btn ${t==='articolate'?'btn-primary':'btn-outline'}`;
-    el.querySelector('#tab-topics').className = `btn ${t==='topics'?'btn-primary':'btn-outline'}`;
-    if (t === 'articolate') {
-      content.innerHTML = `
-        <div class="card" style="padding:16px">
-          <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px">Clicca su una cella per vedere la composizione e un esempio.</div>
-          <div id="art-table-wrap"></div>
-        </div>
-        <div class="card mt-3" style="padding:14px">
-          <div style="font-size:0.82rem;color:var(--text-muted)">
-            <strong>con + il = col</strong> (colloquiale) &nbsp;|&nbsp; <strong>con + i = coi</strong> (colloquiale)<br>
-            Le altre contrazioni (colla, collo, cogli…) sono rare o letterarie.
-          </div>
-        </div>
-      `;
-      renderArticolateTable(content.querySelector('#art-table-wrap'));
-    } else {
-      content.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text-muted)">Caricamento...</div>`;
-      API.get('/prepositions/topics').then(topics => {
-        if (!topics || !topics.length) { content.innerHTML = '<div class="card" style="padding:16px">Nessun argomento trovato.</div>'; return; }
-        content.innerHTML = `
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px">
-            ${topics.map(t => `
-              <div class="card" style="padding:14px 16px;cursor:default">
-                <div style="font-size:1.4rem;margin-bottom:6px">${TOPIC_ICONS[t.slug] || '📌'}</div>
-                <div style="font-weight:600;font-size:0.95rem">${t.name_it}</div>
-                <div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px">${t.name_es}</div>
-                <div style="margin-top:6px"><span class="badge badge-blue">${t.cefr_min}</span></div>
-              </div>
-            `).join('')}
-          </div>
-        `;
-      }).catch(() => { content.innerHTML = '<div class="card" style="padding:16px;color:var(--error)">Errore nel caricamento degli argomenti.</div>'; });
+  function renderSubview() {
+    switch (prepState.subview) {
+      case 'articolate': renderPrepArticolate(); break;
+      case 'session':    renderPrepSession(); break;
+      case 'summary':    renderPrepSummary(); break;
+      default:           renderPrepHome(); break;
     }
   }
 
-  el.querySelector('#tab-articolate').addEventListener('click', () => showTab('articolate'));
-  el.querySelector('#tab-topics').addEventListener('click', () => showTab('topics'));
-  el.querySelector('#prep-back').addEventListener('click', () => {
-    prepSubview = null;
-    clozeState.type = null;
-    renderCompletamento(el);
-  });
+  // ── HOME ────────────────────────────────────────────────────────────────────
+  function renderPrepHome() {
+    el.innerHTML = `
+      <div class="section-header">
+        <div class="section-title">Preposizioni</div>
+        <div class="section-sub">Esercizi, articolate e argomenti per tema</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">
+        <button type="button" class="btn btn-primary" id="prep-start-all">Inizia sessione (10 domande)</button>
+        <button type="button" class="btn btn-outline" id="prep-start-art">Solo articolate</button>
+        <button type="button" class="btn btn-outline" id="prep-start-errors">Solo errori</button>
+        <button type="button" class="btn btn-outline" id="prep-back-main" style="margin-left:auto">← Indietro</button>
+      </div>
+      <div style="margin-bottom:8px;font-weight:600;font-size:0.9rem">Argomenti</div>
+      <div class="prep-topic-grid" id="prep-topics-grid">
+        <div style="text-align:center;padding:24px;color:var(--text-muted)">Caricamento...</div>
+      </div>
+    `;
 
-  showTab(tab);
+    el.querySelector('#prep-start-all').onclick = () => startSession(null);
+    el.querySelector('#prep-start-art').onclick = () => { prepState.subview = 'articolate'; renderSubview(); };
+    el.querySelector('#prep-start-errors').onclick = () => startErrorReview();
+    el.querySelector('#prep-back-main').onclick = () => { prepSubview = null; clozeState.type = null; renderCompletamento(el); };
+
+    API.get('/prepositions/topics').then(topics => {
+      const grid = el.querySelector('#prep-topics-grid');
+      if (!grid) return;
+      if (!topics || !topics.length) { grid.innerHTML = '<div class="card" style="padding:16px">Nessun argomento trovato.</div>'; return; }
+      grid.innerHTML = topics.map(t => {
+        const stats = prepState.topicStats[t.slug];
+        const attempts = stats ? stats.attempts : 0;
+        const accuracy = (stats && attempts > 0) ? Math.round(stats.correct / attempts * 100) : null;
+        const mastery = stats ? stats.mastery_level : 'nuovo';
+        const masteryColors = { nuovo: 'var(--text-3)', in_apprendimento: 'var(--orange)', in_consolidamento: 'var(--blue)', padroneggiato: 'var(--accent)' };
+        const masteryLabels = { nuovo: 'Nuovo', in_apprendimento: 'In apprendimento', in_consolidamento: 'In consolidamento', padroneggiato: 'Padroneggiato' };
+        return `<div class="prep-topic-card">
+          <div class="prep-topic-icon">${TOPIC_ICONS[t.slug] || '📌'}</div>
+          <div class="prep-topic-name">${t.name_it}</div>
+          <div class="prep-topic-sub">${t.name_es}</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap">
+            <span class="badge badge-blue">${t.cefr_min}</span>
+            <span style="font-size:0.75rem;color:${masteryColors[mastery]||'var(--text-3)'}">${masteryLabels[mastery]||mastery}</span>
+            ${accuracy !== null ? `<span style="font-size:0.75rem;color:var(--text-muted);margin-left:auto">${accuracy}%</span>` : ''}
+          </div>
+          <button type="button" class="btn btn-outline btn-sm prep-topic-btn" style="margin-top:10px;width:100%" data-slug="${t.slug}">Pratica</button>
+        </div>`;
+      }).join('');
+
+      grid.querySelectorAll('.prep-topic-btn').forEach(btn => {
+        btn.addEventListener('click', () => startSession(btn.dataset.slug));
+      });
+    }).catch(() => {
+      const grid = el.querySelector('#prep-topics-grid');
+      if (grid) grid.innerHTML = '<div class="card" style="padding:16px;color:var(--error)">Errore nel caricamento.</div>';
+    });
+  }
+
+  // ── ARTICOLATE ──────────────────────────────────────────────────────────────
+  function renderPrepArticolate() {
+    el.innerHTML = `
+      <div class="section-header">
+        <div class="section-title">Preposizioni articolate</div>
+        <div class="section-sub">Tavola interattiva</div>
+      </div>
+      <button type="button" class="btn btn-ghost" id="prep-art-back" style="margin-bottom:14px">← Torna ai temi</button>
+      <div class="card" style="padding:16px">
+        <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px">Clicca su una cella per vedere la composizione e un esempio.</div>
+        <div id="art-table-wrap"></div>
+      </div>
+      <div class="card mt-3" style="padding:14px">
+        <div style="font-size:0.82rem;color:var(--text-muted)">
+          <strong>con + il = col</strong> (colloquiale) &nbsp;|&nbsp; <strong>con + i = coi</strong> (colloquiale)<br>
+          Le altre contrazioni (colla, collo, cogli…) sono rare o letterarie.
+        </div>
+      </div>
+    `;
+    el.querySelector('#prep-art-back').onclick = () => { prepState.subview = 'home'; renderSubview(); };
+    renderArticolateTable(el.querySelector('#art-table-wrap'));
+  }
+
+  // ── START SESSION ───────────────────────────────────────────────────────────
+  async function startSession(topicSlug) {
+    prepState.topicFilter = topicSlug;
+    prepState.sessionIndex = 0;
+    prepState.sessionResults = [];
+    prepState.errorReviewMode = false;
+    el.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted)">Caricamento esercizi...</div>`;
+    try {
+      const params = new URLSearchParams({ limit: prepState.sessionSize });
+      if (topicSlug) params.set('topic', topicSlug);
+      const exercises = await API.get('/prepositions/exercises?' + params.toString());
+      if (!exercises || exercises.length === 0) {
+        el.innerHTML = `<div class="card" style="padding:24px;text-align:center">
+          <div style="font-size:1.2rem;margin-bottom:12px">Nessun esercizio trovato</div>
+          <button type="button" class="btn btn-primary" id="prep-no-ex-back">Torna ai temi</button>
+        </div>`;
+        el.querySelector('#prep-no-ex-back').onclick = () => { prepState.subview = 'home'; renderSubview(); };
+        return;
+      }
+      prepState.exercises = shuffleArray(exercises);
+      prepState.subview = 'session';
+      renderPrepSession();
+    } catch (e) {
+      el.innerHTML = `<div class="card" style="padding:24px;color:var(--error)">Errore nel caricamento: ${e.message}<br><button class="btn btn-outline" onclick="location.reload()">Ricarica</button></div>`;
+    }
+  }
+
+  // ── START ERROR REVIEW ──────────────────────────────────────────────────────
+  async function startErrorReview() {
+    el.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted)">Caricamento errori...</div>`;
+    try {
+      const log = await API.get('/prepositions/error-log');
+      if (!log || log.length === 0) {
+        el.innerHTML = `<div class="card" style="padding:24px;text-align:center">
+          <div style="margin-bottom:12px">Nessun errore registrato — ottimo lavoro!</div>
+          <button type="button" class="btn btn-primary" id="prep-err-back">Torna ai temi</button>
+        </div>`;
+        el.querySelector('#prep-err-back').onclick = () => { prepState.subview = 'home'; renderSubview(); };
+        return;
+      }
+      // Get exercise IDs from error log
+      const ids = [...new Set(log.filter(e => e.exercise_id).map(e => e.exercise_id))];
+      if (ids.length === 0) { await startSession(null); return; }
+      const all = await API.get('/prepositions/exercises?limit=60');
+      const errEx = all.filter(e => ids.includes(e.id));
+      if (errEx.length === 0) { await startSession(null); return; }
+      prepState.exercises = shuffleArray(errEx).slice(0, prepState.sessionSize);
+      prepState.sessionIndex = 0;
+      prepState.sessionResults = [];
+      prepState.errorReviewMode = true;
+      prepState.subview = 'session';
+      renderPrepSession();
+    } catch (_) { await startSession(null); }
+  }
+
+  // ── SESSION ─────────────────────────────────────────────────────────────────
+  function renderPrepSession() {
+    const exercises = prepState.exercises;
+    const idx = prepState.sessionIndex;
+    if (idx >= exercises.length) { prepState.subview = 'summary'; renderPrepSummary(); return; }
+    const exercise = exercises[idx];
+    const total = exercises.length;
+    const pct = Math.round(idx / total * 100);
+
+    const isChoice = exercise.exercise_type === 'contrast';
+    let distractors = [];
+    try { distractors = JSON.parse(exercise.distractors || '[]'); } catch (_) {}
+    let correct = [];
+    try { correct = JSON.parse(exercise.correct_answers || '[]'); } catch (_) {}
+
+    let choicesHTML = '';
+    if (isChoice) {
+      const choices = shuffleArray([...correct.slice(0, 1), ...distractors]);
+      choicesHTML = `<div class="prep-choices" id="prep-choices">${choices.map(c =>
+        `<button type="button" class="prep-choice-btn" data-answer="${c.replace(/"/g,'&quot;')}">${c}</button>`
+      ).join('')}</div>`;
+    }
+
+    const sentence = exercise.sentence_it || '';
+    const promptHTML = isChoice
+      ? `<div class="prep-session-prompt">${sentence.replace('___', '<span class="prep-blank">___</span>')}</div>`
+      : `<div class="prep-session-prompt">${sentence.replace('___', '<input class="prep-input" id="prep-answer-input" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="…">')}</div>`;
+
+    const esHTML = exercise.sentence_es ? `<div class="prep-sentence-es">${exercise.sentence_es}</div>` : '';
+    const typeLabel = { fill_preposition:'Scegli la preposizione', articolate_form:'Preposizione articolata', contrast:'Contrasto', verb_government:'Reggenza verbale', fill_locuzione:'Locuzione preposizionale' }[exercise.exercise_type] || exercise.exercise_type;
+
+    el.innerHTML = `
+      <div class="prep-session-wrap">
+        <div class="prep-progress">
+          <div class="prep-progress-bar" style="width:${pct}%"></div>
+        </div>
+        <div class="prep-progress-label">${idx + 1} / ${total}</div>
+        <div class="prep-session-type">${typeLabel}</div>
+        ${promptHTML}
+        ${esHTML}
+        ${choicesHTML}
+        ${!isChoice ? `<div style="display:flex;gap:8px;margin-top:16px"><button type="button" class="btn btn-primary" id="prep-check-btn">Controlla</button></div>` : ''}
+        <div id="prep-feedback-wrap" style="margin-top:16px"></div>
+        <button type="button" class="btn btn-ghost" id="prep-session-back" style="margin-top:12px;font-size:0.85rem">← Abbandona sessione</button>
+      </div>
+    `;
+
+    el.querySelector('#prep-session-back').onclick = () => { prepState.subview = 'home'; renderSubview(); };
+
+    const feedbackWrap = el.querySelector('#prep-feedback-wrap');
+
+    function submitAnswer(typed) {
+      const evaluation = buildPrepositionEvaluation(typed, exercise);
+      const result = evaluation.accepted ? 'correct' : (evaluation.score >= 0.4 ? 'almost' : 'incorrect');
+      prepState.sessionResults.push({ exercise, evaluation, userAnswer: typed });
+
+      // Post stats
+      API.post('/prepositions/topic-stats', { topic_slug: exercise.topic_slug, result }).catch(() => {});
+
+      // Log errors
+      if (evaluation.saveToErrorNotebook) {
+        API.post('/prepositions/error-log', {
+          exercise_id: exercise.id,
+          topic_slug: exercise.topic_slug,
+          exercise_type: exercise.exercise_type,
+          cefr: exercise.cefr,
+          user_answer: typed,
+          correct_answer: evaluation.targetAnswer,
+          evaluation_status: evaluation.status,
+          error_type: evaluation.errorType,
+          explanation: exercise.explanation_it,
+        }).catch(() => {});
+      }
+
+      // Render feedback
+      Feedback.render({
+        container: feedbackWrap,
+        evaluation,
+        context: { exerciseType: exercise.exercise_type },
+        actions: {
+          onContinue: goNext,
+        },
+        focusStrategy: 'primary-action',
+      });
+
+      // Disable input / choices
+      const inp = el.querySelector('#prep-answer-input');
+      if (inp) inp.disabled = true;
+      const checkBtn = el.querySelector('#prep-check-btn');
+      if (checkBtn) checkBtn.disabled = true;
+      el.querySelectorAll('.prep-choice-btn').forEach(btn => {
+        btn.disabled = true;
+        const bVal = btn.dataset.answer;
+        const correctAnswers = correct.map(a => (a||'').normalize('NFC').toLowerCase().trim());
+        if (correctAnswers.includes((bVal||'').normalize('NFC').toLowerCase().trim())) {
+          btn.classList.add('prep-choice-correct');
+        } else if (bVal === typed) {
+          btn.classList.add('prep-choice-wrong');
+        }
+      });
+    }
+
+    function goNext() {
+      prepState.sessionIndex++;
+      if (prepState.sessionIndex >= prepState.exercises.length) {
+        prepState.subview = 'summary';
+        renderPrepSummary();
+      } else {
+        renderPrepSession();
+      }
+    }
+
+    if (!isChoice) {
+      const checkBtn = el.querySelector('#prep-check-btn');
+      const inp = el.querySelector('#prep-answer-input');
+      if (inp) setTimeout(() => inp.focus(), 80);
+      if (checkBtn) checkBtn.onclick = () => {
+        const typed = (inp ? inp.value : '').trim();
+        if (!typed) { inp && inp.focus(); return; }
+        submitAnswer(typed);
+      };
+      if (inp) inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !inp.disabled) checkBtn && checkBtn.click();
+      });
+    } else {
+      el.querySelectorAll('.prep-choice-btn').forEach(btn => {
+        btn.addEventListener('click', () => submitAnswer(btn.dataset.answer));
+      });
+    }
+  }
+
+  // ── SUMMARY ─────────────────────────────────────────────────────────────────
+  function renderPrepSummary() {
+    const results = prepState.sessionResults;
+    const correctCount = results.filter(r => r.evaluation.accepted).length;
+    const almostCount = results.filter(r => !r.evaluation.accepted && r.evaluation.score >= 0.4).length;
+    const incorrectCount = results.filter(r => !r.evaluation.accepted && r.evaluation.score < 0.4).length;
+    const total = results.length;
+    const accuracy = total > 0 ? Math.round(correctCount / total * 100) : 0;
+    const wrongResults = results.filter(r => !r.evaluation.accepted);
+
+    el.innerHTML = `
+      <div class="prep-summary">
+        <div style="font-size:1.5rem;margin-bottom:4px">${accuracy >= 90 ? '🎉' : accuracy >= 70 ? '👍' : '💪'}</div>
+        <div style="font-weight:700;font-size:1.2rem;margin-bottom:12px">Sessione completata</div>
+        <div class="prep-summary-stats">
+          <div class="prep-stat-item prep-stat-correct"><div class="prep-stat-num">${correctCount}</div><div class="prep-stat-lbl">Corretti</div></div>
+          <div class="prep-stat-item prep-stat-almost"><div class="prep-stat-num">${almostCount}</div><div class="prep-stat-lbl">Quasi</div></div>
+          <div class="prep-stat-item prep-stat-wrong"><div class="prep-stat-num">${incorrectCount}</div><div class="prep-stat-lbl">Errati</div></div>
+        </div>
+        <div style="font-size:1.4rem;font-weight:700;margin:12px 0">${accuracy}%</div>
+        ${wrongResults.length > 0 ? `
+          <div style="margin-top:12px;text-align:left;border-top:1px solid var(--border);padding-top:12px">
+            <div style="font-weight:600;margin-bottom:8px;font-size:0.9rem">Esercizi da rivedere:</div>
+            ${wrongResults.map(r => `
+              <div style="font-size:0.85rem;padding:6px 0;border-bottom:1px solid var(--border)">
+                <div style="color:var(--text-2)">${r.exercise.sentence_it}</div>
+                <div style="color:var(--error)">Hai scritto: <strong>${r.userAnswer || '(vuoto)'}</strong></div>
+                <div style="color:var(--accent)">Risposta: <strong>${r.evaluation.targetAnswer}</strong></div>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:20px">
+          ${wrongResults.length > 0 ? `<button type="button" class="btn btn-primary" id="prep-retry-errors">Ripeti gli errori</button>` : ''}
+          <button type="button" class="btn btn-outline" id="prep-go-home">Torna ai temi</button>
+        </div>
+      </div>
+    `;
+
+    const retryBtn = el.querySelector('#prep-retry-errors');
+    if (retryBtn) retryBtn.onclick = () => {
+      prepState.exercises = shuffleArray(wrongResults.map(r => r.exercise));
+      prepState.sessionIndex = 0;
+      prepState.sessionResults = [];
+      prepState.subview = 'session';
+      renderPrepSession();
+    };
+    el.querySelector('#prep-go-home').onclick = () => {
+      prepState.subview = 'home';
+      prepState.exercises = [];
+      prepState.sessionResults = [];
+      prepState.sessionIndex = 0;
+      renderSubview();
+    };
+  }
+
+  renderSubview();
 }
 
 function normCloze(s) {

@@ -747,6 +747,128 @@ function createSchema() {
       if (item1 && item2) insContrast4.run(item1.id, item2.id, expl, e1it, e1es, e2it, e2es);
     });
   }
+
+  // ── Phase 4B: exercise tables ─────────────────────────────────────────────────
+  try { db.exec(`CREATE TABLE IF NOT EXISTS preposition_exercises (
+    id TEXT PRIMARY KEY,
+    exercise_type TEXT NOT NULL,
+    topic_slug TEXT NOT NULL,
+    cefr TEXT DEFAULT 'A1',
+    sentence_it TEXT NOT NULL,
+    sentence_es TEXT,
+    correct_answers TEXT NOT NULL DEFAULT '[]',
+    accepted_variants TEXT DEFAULT '[]',
+    distractors TEXT DEFAULT '[]',
+    explanation_it TEXT,
+    explanation_es TEXT,
+    contrast_slug TEXT,
+    reggenza_id INTEGER,
+    difficulty INTEGER DEFAULT 1,
+    needs_review INTEGER DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS idx_prep_exercises_topic ON preposition_exercises(topic_slug);
+  CREATE INDEX IF NOT EXISTS idx_prep_exercises_cefr ON preposition_exercises(cefr);`); } catch (_) {}
+
+  try { db.exec(`CREATE TABLE IF NOT EXISTS preposition_topic_stats (
+    topic_slug TEXT NOT NULL,
+    user_id TEXT NOT NULL DEFAULT 'default',
+    attempts INTEGER DEFAULT 0,
+    correct INTEGER DEFAULT 0,
+    almost_correct INTEGER DEFAULT 0,
+    incorrect INTEGER DEFAULT 0,
+    last_attempted INTEGER,
+    streak INTEGER DEFAULT 0,
+    mastery_level TEXT DEFAULT 'nuovo',
+    PRIMARY KEY (topic_slug, user_id)
+  )`); } catch (_) {}
+
+  try { db.exec(`CREATE TABLE IF NOT EXISTS preposition_error_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    exercise_id TEXT REFERENCES preposition_exercises(id),
+    topic_slug TEXT NOT NULL,
+    exercise_type TEXT NOT NULL,
+    cefr TEXT,
+    user_answer TEXT,
+    correct_answer TEXT,
+    evaluation_status TEXT,
+    error_type TEXT,
+    explanation TEXT,
+    created_at INTEGER DEFAULT (unixepoch())
+  )`); } catch (_) {}
+
+  // ── Phase 4B: seed exercises (INSERT OR REPLACE so corrections can be applied) ─
+  const exercises = [
+    // Mode 1: fill_preposition (15)
+    ['prep_s_001', 'fill_preposition', 'preposizioni_semplici', 'A1', 'Vivo ___ Roma.', 'Vivo en Roma.', '["a"]', '[]', '["in","da","di"]', 'Con i nomi di città si usa "a": a Roma, a Milano, a Parigi.', 'Con nombres de ciudad se usa "a".', 1],
+    ['prep_s_002', 'fill_preposition', 'preposizioni_semplici', 'A1', 'Vivo ___ Italia.', 'Vivo en Italia.', '["in"]', '[]', '["a","da","di"]', 'Con i nomi di paesi e regioni si usa "in": in Italia, in Francia, in Toscana.', 'Con nombres de países se usa "in".', 1],
+    ['prep_s_003', 'fill_preposition', 'preposizioni_semplici', 'A1', 'Sono ___ Madrid.', 'Soy de Madrid.', '["di"]', '[]', '["da","a","in"]', '"Di" indica l\'origine o la provenienza stabile: sono di Madrid = soy de Madrid (origen).', 'Para origen se usa "di".', 1],
+    ['prep_s_004', 'fill_preposition', 'preposizioni_semplici', 'A1', 'Vengo ___ Madrid.', 'Vengo de Madrid.', '["da"]', '[]', '["di","a","in"]', '"Da" indica provenienza come movimento: vengo da Madrid = vengo de Madrid (movimiento). "Di" indica origine stabile (sono di Madrid).', '"Da" expresa movimiento desde un lugar.', 2],
+    ['prep_s_005', 'fill_preposition', 'preposizioni_semplici', 'A1', 'Questo regalo è ___ te.', 'Este regalo es para ti.', '["per"]', '[]', '["a","di","con"]', '"Per" indica il destinatario: questo è per te.', '"Per" indica el destinatario.', 1],
+    ['prep_s_006', 'fill_preposition', 'preposizioni_semplici', 'A1', 'Arrivo ___ due ore.', 'Llego en dos horas (desde ahora).', '["tra","fra"]', '[]', '["in","da","per"]', '"Tra/fra + tempo" = dentro de X tiempo (a partir de ahora). "In due ore" = en dos horas (tiempo necesario para completarlo).', '"Tra/fra" = dentro de (tiempo futuro). No confundir con "in".', 2],
+    ['prep_s_007', 'fill_preposition', 'preposizioni_semplici', 'A1', 'Studio italiano ___ due ore.', 'Estudio italiano durante dos horas.', '["per"]', '[]', '["da","tra","in"]', '"Per + durata" indica per quanto tempo dura un\'azione: studio per due ore.', '"Per" indica duración.', 1],
+    ['prep_s_008', 'fill_preposition', 'preposizioni_semplici', 'A2', 'Studio italiano ___ due anni.', 'Estudio italiano desde hace dos años.', '["da"]', '[]', '["per","tra","in"]', '"Da + tempo" con il presente indica azione iniziata nel passato e ancora in corso: studio da due anni = llevo dos años estudiando.', '"Da" con presente = desde hace X tiempo.', 2],
+    ['prep_s_009', 'fill_preposition', 'preposizioni_semplici', 'A1', 'Vado ___ treno.', 'Voy en tren.', '["in"]', '[]', '["con","a","per"]', 'Con i mezzi di trasporto si usa spesso "in": in treno, in macchina, in aereo. Eccezione: a piedi, a cavallo.', 'Con medios de transporte se usa "in".', 1],
+    ['prep_s_010', 'fill_preposition', 'preposizioni_semplici', 'A1', 'Il libro è ___ tavolo.', 'El libro está en/sobre la mesa.', '["sul"]', '["su il","su"]', '["nel","del","al"]', 'Con articolo: su + il = sul. "Sul" indica posizione sopra una superficie.', '"Su + il = sul".', 1],
+    ['prep_s_011', 'fill_preposition', 'preposizioni_semplici', 'A2', 'Vado ___ medico.', 'Voy al médico.', '["dal"]', '["da il","da"]', '["al","nel","del"]', '"Da + professionista" indica andare presso quella persona: vado dal medico, dal dentista, dal dottore.', '"Da + profesional" = ir a donde está esa persona.', 2],
+    ['prep_s_012', 'fill_preposition', 'preposizioni_semplici', 'A1', 'Parlo ___ calcio.', 'Hablo de fútbol.', '["di"]', '[]', '["su","con","per"]', '"Di" introduce l\'argomento di cui si parla.', '"Di" introduce el tema.', 1],
+    ['prep_s_013', 'fill_preposition', 'preposizioni_semplici', 'A2', 'Cammino ___ la piazza.', 'Camino hacia la plaza.', '["verso"]', '[]', '["a","per","fino a"]', '"Verso" indica direzione approssimativa: verso = hacia.', '"Verso" = hacia (dirección aproximada).', 1],
+    ['prep_s_014', 'fill_preposition', 'preposizioni_semplici', 'A2', 'Lavoro ___ le sei.', 'Trabajo hasta las seis.', '["fino a","fino alle"]', '["fino"]', '["per","tra","entro"]', '"Fino a" indica limite temporale o spaziale: lavoro fino alle sei.', '"Fino a" = hasta.', 1],
+    ['prep_s_015', 'fill_preposition', 'preposizioni_semplici', 'B1', 'Riesco ___ capire.', 'Logro entender.', '["a"]', '[]', '["di","in","per"]', '"Riuscire a + infinito" è una reggenza verbale: riuscire a = lograr.', 'Reggenza: riuscire a + infinitivo.', 2],
+    // Mode 2: articolate_form (15)
+    ['prep_a_001', 'articolate_form', 'preposizioni_articolate', 'A1', 'a + lo = ___', null, '["allo"]', '[]', '["al","alla","agli"]', 'a + lo = allo. "Lo" si usa con parole che iniziano per s+consonante, z, gn, ps, x, y.', 'a + lo = allo', 1],
+    ['prep_a_002', 'articolate_form', 'preposizioni_articolate', 'A1', 'di + gli = ___', null, '["degli"]', '[]', '["dei","delle","del"]', 'di + gli = degli. "Gli" si usa al plurale come "lo" al singolare.', 'di + gli = degli', 1],
+    ['prep_a_003', 'articolate_form', 'preposizioni_articolate', 'A1', "da + l' = ___", null, '["dall\'"]', '[]', '["dal","dalla","dagli"]', "da + l' = dall'. L'apostrofo indica una vocale iniziale.", "da + l' = dall'", 1],
+    ['prep_a_004', 'articolate_form', 'preposizioni_articolate', 'A1', "su + l' = ___", null, '["sull\'"]', '[]', '["sul","sulla","sugli"]', "su + l' = sull'.", "su + l' = sull'", 1],
+    ['prep_a_005', 'articolate_form', 'preposizioni_articolate', 'A1', 'in + le = ___', null, '["nelle"]', '[]', '["nello","nella","nei"]', 'in + le = nelle. Femminile plurale.', 'in + le = nelle', 1],
+    ['prep_a_006', 'articolate_form', 'preposizioni_articolate', 'A1', 'delle = di + ___', null, '["le"]', '[]', '["gli","la","i"]', 'delle = di + le. Femminile plurale.', 'delle = di + le', 1],
+    ['prep_a_007', 'articolate_form', 'preposizioni_articolate', 'A1', 'agli = a + ___', null, '["gli"]', '[]', '["i","lo","le"]', 'agli = a + gli. Maschile plurale (davanti a vocale, s+cons, z…).', 'agli = a + gli', 1],
+    ['prep_a_008', 'articolate_form', 'preposizioni_articolate', 'A1', 'nel = ___ + il', null, '["in"]', '[]', '["su","di","a"]', 'nel = in + il. La preposizione base è "in".', 'nel = in + il', 1],
+    ['prep_a_009', 'articolate_form', 'preposizioni_articolate', 'A1', 'sulla = su + ___', null, '["la"]', '[]', '["il","lo","le"]', 'sulla = su + la. Femminile singolare.', 'sulla = su + la', 1],
+    ['prep_a_010', 'articolate_form', 'preposizioni_articolate', 'A1', 'dai = da + ___', null, '["i"]', '[]', '["gli","il","lo"]', 'dai = da + i. Maschile plurale regolare.', 'dai = da + i', 1],
+    ['prep_a_011', 'articolate_form', 'preposizioni_articolate', 'A1', "nell' = ___ + l'", null, '["in"]', '[]', '["su","a","da"]', "nell' = in + l'. Davanti a vocale.", "nell' = in + l'", 1],
+    ['prep_a_012', 'articolate_form', 'preposizioni_articolate', 'A1', 'sui = ___ + i', null, '["su"]', '[]', '["di","a","da"]', 'sui = su + i. Maschile plurale.', 'sui = su + i', 1],
+    ['prep_a_013', 'articolate_form', 'preposizioni_articolate', 'A2', "dall' si usa con parole che iniziano per ___", null, '["vocale","una vocale"]', '[]', '["consonante","s","z"]', "dall' = da + l'. L'apostrofo sostituisce l'articolo \"lo/la/il\" davanti a vocale.", "dall' se usa antes de vocal.", 2],
+    ['prep_a_014', 'articolate_form', 'preposizioni_articolate', 'A2', 'col = con + ___', null, '["il"]', '[]', '["lo","la","i"]', 'col = con + il. Contrazione accettata, comune nel parlato. "Con il" è altrettanto corretto.', 'col = con + il (contracción aceptada).', 2],
+    ['prep_a_015', 'articolate_form', 'preposizioni_articolate', 'A2', 'negli = in + ___', null, '["gli"]', '[]', '["i","le","lo"]', 'negli = in + gli. Maschile plurale (davanti a vocale o consonanti speciali).', 'negli = in + gli', 1],
+    // Mode 3: contrast (12)
+    ['prep_c_001', 'contrast', 'luogo_e_movimento', 'A1', 'Vado ___ Italia.', 'Voy a Italia.', '["in"]', '[]', '["a","da","di"]', 'Con i nomi di paesi si usa "in": in Italia, in Spagna. Con le città si usa "a": a Roma, a Milano.', 'Países: "in". Ciudades: "a".', 1],
+    ['prep_c_002', 'contrast', 'luogo_e_movimento', 'A1', 'Vado ___ Roma.', 'Voy a Roma.', '["a"]', '[]', '["in","da","di"]', 'Con le città si usa "a": a Roma, a Parigi. Con i paesi si usa "in": in Italia.', 'Ciudades: "a". Países: "in".', 1],
+    ['prep_c_003', 'contrast', 'luogo_e_movimento', 'A2', 'Vado ___ scuola.', 'Voy a la escuela.', '["a"]', '[]', '["in","nella","alla"]', '"A scuola" è un\'espressione fissa (senza articolo). Analogamente: in ufficio, in banca, al cinema.', '"A scuola" es una expresión fija.', 2],
+    ['prep_c_004', 'contrast', 'tempo', 'A2', 'Arrivo ___ due ore.', 'Llego dentro de dos horas (a partir de ahora).', '["tra","fra"]', '[]', '["in","per","da"]', '"Tra/fra due ore" = dentro de dos horas (en el futuro). "In due ore" = necesito dos horas para terminarlo.', '"Tra/fra" = dentro de X tiempo. "In" = en X tiempo (duración).', 2],
+    ['prep_c_005', 'contrast', 'tempo', 'A2', 'Finisco ___ due ore.', 'Termino en dos horas (me lleva dos horas).', '["in"]', '[]', '["tra","fra","per"]', '"In due ore" = necesito dos horas para completarlo. "Tra due ore" = en dos horas a partir de ahora.', '"In" = tiempo necesario. "Tra/fra" = tiempo futuro.', 2],
+    ['prep_c_006', 'contrast', 'preposizioni_semplici', 'A1', 'Sono ___ Madrid (origine stabile).', 'Soy de Madrid (origen).', '["di"]', '[]', '["da","a","in"]', '"Sono di Madrid" = soy de Madrid (origen permanente). "Vengo da Madrid" = vengo de Madrid (movimiento).', '"Di" = origen. "Da" = movimiento desde.', 2],
+    ['prep_c_007', 'contrast', 'preposizioni_semplici', 'A1', 'Vengo ___ Madrid (movimento).', 'Vengo de Madrid (movimiento).', '["da"]', '[]', '["di","a","in"]', '"Vengo da Madrid" indica movimento da un luogo. "Sono di Madrid" indica origine stabile.', '"Da" = movimiento. "Di" = origen estable.', 2],
+    ['prep_c_008', 'contrast', 'causa_scopo_mezzo', 'A2', 'Ho superato l\'esame ___ Marco.', 'Aprobé el examen gracias a Marco.', '["grazie a"]', '[]', '["a causa di","per via di","con"]', '"Grazie a" si usa per cause positive o favorevoli. "A causa di" si usa spesso per cause negative.', '"Grazie a" = causa favorable. "A causa di" = causa (generalmente negativa).', 2],
+    ['prep_c_009', 'contrast', 'causa_scopo_mezzo', 'B1', 'Il volo è cancellato ___ dello sciopero.', 'El vuelo está cancelado a causa de la huelga.', '["a causa"]', '["a causa di"]', '["grazie a","per via","invece"]', '"A causa di" introduce una causa, spesso negativa. "Grazie a" introduce una causa positiva.', '"A causa di" para causas (generalmente) negativas.', 2],
+    ['prep_c_010', 'contrast', 'luogo_e_movimento', 'A2', 'L\'hotel è ___ della stazione.', 'El hotel está cerca de la estación.', '["vicino a","vicino alla","nei pressi"]', '["nei pressi di"]', '["lontano da","davanti a","dietro"]', '"Vicino a" è informale. "Nei pressi di" è più formale o preciso.', '"Vicino a" = informal. "Nei pressi di" = formal/preciso.', 2],
+    ['prep_c_011', 'contrast', 'preposizioni_semplici', 'B1', 'Ho studiato ___ un\'ora.', 'Estudié durante una hora.', '["per"]', '[]', '["da","tra","in"]', '"Per + durata" con passato prossimo indica per quanto tempo è durata l\'azione. Non "da" (che implica continuazione nel presente).', '"Per" = duración en el pasado. "Da" implica acción que continúa.', 2],
+    ['prep_c_012', 'contrast', 'luogo_e_movimento', 'A2', 'Il libro è ___ tavolo.', 'El libro está sobre la mesa.', '["sul"]', '["su il","su"]', '["nel","del","nel"]', 'su + il = sul. Posizione sopra una superficie.', 'su + il = sul (sobre la mesa).', 1],
+    // Mode 4: verb_government (10)
+    ['prep_r_001', 'verb_government', 'preposizioni_semplici', 'A2', 'Comincio ___ studiare.', 'Empiezo a estudiar.', '["a"]', '[]', '["di","per","in"]', 'Reggenza: cominciare a + infinito.', 'Reggencia: cominciare a + infinitivo.', 1],
+    ['prep_r_002', 'verb_government', 'preposizioni_semplici', 'B1', 'Smetto ___ fumare.', 'Dejo de fumar.', '["di"]', '[]', '["a","per","da"]', 'Reggenza: smettere di + infinito.', 'Reggencia: smettere di + infinitivo.', 1],
+    ['prep_r_003', 'verb_government', 'preposizioni_semplici', 'B1', 'Ho bisogno ___ aiuto.', 'Necesito ayuda.', '["di"]', '[]', '["a","per","da"]', 'Reggenza: avere bisogno di + sostantivo.', 'Reggencia: avere bisogno di + sustantivo.', 1],
+    ['prep_r_004', 'verb_government', 'preposizioni_semplici', 'B1', 'Dipende ___ te.', 'Depende de ti.', '["da"]', '[]', '["di","a","per"]', 'Reggenza: dipendere da + persona/cosa.', 'Reggencia: dipendere da + persona/cosa.', 1],
+    ['prep_r_005', 'verb_government', 'preposizioni_semplici', 'B1', 'Non riesco ___ dormire.', 'No logro dormir.', '["a"]', '[]', '["di","per","in"]', 'Reggenza: riuscire a + infinito.', 'Reggencia: riuscire a + infinitivo.', 1],
+    ['prep_r_006', 'verb_government', 'preposizioni_semplici', 'A2', 'Continuo ___ lavorare.', 'Sigo trabajando.', '["a"]', '[]', '["di","per","da"]', 'Reggenza: continuare a + infinito.', 'Reggencia: continuare a + infinitivo.', 1],
+    ['prep_r_007', 'verb_government', 'preposizioni_semplici', 'B1', 'Mi sono dimenticato ___ chiamarti.', 'Me olvidé de llamarte.', '["di"]', '[]', '["a","da","per"]', 'Reggenza: dimenticarsi di + infinito.', 'Reggencia: dimenticarsi di + infinitivo.', 2],
+    ['prep_r_008', 'verb_government', 'preposizioni_semplici', 'A2', 'Parlo ___ calcio.', 'Hablo de fútbol.', '["di"]', '[]', '["su","con","per"]', 'Reggenza: parlare di + argomento. Non "su" come in spagnolo.', 'Reggencia: parlare di. No usar "su".', 1],
+    ['prep_r_009', 'verb_government', 'preposizioni_semplici', 'B1', 'Ti ringrazio ___ l\'aiuto.', 'Te agradezco la ayuda.', '["per"]', '[]', '["di","a","con"]', 'Reggenza: ringraziare per + cosa. Non "di".', 'Reggencia: ringraziare per + cosa.', 2],
+    ['prep_r_010', 'verb_government', 'preposizioni_semplici', 'B1', 'Ho deciso ___ partire.', 'He decidido partir.', '["di"]', '[]', '["a","per","in"]', 'Reggenza: decidere di + infinito.', 'Reggencia: decidere di + infinitivo.', 1],
+    // Mode 5: fill_locuzione (8)
+    ['prep_l_001', 'fill_locuzione', 'causa_scopo_mezzo', 'B1', 'Il volo è cancellato ___ dello sciopero.', 'El vuelo está cancelado a causa de la huelga.', '["a causa"]', '["a causa di"]', '["grazie","per via","a seguito"]', 'La locuzione è "a causa di": a causa di + nome. Indica causa, spesso negativa.', '"A causa di" = a causa de.', 2],
+    ['prep_l_002', 'fill_locuzione', 'causa_scopo_mezzo', 'A2', '___ a te ho superato l\'esame.', 'Gracias a ti aprobé el examen.', '["grazie"]', '["grazie a"]', '["a causa","in seguito","per via"]', 'La locuzione è "grazie a": grazie a + persona/cosa. Indica causa positiva.', '"Grazie a" = gracias a.', 1],
+    ['prep_l_003', 'fill_locuzione', 'confronto_riferimento', 'B1', '___ a ieri fa più caldo.', 'En comparación con ayer hace más calor.', '["rispetto"]', '["rispetto a"]', '["a differenza","in base","in quanto"]', 'La locuzione è "rispetto a": rispetto a + termine di paragone.', '"Rispetto a" = en comparación con / respecto a.', 2],
+    ['prep_l_004', 'fill_locuzione', 'contrasto_esclusione', 'B1', '___ la pioggia siamo usciti.', 'A pesar de la lluvia salimos.', '["nonostante"]', '[]', '["invece di","a causa di","grazie a"]', '"Nonostante + nome/pronome" indica concessione. Con verbo: nonostante sia tardi (+ congiuntivo).', '"Nonostante" = a pesar de.', 2],
+    ['prep_l_005', 'fill_locuzione', 'contrasto_esclusione', 'B1', 'Vengono tutti ___ lui.', 'Vienen todos excepto él.', '["tranne","eccetto","salvo"]', '[]', '["invece di","grazie a","nonostante"]', '"Tranne", "eccetto" e "salvo" sono sinonimi: indicano esclusione. "Tranne" è il più comune nel parlato.', '"Tranne/eccetto/salvo" = excepto.', 1],
+    ['prep_l_006', 'fill_locuzione', 'luogo_e_movimento', 'A2', 'Il bagno è ___ al corridoio.', 'El baño está al fondo del pasillo.', '["in fondo"]', '["in fondo a"]', '["in cima","di fronte","accanto"]', '"In fondo a" indica il punto più lontano o più basso. "In cima a" il punto più alto.', '"In fondo a" = al fondo de.', 2],
+    ['prep_l_007', 'fill_locuzione', 'confronto_riferimento', 'B2', 'Decidiamo ___ ai risultati.', 'Decidimos según los resultados.', '["in base"]', '["in base a"]', '["rispetto","a differenza","in quanto"]', '"In base a" = según / basándose en. Preferire "in base a" o "secondo" rispetto al calco "en base a".', '"In base a" = según / basándose en.', 2],
+    ['prep_l_008', 'fill_locuzione', 'causa_scopo_mezzo', 'B2', 'Studio ___ migliorare.', 'Estudio con el fin de mejorar.', '["allo scopo di","per"]', '[]', '["a causa di","grazie a","invece di"]', '"Allo scopo di + infinito" esprime finalità formale. "Per + infinito" è più comune e informale: studio per migliorare.', '"Allo scopo di" / "per" = con el fin de.', 2],
+  ];
+
+  try {
+    const insEx = db.prepare(`INSERT OR REPLACE INTO preposition_exercises(id,exercise_type,topic_slug,cefr,sentence_it,sentence_es,correct_answers,accepted_variants,distractors,explanation_it,explanation_es,difficulty) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`);
+    exercises.forEach(e => insEx.run(...e));
+  } catch (_) {}
 }
 
 module.exports = { createSchema };

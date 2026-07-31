@@ -1328,3 +1328,143 @@ body  { min-height: 100vh; min-height: 100dvh; }
      with dvh automatically. No JS needed. */
   .topbar { position: sticky; top: 0; }
 }
+
+/* ── Phase 4B: Preposizioni section ─────────────────────────────────────── */
+.prep-topic-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.prep-topic-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  transition: box-shadow var(--transition);
+}
+.prep-topic-card:hover {
+  box-shadow: var(--shadow-md);
+}
+.prep-topic-icon { font-size: 1.4rem; margin-bottom: 6px; }
+.prep-topic-name { font-weight: 600; font-size: 0.95rem; }
+.prep-topic-sub { font-size: 0.8rem; color: var(--text-muted, var(--text-3)); margin-top: 2px; }
+
+.prep-session-wrap { max-width: 640px; }
+
+.prep-progress {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.prep-progress-bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.prep-progress-label {
+  font-size: 0.8rem;
+  color: var(--text-3);
+  margin-bottom: 14px;
+}
+.prep-session-type {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+.prep-session-prompt {
+  font-size: 1.1rem;
+  font-weight: 500;
+  line-height: 1.7;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 10px;
+}
+.prep-blank {
+  display: inline-block;
+  min-width: 48px;
+  border-bottom: 2px solid var(--accent);
+  color: var(--accent);
+  text-align: center;
+  padding: 0 4px;
+}
+.prep-input {
+  display: inline-block;
+  border: none;
+  border-bottom: 2px solid var(--accent);
+  background: transparent;
+  font-size: 1.1rem;
+  font-family: inherit;
+  color: var(--text);
+  min-width: 80px;
+  padding: 2px 4px;
+  outline: none;
+}
+.prep-input:focus { border-bottom-color: var(--accent-h, var(--accent)); }
+.prep-sentence-es {
+  font-size: 0.85rem;
+  color: var(--text-3);
+  margin-bottom: 12px;
+  font-style: italic;
+}
+.prep-choices { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.prep-choice-btn {
+  padding: 8px 20px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 1rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+}
+.prep-choice-btn:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--accent);
+}
+.prep-choice-btn:disabled { cursor: default; opacity: 0.75; }
+.prep-choice-correct { background: var(--accent-bg) !important; border-color: var(--accent) !important; color: var(--accent) !important; font-weight: 600; }
+.prep-choice-wrong { background: var(--red-bg) !important; border-color: var(--red) !important; color: var(--red) !important; }
+
+.prep-summary {
+  max-width: 520px;
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px 24px;
+}
+.prep-summary-stats {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin: 12px 0;
+}
+.prep-stat-item {
+  flex: 1;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+.prep-stat-num { font-size: 1.5rem; font-weight: 700; }
+.prep-stat-lbl { font-size: 0.75rem; color: var(--text-3); margin-top: 2px; }
+.prep-stat-correct { border-color: var(--accent); }
+.prep-stat-correct .prep-stat-num { color: var(--accent); }
+.prep-stat-almost { border-color: var(--gold); }
+.prep-stat-almost .prep-stat-num { color: var(--gold); }
+.prep-stat-wrong { border-color: var(--red); }
+.prep-stat-wrong .prep-stat-num { color: var(--red); }
+
+@media (max-width: 600px) {
+  .prep-topic-grid { grid-template-columns: 1fr 1fr; }
+  .prep-summary-stats { gap: 8px; }
+}

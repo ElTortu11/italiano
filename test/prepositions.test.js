@@ -153,6 +153,176 @@ if (db) {
   assert(contrastCount >= 5, `preposition_contrasts has >= 5 rows (got ${contrastCount})`);
 }
 
+// ── Phase 4B: exercise bank tests ─────────────────────────────────────────────
+console.log('\nPhase 4B — buildPrepositionEvaluation logic:');
+
+// Minimal exercise stub for evaluation tests
+function makeExercise(opts) {
+  return {
+    id: opts.id || 'test',
+    exercise_type: opts.exercise_type || 'fill_preposition',
+    topic_slug: opts.topic_slug || 'preposizioni_semplici',
+    correct_answers: JSON.stringify(opts.correct_answers || ['a']),
+    accepted_variants: JSON.stringify(opts.accepted_variants || []),
+    explanation_it: opts.explanation_it || 'Spiegazione test.',
+  };
+}
+
+// Inline copy of buildPrepositionEvaluation for Node.js testing
+function buildPrepositionEvaluation(typed, exercise) {
+  const norm = s => (s || '').normalize('NFC').toLowerCase().trim().replace(/['']/g, "'");
+  const typedN = norm(typed);
+  let correct = [];
+  let variants = [];
+  try { correct = JSON.parse(exercise.correct_answers || '[]'); } catch (_) {}
+  try { variants = JSON.parse(exercise.accepted_variants || '[]'); } catch (_) {}
+  const allCorrect = [...correct, ...variants];
+
+  if (allCorrect.some(a => norm(a) === typedN)) {
+    return { status: 'correct_exact', accepted: true, score: 1.0, userAnswer: typed, targetAnswer: correct[0], errorType: null, saveToErrorNotebook: false };
+  }
+  if (exercise.exercise_type === 'fill_locuzione') {
+    if (allCorrect.some(a => norm(a).startsWith(typedN) && typedN.length >= norm(a).length * 0.6)) {
+      return { status: 'almost_correct_missing_article', accepted: false, score: 0.5, userAnswer: typed, targetAnswer: correct[0], errorType: 'incomplete_expression', saveToErrorNotebook: true };
+    }
+  }
+  const isClose = allCorrect.some(a => {
+    const target = norm(a);
+    if (Math.abs(typedN.length - target.length) > 2) return false;
+    let diff = 0;
+    const minLen = Math.min(typedN.length, target.length);
+    for (let i = 0; i < minLen; i++) if (typedN[i] !== target[i]) diff++;
+    diff += Math.abs(typedN.length - target.length);
+    return diff <= 1 && typedN.length >= 2;
+  });
+  if (isClose) {
+    return { status: 'almost_correct_spelling', accepted: false, score: 0.5, userAnswer: typed, targetAnswer: correct[0], errorType: 'spelling', saveToErrorNotebook: false };
+  }
+  return { status: 'incorrect', accepted: false, score: 0.0, userAnswer: typed, targetAnswer: correct[0],
+    errorType: exercise.exercise_type === 'contrast' ? 'contrast_confusion' : exercise.exercise_type === 'verb_government' ? 'verb_regency' : 'simple_preposition',
+    saveToErrorNotebook: true };
+}
+
+// Test: exact match
+{
+  const ex = makeExercise({ correct_answers: ['a'] });
+  const r = buildPrepositionEvaluation('a', ex);
+  assert(r.status === 'correct_exact', 'exact match → correct_exact');
+  assert(r.accepted === true, 'exact match → accepted');
+}
+
+// Test: accepted variant
+{
+  const ex = makeExercise({ correct_answers: ['tra'], accepted_variants: ['fra'] });
+  const r = buildPrepositionEvaluation('fra', ex);
+  assert(r.status === 'correct_exact', 'accepted variant → correct_exact');
+}
+
+// Test: typo (1 char off)
+{
+  const ex = makeExercise({ correct_answers: ['della'] });
+  const r = buildPrepositionEvaluation('dellа', ex); // 'а' is Cyrillic — fallback to spelling check
+  // For ASCII typo:
+  const r2 = buildPrepositionEvaluation('delia', ex);
+  assert(r2.status === 'almost_correct_spelling', 'typo (1 char off) → almost_correct_spelling');
+}
+
+// Test: incomplete locuzione → almost_correct_missing_article
+{
+  const ex = makeExercise({ exercise_type: 'fill_locuzione', correct_answers: ['a causa di'], accepted_variants: [] });
+  const r = buildPrepositionEvaluation('a causa', ex);
+  assert(r.status === 'almost_correct_missing_article', 'incomplete locuzione → almost_correct_missing_article');
+  assert(r.errorType === 'incomplete_expression', 'incomplete locuzione errorType = incomplete_expression');
+  assert(r.saveToErrorNotebook === true, 'incomplete locuzione → saveToErrorNotebook');
+}
+
+// Test: wrong preposition → incorrect with errorType
+{
+  const ex = makeExercise({ exercise_type: 'fill_preposition', correct_answers: ['a'] });
+  const r = buildPrepositionEvaluation('in', ex);
+  assert(r.status === 'incorrect', 'wrong preposition → incorrect');
+  assert(r.errorType === 'simple_preposition', 'wrong preposition errorType = simple_preposition');
+  assert(r.saveToErrorNotebook === true, 'wrong preposition → saveToErrorNotebook');
+}
+
+// Test: contrast wrong → contrast_confusion errorType
+{
+  const ex = makeExercise({ exercise_type: 'contrast', correct_answers: ['a'] });
+  const r = buildPrepositionEvaluation('in', ex);
+  assert(r.errorType === 'contrast_confusion', 'contrast wrong → errorType contrast_confusion');
+}
+
+// Test: verb_government wrong → verb_regency errorType
+{
+  const ex = makeExercise({ exercise_type: 'verb_government', correct_answers: ['di'] });
+  const r = buildPrepositionEvaluation('a', ex);
+  assert(r.errorType === 'verb_regency', 'verb_government wrong → errorType verb_regency');
+}
+
+// Test: apostrophe normalization
+{
+  const ex = makeExercise({ correct_answers: ["dall'"] });
+  const r1 = buildPrepositionEvaluation("dall'", ex);  // curly apostrophe
+  const r2 = buildPrepositionEvaluation("dall'", ex);  // straight apostrophe
+  assert(r1.status === 'correct_exact', 'apostrophe normalization: curly → correct_exact');
+  assert(r2.status === 'correct_exact', 'apostrophe normalization: straight → correct_exact');
+}
+
+// Phase 4B DB tests
+if (db) {
+  console.log('\nPhase 4B — DB exercise bank:');
+
+  let exCount = 0;
+  let exRows = [];
+  try {
+    exRows = db.prepare('SELECT * FROM preposition_exercises').all();
+    exCount = exRows.length;
+  } catch (_) {}
+  assert(exCount >= 60, `At least 60 exercises seeded (got ${exCount})`);
+
+  // All 5 exercise types present
+  const types = new Set(exRows.map(e => e.exercise_type));
+  assert(types.has('fill_preposition'), 'exercise type fill_preposition present');
+  assert(types.has('articolate_form'), 'exercise type articolate_form present');
+  assert(types.has('contrast'), 'exercise type contrast present');
+  assert(types.has('verb_government'), 'exercise type verb_government present');
+  assert(types.has('fill_locuzione'), 'exercise type fill_locuzione present');
+
+  // All exercises have non-empty correct_answers
+  const missingAnswers = exRows.filter(e => {
+    try { const arr = JSON.parse(e.correct_answers || '[]'); return !arr.length; } catch (_) { return true; }
+  });
+  assert(missingAnswers.length === 0, `All exercises have non-empty correct_answers (${missingAnswers.length} missing)`);
+
+  // All exercises have explanation_it
+  const missingExpl = exRows.filter(e => !e.explanation_it || e.explanation_it.trim() === '');
+  assert(missingExpl.length === 0, `All exercises have explanation_it (${missingExpl.length} missing)`);
+
+  // No exercise has empty sentence_it
+  const emptySentence = exRows.filter(e => !e.sentence_it || e.sentence_it.trim() === '');
+  assert(emptySentence.length === 0, `No exercise has empty sentence_it (${emptySentence.length} empty)`);
+
+  // Mode 2 (articolate_form) exercises check
+  const artRows = exRows.filter(e => e.exercise_type === 'articolate_form');
+  assert(artRows.length >= 15, `At least 15 articolate_form exercises (got ${artRows.length})`);
+
+  // Mode 3 (contrast) have at least 2 distractors
+  const contrastRows = exRows.filter(e => e.exercise_type === 'contrast');
+  const contrastBad = contrastRows.filter(e => {
+    try { return JSON.parse(e.distractors || '[]').length < 2; } catch (_) { return true; }
+  });
+  assert(contrastBad.length === 0, `All contrast exercises have >= 2 distractors (${contrastBad.length} fail)`);
+
+  console.log('\nPhase 4B — DB new tables:');
+  let topicStatsOk = false;
+  try { db.prepare('SELECT COUNT(*) as n FROM preposition_topic_stats').get(); topicStatsOk = true; } catch (_) {}
+  assert(topicStatsOk, 'preposition_topic_stats table exists');
+
+  let errorLogOk = false;
+  try { db.prepare('SELECT COUNT(*) as n FROM preposition_error_log').get(); errorLogOk = true; } catch (_) {}
+  assert(errorLogOk, 'preposition_error_log table exists');
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n─────────────────────────────────────`);
 console.log(`Risultato: ${passed} passati, ${failed} falliti su ${passed+failed} totali`);
