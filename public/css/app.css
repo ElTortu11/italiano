@@ -1560,3 +1560,68 @@ body  { min-height: 100vh; min-height: 100dvh; }
   .conj-paradigm-grid { grid-template-columns: 2.5rem 1fr; gap: 6px 10px; }
   .conj-session-wrap { padding: 16px 10px; }
 }
+
+/* ── Phase 5B: Accent bar (character insert helper) ─────────────────────────── */
+.accent-bar {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.accent-btn {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 6px;
+  background: var(--surface-2, var(--card));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--text);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  font-family: inherit;
+}
+.accent-btn:hover { background: var(--hover); border-color: var(--accent); color: var(--accent); }
+.accent-btn:active { transform: scale(0.95); }
+
+/* ── Phase 5B: Statistics bar chart ─────────────────────────────────────────── */
+.stat-bar-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+.stat-bar-label { width: 160px; font-size: 0.8rem; color: var(--muted); flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stat-bar-track { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+.stat-bar-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.5s ease; }
+.stat-bar-fill.low { background: var(--red, #e74c3c); }
+.stat-bar-fill.mid { background: var(--gold, #f39c12); }
+.stat-bar-pct { width: 36px; font-size: 0.8rem; color: var(--muted); text-align: right; flex-shrink: 0; }
+
+/* ── Phase 5B: Paradigm row with correct/wrong state ─────────────────────────── */
+.conj-paradigm-row { display: grid; grid-template-columns: 80px 1fr; align-items: center; gap: 8px; }
+.conj-paradigm-person { font-size: 0.85rem; color: var(--muted); font-weight: 500; }
+.conj-paradigm-row input { margin: 0; }
+.conj-paradigm-row.correct input { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.conj-paradigm-row.wrong input { border-color: var(--red, #e74c3c); background: color-mix(in srgb, var(--red, #e74c3c) 12%, transparent); }
+
+/* ── Phase 5B: Mode selector pills for esercizi tab ─────────────────────────── */
+.conj-mode-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.conj-mode-pill {
+  padding: 4px 12px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border);
+  background: var(--card);
+  color: var(--muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.conj-mode-pill.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); font-weight: 600; }
+.conj-mode-pill:hover:not(.active) { border-color: var(--accent); color: var(--accent); }
+
+/* ── Phase 5B: Mobile safe area ─────────────────────────────────────────────── */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .conj-session-wrap { padding-bottom: max(80px, calc(60px + env(safe-area-inset-bottom))); }
+}
+@media (max-width: 480px) {
+  .conj-verb-header { font-size: 0.95rem; }
+  .accent-bar { gap: 3px; }
+  .accent-btn { min-width: 28px; height: 28px; font-size: 0.9rem; }
+  .conj-paradigm-row { grid-template-columns: 60px 1fr; }
+}

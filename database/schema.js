@@ -1325,6 +1325,259 @@ function createSchema() {
     ];
     conjExercises.forEach(e => { try { insConjEx.run(...e); } catch (_) {} });
   } catch (_) {}
+
+  // ── Phase 5B: New columns on verbs ──────────────────────────────────────────
+  try { db.exec(`ALTER TABLE verbs ADD COLUMN auxiliary_variants TEXT DEFAULT '[]'`); } catch(_) {}
+  try { db.exec(`ALTER TABLE verbs ADD COLUMN auxiliary_note TEXT`); } catch(_) {}
+
+  // ── Phase 5B: New columns on conjugation_error_log ───────────────────────────
+  try { db.exec(`ALTER TABLE conjugation_error_log ADD COLUMN exercise_id TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE conjugation_error_log ADD COLUMN subject TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE conjugation_error_log ADD COLUMN exercise_mode TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE conjugation_error_log ADD COLUMN secondary_issues TEXT DEFAULT '[]'`); } catch(_) {}
+  try { db.exec(`ALTER TABLE conjugation_error_log ADD COLUMN auxiliary TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE conjugation_error_log ADD COLUMN participle TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE conjugation_error_log ADD COLUMN last_reviewed_at INTEGER`); } catch(_) {}
+  try { db.exec(`ALTER TABLE conjugation_error_log ADD COLUMN review_count INTEGER DEFAULT 0`); } catch(_) {}
+  try { db.exec(`ALTER TABLE conjugation_error_log ADD COLUMN correct_streak INTEGER DEFAULT 0`); } catch(_) {}
+  try { db.exec(`ALTER TABLE conjugation_error_log ADD COLUMN mastery_status TEXT DEFAULT 'nuovo'`); } catch(_) {}
+
+  // ── Phase 5B: Insert missing verbs ───────────────────────────────────────────
+  const insVerbB = db.prepare(`INSERT OR IGNORE INTO verbs(infinitive,translation,auxiliary,past_participle,conjugation_group,is_regular,is_isc) VALUES(?,?,?,?,?,?,?)`);
+  [
+    ['dimenticare','olvidar','avere','dimenticato','are',1,0],
+    ['cominciare','empezar / comenzar','avere','cominciato','are',1,0],
+    ['camminare','caminar','avere','camminato','are',1,0],
+    ['usare','usar / utilizar','avere','usato','are',1,0],
+    ['amare','amar / querer','avere','amato','are',1,0],
+    ['suonare','tocar (instrumento)','avere','suonato','are',1,0],
+    ['chiudere','cerrar','avere','chiuso','ere',0,0],
+    ['vendere','vender','avere','venduto','ere',1,0],
+    ['passare','pasar','essere','passato','are',1,0],
+    ['sedere','sentarse','essere','seduto','ere',0,0],
+    ['scoprire','descubrir','avere','scoperto','ire',0,0],
+    ['costruire','construir','avere','costruito','ire_isc',1,1],
+    ['obbedire','obedecer','avere','obbedito','ire_isc',1,1],
+    ['garantire','garantizar','avere','garantito','ire_isc',1,1],
+    ['interessare','interesar','essere','interessato','are',1,0],
+    ['imparare','aprender','avere','imparato','are',1,0],
+  ].forEach(row => { try { insVerbB.run(...row); } catch(_) {} });
+
+  // ── Phase 5B: Update verb metadata (idempotent) ───────────────────────────────
+  try {
+    db.prepare(`UPDATE verbs SET conjugation_group='ire_isc' WHERE infinitive='capire' AND conjugation_group='ire'`).run();
+    db.prepare(`UPDATE verbs SET auxiliary='essere' WHERE infinitive='correre'`).run();
+    db.prepare(`UPDATE verbs SET auxiliary='essere' WHERE infinitive='vivere'`).run();
+    [
+      ['camminare','intransitive'],['andare','intransitive'],['stare','intransitive'],
+      ['arrivare','intransitive'],['entrare','intransitive'],['tornare','intransitive'],
+      ['partire','intransitive'],['dormire','intransitive'],['uscire','intransitive'],
+      ['nascere','intransitive'],['morire','intransitive'],['crescere','intransitive'],
+      ['rimanere','intransitive'],['restare','intransitive'],['essere','intransitive'],
+      ['piacere','intransitive'],['mancare','intransitive'],['sedere','intransitive'],
+      ['salire','intransitive'],['correre','intransitive'],['vivere','intransitive'],
+      ['interessare','intransitive'],
+    ].forEach(([inf,tr]) => {
+      try { db.prepare(`UPDATE verbs SET transitivity=? WHERE infinitive=?`).run(tr,inf); } catch(_) {}
+    });
+  } catch(_) {}
+
+  // ── Phase 5B: auxiliary_variants for variable-auxiliary verbs ─────────────────
+  try {
+    const setVar = db.prepare(`UPDATE verbs SET auxiliary=?,auxiliary_variants=?,auxiliary_note=? WHERE infinitive=?`);
+    [
+      ['passare','essere','[{"aux":"avere","ctx":"uso transitivo: ho passato una bella giornata"},{"aux":"essere","ctx":"movimento: sono passato da casa"}]','Transitivo→avere; intransitivo→essere'],
+      ['salire','essere','[{"aux":"avere","ctx":"uso transitivo: ho salito le scale"},{"aux":"essere","ctx":"intransitivo: sono salito al terzo piano"}]','Transitivo→avere; intransitivo→essere'],
+      ['correre','essere','[{"aux":"avere","ctx":"sport generico: ho corso"},{"aux":"essere","ctx":"con destinazione: sono corso in ospedale"}]','Variazione nell\'uso contemporaneo'],
+      ['vivere','essere','[{"aux":"avere","ctx":"ho vissuto esperienze bellissime"},{"aux":"essere","ctx":"sono vissuto a Roma per anni"}]','Variazione: avere con oggetto, essere senza'],
+      ['finire','essere','[{"aux":"essere","ctx":"azione giunta a termine: il film è finito"},{"aux":"avere","ctx":"uso transitivo: ho finito il lavoro"}]','Intransitivo→essere; transitivo→avere'],
+    ].forEach(([inf,aux,variants,note]) => {
+      try { setVar.run(aux,variants,note,inf); } catch(_) {}
+    });
+  } catch(_) {}
+
+  // ── Phase 5B: Critical conjugation forms (INSERT OR REPLACE) ─────────────────
+  try {
+    const insFormR = db.prepare(`INSERT OR REPLACE INTO verb_conjugations(verb_id,tense,person,form) SELECT v.id,?,?,? FROM verbs v WHERE v.infinitive=?`);
+    const critForms = [
+      ['essere','present_indicative','io','sono'],['essere','present_indicative','tu','sei'],
+      ['essere','present_indicative','lui/lei','è'],['essere','present_indicative','noi','siamo'],
+      ['essere','present_indicative','voi','siete'],['essere','present_indicative','loro','sono'],
+      ['avere','present_indicative','io','ho'],['avere','present_indicative','tu','hai'],
+      ['avere','present_indicative','lui/lei','ha'],['avere','present_indicative','noi','abbiamo'],
+      ['avere','present_indicative','voi','avete'],['avere','present_indicative','loro','hanno'],
+      ['andare','present_indicative','io','vado'],['andare','present_indicative','tu','vai'],
+      ['andare','present_indicative','lui/lei','va'],['andare','present_indicative','noi','andiamo'],
+      ['andare','present_indicative','voi','andate'],['andare','present_indicative','loro','vanno'],
+      ['fare','present_indicative','io','faccio'],['fare','present_indicative','tu','fai'],
+      ['fare','present_indicative','lui/lei','fa'],['fare','present_indicative','noi','facciamo'],
+      ['fare','present_indicative','voi','fate'],['fare','present_indicative','loro','fanno'],
+      ['venire','present_indicative','io','vengo'],['venire','present_indicative','tu','vieni'],
+      ['venire','present_indicative','lui/lei','viene'],['venire','present_indicative','noi','veniamo'],
+      ['venire','present_indicative','voi','venite'],['venire','present_indicative','loro','vengono'],
+      ['andare','future_simple','io','andrò'],['andare','future_simple','tu','andrai'],
+      ['andare','future_simple','lui/lei','andrà'],['andare','future_simple','noi','andremo'],
+      ['andare','future_simple','voi','andrete'],['andare','future_simple','loro','andranno'],
+      ['essere','future_simple','io','sarò'],['essere','future_simple','tu','sarai'],
+      ['essere','future_simple','lui/lei','sarà'],['essere','future_simple','noi','saremo'],
+      ['essere','future_simple','voi','sarete'],['essere','future_simple','loro','saranno'],
+      ['avere','future_simple','io','avrò'],['avere','future_simple','tu','avrai'],
+      ['avere','future_simple','lui/lei','avrà'],['avere','future_simple','noi','avremo'],
+      ['avere','future_simple','voi','avrete'],['avere','future_simple','loro','avranno'],
+      ['fare','future_simple','io','farò'],['fare','future_simple','tu','farai'],
+      ['fare','future_simple','lui/lei','farà'],['fare','future_simple','noi','faremo'],
+      ['fare','future_simple','voi','farete'],['fare','future_simple','loro','faranno'],
+      ['essere','subjunctive_present','io','sia'],['essere','subjunctive_present','tu','sia'],
+      ['essere','subjunctive_present','lui/lei','sia'],['essere','subjunctive_present','noi','siamo'],
+      ['essere','subjunctive_present','voi','siate'],['essere','subjunctive_present','loro','siano'],
+      ['avere','subjunctive_present','io','abbia'],['avere','subjunctive_present','tu','abbia'],
+      ['avere','subjunctive_present','lui/lei','abbia'],['avere','subjunctive_present','noi','abbiamo'],
+      ['avere','subjunctive_present','voi','abbiate'],['avere','subjunctive_present','loro','abbiano'],
+      ['piacere','present_indicative','lui/lei','piace'],['piacere','present_indicative','loro','piacciono'],
+      ['capire','present_indicative','io','capisco'],['capire','present_indicative','tu','capisci'],
+      ['capire','present_indicative','lui/lei','capisce'],['capire','present_indicative','noi','capiamo'],
+      ['capire','present_indicative','voi','capite'],['capire','present_indicative','loro','capiscono'],
+      ['finire','present_indicative','io','finisco'],['finire','present_indicative','tu','finisci'],
+      ['finire','present_indicative','lui/lei','finisce'],['finire','present_indicative','noi','finiamo'],
+      ['finire','present_indicative','voi','finite'],['finire','present_indicative','loro','finiscono'],
+      ['uscire','present_indicative','io','esco'],['uscire','present_indicative','tu','esci'],
+      ['uscire','present_indicative','lui/lei','esce'],['uscire','present_indicative','noi','usciamo'],
+      ['uscire','present_indicative','voi','uscite'],['uscire','present_indicative','loro','escono'],
+      ['sapere','present_indicative','io','so'],['sapere','present_indicative','tu','sai'],
+      ['sapere','present_indicative','lui/lei','sa'],['sapere','present_indicative','noi','sappiamo'],
+      ['sapere','present_indicative','voi','sapete'],['sapere','present_indicative','loro','sanno'],
+      ['dare','present_indicative','io','do'],['dare','present_indicative','tu','dai'],
+      ['dare','present_indicative','lui/lei','dà'],['dare','present_indicative','noi','diamo'],
+      ['dare','present_indicative','voi','date'],['dare','present_indicative','loro','danno'],
+      ['stare','present_indicative','io','sto'],['stare','present_indicative','tu','stai'],
+      ['stare','present_indicative','lui/lei','sta'],['stare','present_indicative','noi','stiamo'],
+      ['stare','present_indicative','voi','state'],['stare','present_indicative','loro','stanno'],
+      ['bere','present_indicative','io','bevo'],['bere','present_indicative','tu','bevi'],
+      ['bere','present_indicative','lui/lei','beve'],['bere','present_indicative','noi','beviamo'],
+      ['bere','present_indicative','voi','bevete'],['bere','present_indicative','loro','bevono'],
+      ['dire','present_indicative','io','dico'],['dire','present_indicative','tu','dici'],
+      ['dire','present_indicative','lui/lei','dice'],['dire','present_indicative','noi','diciamo'],
+      ['dire','present_indicative','voi','dite'],['dire','present_indicative','loro','dicono'],
+      ['rimanere','present_indicative','io','rimango'],['rimanere','present_indicative','tu','rimani'],
+      ['rimanere','present_indicative','lui/lei','rimane'],['rimanere','present_indicative','noi','rimaniamo'],
+      ['rimanere','present_indicative','voi','rimanete'],['rimanere','present_indicative','loro','rimangono'],
+      ['scegliere','present_indicative','io','scelgo'],['scegliere','present_indicative','tu','scegli'],
+      ['scegliere','present_indicative','lui/lei','sceglie'],['scegliere','present_indicative','noi','scegliamo'],
+      ['scegliere','present_indicative','voi','scegliete'],['scegliere','present_indicative','loro','scelgono'],
+      ['tenere','present_indicative','io','tengo'],['tenere','present_indicative','tu','tieni'],
+      ['tenere','present_indicative','lui/lei','tiene'],['tenere','present_indicative','noi','teniamo'],
+      ['tenere','present_indicative','voi','tenete'],['tenere','present_indicative','loro','tengono'],
+      ['morire','present_indicative','io','muoio'],['morire','present_indicative','tu','muori'],
+      ['morire','present_indicative','lui/lei','muore'],['morire','present_indicative','noi','moriamo'],
+      ['morire','present_indicative','voi','morite'],['morire','present_indicative','loro','muoiono'],
+      ['salire','present_indicative','io','salgo'],['salire','present_indicative','tu','sali'],
+      ['salire','present_indicative','lui/lei','sale'],['salire','present_indicative','noi','saliamo'],
+      ['salire','present_indicative','voi','salite'],['salire','present_indicative','loro','salgono'],
+      ['sedere','present_indicative','io','siedo'],['sedere','present_indicative','tu','siedi'],
+      ['sedere','present_indicative','lui/lei','siede'],['sedere','present_indicative','noi','sediamo'],
+      ['sedere','present_indicative','voi','sedete'],['sedere','present_indicative','loro','siedono'],
+      ['potere','present_indicative','io','posso'],['potere','present_indicative','tu','puoi'],
+      ['potere','present_indicative','lui/lei','può'],['potere','present_indicative','noi','possiamo'],
+      ['potere','present_indicative','voi','potete'],['potere','present_indicative','loro','possono'],
+      ['volere','present_indicative','io','voglio'],['volere','present_indicative','tu','vuoi'],
+      ['volere','present_indicative','lui/lei','vuole'],['volere','present_indicative','noi','vogliamo'],
+      ['volere','present_indicative','voi','volete'],['volere','present_indicative','loro','vogliono'],
+      ['dovere','present_indicative','io','devo'],['dovere','present_indicative','tu','devi'],
+      ['dovere','present_indicative','lui/lei','deve'],['dovere','present_indicative','noi','dobbiamo'],
+      ['dovere','present_indicative','voi','dovete'],['dovere','present_indicative','loro','devono'],
+      ['venire','future_simple','io','verrò'],['venire','future_simple','tu','verrai'],
+      ['venire','future_simple','lui/lei','verrà'],['venire','future_simple','noi','verremo'],
+      ['venire','future_simple','voi','verrete'],['venire','future_simple','loro','verranno'],
+    ];
+    critForms.forEach(([inf,tense,person,form]) => {
+      try { insFormR.run(tense,person,form,inf); } catch(_) {}
+    });
+  } catch(_) {}
+
+  // ── Phase 5B: Additional conjugation exercises ────────────────────────────────
+  try {
+    const insExB = db.prepare(`INSERT OR REPLACE INTO conjugation_exercises(id,exercise_type,verb_id,tense_id,person,prompt_it,prompt_es,correct_answers,accepted_variants,distractors,explanation_it,explanation_es,difficulty,cefr,context_sentence,target_form) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+    const gV = (inf) => { const r = db.prepare('SELECT id FROM verbs WHERE infinitive=?').get(inf); return r ? r.id : null; };
+    const exB = [
+      // single_form — passato prossimo with subjects
+      ['conj_s_036','single_form',gV('andare'),'passato_prossimo','Marco (m)','Marco ___ a casa. (andare)','Marco went home.','["è andato"]','[]','["ha andato","è andata","ha andato"]','Con "andare" si usa "essere". Soggetto maschile singolare: è andato.',null,2,'A2','Marco è andato a casa.','è andato'],
+      ['conj_s_037','single_form',gV('andare'),'passato_prossimo','Giulia (f)','Giulia ___ a casa. (andare)','Giulia went home.','["è andata"]','[]','["ha andato","è andato","ha andata"]','Con "andare" si usa "essere". Soggetto femminile singolare: è andata.',null,2,'A2','Giulia è andata a casa.','è andata'],
+      ['conj_s_038','single_form',gV('uscire'),'passato_prossimo','io (m)','Ieri io ___ tardi. (uscire)','Yesterday I left late.','["sono uscito"]','["uscito"]','["ho uscito","sono uscita","è uscito"]','Con "uscire" si usa "essere". Maschile: uscito.',null,2,'A2','Ieri sono uscito tardi.','sono uscito'],
+      ['conj_s_039','single_form',gV('uscire'),'passato_prossimo','io (f)','Ieri io ___ tardi. (uscire — femminile)','Yesterday I (f) left late.','["sono uscita"]','["uscita"]','["ho uscito","sono uscito","è uscita"]','Con "uscire" si usa "essere". Femminile: uscita.',null,2,'A2','Ieri sono uscita tardi.','sono uscita'],
+      ['conj_s_040','single_form',gV('arrivare'),'passato_prossimo','Marco e Luca (m pl)','Marco e Luca ___ in ritardo. (arrivare)','Marco and Luca arrived late.','["sono arrivati"]','[]','["hanno arrivato","è arrivati","sono arrivato"]','Con "arrivare" si usa "essere". Maschile plurale: arrivati.',null,2,'A2','Marco e Luca sono arrivati in ritardo.','sono arrivati'],
+      // single_form — irregular presents
+      ['conj_s_041','single_form',gV('venire'),'present_indicative','io','io ___ (venire)','I come.','["vengo"]','[]','["veno","viene","vengo"]','Venire è irregolare al presente: vengo.',null,1,'A2','Vengo anche io.',null],
+      ['conj_s_042','single_form',gV('venire'),'present_indicative','loro','loro ___ (venire)','They come.','["vengono"]','[]','["venono","vanno","vengano"]','Venire: loro vengono.',null,1,'A2','Vengono domani.',null],
+      ['conj_s_043','single_form',gV('sapere'),'present_indicative','io','io ___ (sapere)','I know.','["so"]','[]','["sao","sappo","sapisco"]','Sapere è irregolare: io so.',null,2,'A2','So parlare italiano.',null],
+      ['conj_s_044','single_form',gV('sapere'),'present_indicative','loro','loro ___ (sapere)','They know.','["sanno"]','[]','["sapono","sapono","sannono"]','Sapere: loro sanno.',null,2,'A2','Sanno cucinare bene.',null],
+      ['conj_s_045','single_form',gV('potere'),'present_indicative','io','io ___ (potere)','I can.','["posso"]','[]','["poto","potisco","puopo"]','Potere: io posso.',null,1,'A2','Non posso venire stasera.',null],
+      ['conj_s_046','single_form',gV('potere'),'present_indicative','loro','loro ___ (potere)','They can.','["possono"]','[]','["potono","possonno","potonno"]','Potere: loro possono.',null,1,'A2','Non possono dormire.',null],
+      ['conj_s_047','single_form',gV('dovere'),'present_indicative','io','io ___ (dovere)','I must.','["devo"]','["debbo"]','["devo","debo","dovisco"]','Dovere: io devo (o debbo, più formale).',null,1,'A2','Devo studiare.',null],
+      ['conj_s_048','single_form',gV('volere'),'present_indicative','io','io ___ (volere)','I want.','["voglio"]','[]','["volo","vuolo","voglo"]','Volere: io voglio.',null,1,'A2',"Voglio imparare l'italiano.",null],
+      ['conj_s_049','single_form',gV('volere'),'present_indicative','tu','tu ___ (volere)','You want.','["vuoi"]','[]','["voli","vuole","voglio"]','Volere: tu vuoi.',null,1,'A2','Vuoi un caffè?',null],
+      ['conj_s_050','single_form',gV('dire'),'present_indicative','io','io ___ (dire)','I say.','["dico"]','[]','["dio","dico","disce"]','Dire è irregolare: io dico.',null,2,'B1','Dico sempre la verità.',null],
+      ['conj_s_051','single_form',gV('dire'),'present_indicative','voi','voi ___ (dire)','You say (plural).','["dite"]','[]','["dicete","dite","dicono"]','Dire: voi dite.',null,2,'B1','Dite sempre bugie.',null],
+      ['conj_s_052','single_form',gV('bere'),'present_indicative','io','io ___ (bere)','I drink.','["bevo"]','[]','["bero","berisco","bevisco"]','Bere: io bevo.',null,1,'A2','Bevo un caffè ogni mattina.',null],
+      ['conj_s_053','single_form',gV('bere'),'present_indicative','loro','loro ___ (bere)','They drink.','["bevono"]','[]','["berono","bevano","bevonno"]','Bere: loro bevono.',null,1,'A2','Non bevono alcolici.',null],
+      ['conj_s_054','single_form',gV('rimanere'),'present_indicative','io','io ___ (rimanere)','I stay/remain.','["rimango"]','[]','["rimano","rimango","rimanisco"]','Rimanere: io rimango.',null,2,'B1','Rimango a casa stasera.',null],
+      ['conj_s_055','single_form',gV('scegliere'),'present_indicative','io','io ___ (scegliere)','I choose.','["scelgo"]','[]','["scelgio","scelisco","scelgo"]','Scegliere: io scelgo.',null,2,'B1','Scelgo sempre il più difficile.',null],
+      // imperfetto
+      ['conj_s_056','single_form',gV('giocare'),'imperfect_indicative','io','Da bambino io ___ (giocare)','As a child I used to play.','["giocavo"]','[]','["giocai","giocherò","gioco"]','Imperfetto: io giocavo. Descrive abitudine nel passato.',null,1,'A2','Da bambino giocavo sempre a calcio.',null],
+      ['conj_s_057','single_form',gV('dormire'),'imperfect_indicative','lui/lei','Quando era piccola, lei ___ (dormire)','When she was little, she slept.','["dormiva"]','[]','["dormì","dormirà","dorme"]','Imperfetto: lei dormiva. Descrive uno stato o azione abituale nel passato.',null,1,'A2','Quando era piccola dormiva molto.',null],
+      ['conj_s_058','single_form',gV('essere'),'imperfect_indicative','io','Da studente io ___ (essere)','As a student I was.','["ero"]','[]','["sono stato","sarò","sono"]','Essere - imperfetto: io ero.',null,2,'A2','Da studente ero molto stressato.',null],
+      // futuro
+      ['conj_s_059','single_form',gV('venire'),'future_simple','tu','domani tu ___ (venire)','Tomorrow you will come.','["verrai"]','[]','["vieni","verresti","venivi"]','Venire - futuro irregolare: verrai.',null,2,'A2','Domani verrai con noi?',null],
+      ['conj_s_060','single_form',gV('fare'),'future_simple','noi','noi ___ (fare)','We will do.','["faremo"]','[]','["fareremo","faceremo","faremo"]','Fare - futuro: faremo. Radice far-.',null,2,'A2','Domani faremo una passeggiata.',null],
+      // condizionale
+      ['conj_s_061','single_form',gV('venire'),'conditional_present','io','se potessi ___ (venire)','If I could I would come.','["verrei"]','[]','["venivo","verrò","venivo"]','Condizionale presente: verrei.',null,2,'B1','Se potessi verrei subito.',null],
+      ['conj_s_062','single_form',gV('volere'),'conditional_present','io','mi ___ un caffè. (volere)','I would like a coffee.','["vorrei"]','[]','["voglio","volevo","voglio"]','Condizionale: vorrei. Forma di cortesia molto frequente.',null,1,'A2','Vorrei un caffè, grazie.',null],
+      // congiuntivo
+      ['conj_s_063','single_form',gV('andare'),'subjunctive_present','lui/lei','Penso che lui ___ a casa. (andare)','I think he goes home.','["vada"]','[]','["va","andrà","vadano"]','Congiuntivo presente: lui vada.',null,3,'B1','Penso che vada a casa.',null],
+      ['conj_s_064','single_form',gV('capire'),'subjunctive_present','loro','Bisogna che loro ___ (capire)','They need to understand.','["capiscano"]','[]','["capono","capiscono","capino"]','Capire - congiuntivo presente: capiscano (-isc al congiuntivo).',null,3,'B1','Bisogna che capiscano la regola.',null],
+      ['conj_s_065','single_form',gV('potere'),'subjunctive_present','io','Spero che io ___ (potere)','I hope I can.','["possa"]','[]','["posso","potrò","potessi"]','Potere - congiuntivo: io possa.',null,3,'B1','Spero che possa venire.',null],
+      // choose_tense
+      ['conj_ct_011','choose_tense',gV('giocare'),'imperfect_indicative',null,'Quando ero piccolo, ___ spesso con i miei amici. (giocare)','Cuando era pequeño, jugaba con mis amigos.','["giocavo"]','[]','["ho giocato","giocherò","gioco"]','Imperfetto per abitudine nel passato.',null,2,'A2',null,'giocavo'],
+      ['conj_ct_012','choose_tense',gV('lavorare'),'passato_prossimo',null,'Ieri Marco ___ tutto il giorno. (lavorare)','Ayer Marco trabajó todo el día.','["ha lavorato"]','[]','["lavorava","lavorerà","lavora"]','Passato prossimo per evento completato in un momento specifico.',null,2,'A2',null,'ha lavorato'],
+      ['conj_ct_013','choose_tense',gV('studiare'),'imperfect_indicative',null,'Mentre lei ___, è arrivato lui. (studiare)','Mientras ella estudiaba, llegó él.','["studiava"]','[]','["ha studiato","studierà","studia"]','Imperfetto per azione in corso interrotta.',null,2,'A2',null,'studiava'],
+      ['conj_ct_014','choose_tense',gV('abitare'),'future_simple',null,'L\'anno prossimo ___ a Milano. (abitare)','El año que viene viviré en Milán.','["abiterò"]','[]','["abito","abitavo","ho abitato"]','Futuro per intenzione futura.',null,1,'A2',null,'abiterò'],
+      ['conj_ct_015','choose_tense',gV('leggere'),'conditional_present',null,'Con più tempo, ___ di più. (leggere)','Con más tiempo, leería más.','["leggerei"]','[]','["leggo","leggevo","leggerò"]','Condizionale per situazione ipotetica.',null,2,'B1',null,'leggerei'],
+      ['conj_ct_016','choose_tense',gV('andare'),'passato_prossimo',null,'La settimana scorsa noi ___ al ristorante. (andare)','La semana pasada fuimos al restaurante.','["siamo andati"]','[]','["andavamo","andremo","andiamo"]','Passato prossimo con evento specifico nel passato.',null,2,'A2',null,'siamo andati'],
+      ['conj_ct_017','choose_tense',null,'imperfect_indicative',null,'Da giovane mia nonna ___ bene. (cucinare)','De joven, mi abuela cocinaba bien.','["cucinava"]','[]','["ha cucinato","cucinerà","cucina"]','Imperfetto per abilità o abitudine nel passato.',null,1,'A2',null,'cucinava'],
+      ['conj_ct_018','choose_tense',gV('avere'),'subjunctive_present',null,'Non credo che lui ___ ragione. (avere)','No creo que tenga razón.','["abbia"]','[]','["ha","aveva","avrà"]','Congiuntivo dopo "non credo che".',null,3,'B1',null,'abbia'],
+      ['conj_ct_019','choose_tense',null,'passato_prossimo',null,'Stamattina io ___ alle sei. (svegliarsi — m)','Esta mañana me desperté a las seis.','["mi sono svegliato"]','[]','["mi svegliavo","mi sveglierò","mi sveglio"]','Riflessivo al passato prossimo con essere: mi sono svegliato.',null,2,'A2',null,'mi sono svegliato'],
+      ['conj_ct_020','choose_tense',gV('partire'),'future_simple',null,'Domani ___ in vacanza. (partire — loro)','Mañana se van de vacaciones.','["partiranno"]','[]','["partono","partivano","sono partiti"]','Futuro semplice per evento futuro pianificato.',null,1,'A2',null,'partiranno'],
+      // prossimo_vs_imperfetto
+      ['conj_pi_011','prossimo_vs_imperfetto',gV('leggere'),'imperfect_indicative',null,'Mentre Maria ___ (leggere), il telefono ha squillato.','Mientras María leía, sonó el teléfono.','["leggeva"]','[]','["ha letto","leggerà","legge"]','Azione in corso (imperfetto) interrotta da evento (passato prossimo).',null,2,'A2',null,'leggeva'],
+      ['conj_pi_012','prossimo_vs_imperfetto',gV('bere'),'imperfect_indicative',null,'Ogni mattina io ___ (bere) un caffè al bar.','Cada mañana me tomaba un café en el bar.','["bevevo"]','[]','["ho bevuto","berrò","bevo"]','Abitudine nel passato: imperfetto.',null,1,'A2',null,'bevevo'],
+      ['conj_pi_013','prossimo_vs_imperfetto',gV('andare'),'passato_prossimo',null,"L'anno scorso noi ___ in Sardegna. (andare)",'El año pasado fuimos a Cerdeña.','["siamo andati"]','[]','["andavamo","andremo","andiamo"]','Evento specifico nel passato: passato prossimo.',null,2,'A2',null,'siamo andati'],
+      ['conj_pi_014','prossimo_vs_imperfetto',gV('avere'),'imperfect_indicative',null,"Quando ___ (avere) vent'anni, lei viveva a Londra.",'Cuando tenía veinte años, vivía en Londres.','["aveva"]','[]','["ha avuto","avrà","ha"]','Condizione/stato nel passato: imperfetto.',null,2,'A2',null,'aveva'],
+      ['conj_pi_015','prossimo_vs_imperfetto',gV('dormire'),'imperfect_indicative',null,'Da bambina lei ___ (dormire) molto.','De niña ella dormía mucho.','["dormiva"]','[]','["ha dormito","dormirà","dorme"]','Abitudine nel passato: imperfetto.',null,1,'A2',null,'dormiva'],
+      // verbi_speciali
+      ['conj_vs_011','verbi_speciali',gV('piacere'),'present_indicative',null,'___ le lingue straniere. (a me)','Me gustan los idiomas extranjeros.','["mi piacciono"]','[]','["mi piace","mi piacono","mi piacono"]','"Lingue" è plurale: mi piacciono. Il soggetto grammaticale è "le lingue".',null,2,'A2','Mi piacciono le lingue straniere.','mi piacciono'],
+      ['conj_vs_012','verbi_speciali',gV('piacere'),'present_indicative',null,'A Marco ___ il calcio.','A Marco le gusta el fútbol.','["piace"]','[]','["piacciono","piacono","piaccia"]','Il soggetto è "il calcio" (singolare): piace.',null,1,'A1','A Marco piace il calcio.','piace'],
+      ['conj_vs_013','verbi_speciali',gV('mancare'),'present_indicative',null,'Mi ___ i miei amici.','Echo de menos a mis amigos.','["mancano"]','[]','["manca","mi manco","mancano"]','"Gli amici" è plurale: mancano.',null,2,'A2','Mi mancano i miei amici.','mancano'],
+      ['conj_vs_014','verbi_speciali',gV('mancare'),'present_indicative',null,'Ti ___ Roma?','¿Echas de menos Roma?','["manca"]','[]','["mancano","ti manco","manchi"]','"Roma" è singolare: manca.',null,1,'A2','Ti manca Roma?','manca'],
+      ['conj_vs_015','verbi_speciali',gV('interessare'),'present_indicative',null,'Le ___ i film italiani? (a Lei, formale)','¿Le interesan las películas italianas?','["interessano"]','[]','["interessa","le interessa","interessino"]','"I film" è plurale: interessano. Forma di cortesia: Le.',null,2,'B1','Le interessano i film italiani?','interessano'],
+      ['conj_vs_016','verbi_speciali',gV('interessare'),'present_indicative',null,'A Giulia ___ la musica jazz.','A Giulia le interesa el jazz.','["interessa"]','[]','["interessano","interessi","interessa"]','"La musica" è singolare: interessa.',null,1,'A2','A Giulia interessa la musica jazz.','interessa'],
+      ['conj_vs_017','verbi_speciali',gV('piacere'),'present_indicative',null,'A loro ___ i film di Fellini.','Les gustan las películas de Fellini.','["piacciono"]','[]','["piace","piacciono","piacono"]','"I film" è plurale: piacciono.',null,2,'A2','A loro piacciono i film di Fellini.','piacciono'],
+      ['conj_vs_018','verbi_speciali',gV('mancare'),'present_indicative',null,'Mi ___ dormire.','Echo de menos dormir.','["manca"]','[]','["mancano","mi manchi","mancasse"]','"Dormire" è un infinito (singolare): manca.',null,2,'B1','Mi manca dormire di più.','manca'],
+      // irregolarita
+      ['conj_irr_001','irregolarita',gV('andare'),'future_simple','io','Qual è il futuro di "andare" per io?',null,'["andrò"]','[]','["anderò","vado","andevo"]','Futuro irregolare di andare: and- → andr-. Io andrò.',null,2,'A2',null,'andrò'],
+      ['conj_irr_002','irregolarita',gV('essere'),'future_simple','io','Qual è il futuro di "essere" per io?',null,'["sarò"]','[]','["esserò","sono","ero"]','Futuro irregolare di essere: sar-. Io sarò.',null,2,'A2',null,'sarò'],
+      ['conj_irr_003','irregolarita',gV('fare'),'future_simple','io','Qual è il futuro di "fare" per io?',null,'["farò"]','[]','["farerò","facerò","farisco"]','Futuro irregolare di fare: far-. Io farò.',null,2,'A2',null,'farò'],
+      ['conj_irr_004','irregolarita',gV('capire'),'present_indicative','io','Qual è la forma di "capire" per io (verbo in -isc)?',null,'["capisco"]','[]','["capo","cappo","capgo"]','I verbi in -isc aggiungono -isc tra la radice e la terminazione: capisco.',null,1,'A2',null,'capisco'],
+      ['conj_irr_005','irregolarita',gV('capire'),'present_indicative','noi','Qual è la forma di "capire" per noi (verbo in -isc)?',null,'["capiamo"]','[]','["capisciamo","capiscamo","capiamo"]','Per noi e voi i verbi in -isc NON aggiungono -isc: capiamo.',null,2,'A2',null,'capiamo'],
+      ['conj_irr_006','irregolarita',gV('vedere'),'passato_prossimo','io','Qual è il participio passato di "vedere"?',null,'["visto"]','["veduto"]','["vedato","vedere","veduto"]','Vedere ha un participio irregolare: visto (o veduto, meno comune).',null,1,'A2',null,'visto'],
+      ['conj_irr_007','irregolarita',gV('prendere'),'passato_prossimo','io','Qual è il participio passato di "prendere"?',null,'["preso"]','[]','["prenduto","prendito","prendato"]','Prendere ha un participio irregolare: preso.',null,1,'A2',null,'preso'],
+      // riflessivi
+      ['conj_rif_001','riflessivi',null,'present_indicative','io','io ___ (chiamarsi)','My name is... (I am called...)','["mi chiamo"]','[]','["chiamo","si chiama","mi chiamisco"]','Riflessivo: mi chiamo. Pronome riflessivo mi + forma verbale.',null,1,'A1','Mi chiamo Marco.','mi chiamo'],
+      ['conj_rif_002','riflessivi',null,'passato_prossimo','Giulia (f)','Stamattina Giulia ___ (svegliarsi)','This morning Giulia woke up.','["si è svegliata"]','["si è svegliata"]','["ha svegliato","si ha svegliata","si è svegliato"]','Riflessivo al passato prossimo: si è svegliata. Essere + participio concorde (femminile).',null,2,'A2','Stamattina Giulia si è svegliata presto.','si è svegliata'],
+      ['conj_rif_003','riflessivi',null,'passato_prossimo','io (m)','Ieri io ___ (lavarsi)','Yesterday I washed myself.','["mi sono lavato"]','["lavato"]','["ho lavato","si sono lavato","mi sono lavata"]','Riflessivo con essere: mi sono lavato (m).',null,2,'A2','Ieri mi sono lavato i capelli.','mi sono lavato'],
+      ['conj_rif_004','riflessivi',null,'present_indicative','io','io ___ (fermarsi)','I stop.','["mi fermo"]','[]','["fermo","si ferma","mi fermisco"]','Fermarsi: mi fermo.',null,1,'A1','Mi fermo qui per un momento.','mi fermo'],
+      ['conj_rif_005','riflessivi',null,'present_indicative','lui/lei','lui/lei ___ (vestirsi)','He/she gets dressed.','["si veste"]','[]','["veste","si vestisce","si vesta"]','Vestirsi: lui si veste. Non usa -isc.',null,1,'A2','Si veste sempre elegante.','si veste'],
+    ];
+    exB.forEach(e => { try { insExB.run(...e); } catch(_) {} });
+  } catch(_) {}
 }
 
 module.exports = { createSchema };

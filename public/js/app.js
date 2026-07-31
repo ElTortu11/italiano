@@ -1470,26 +1470,94 @@ async function loadConjugationExercise(el) {
   }
 }
 
-// ── Phase 5: DB-driven conjugation exercises tab ──────────────────────────────
-let conjEsState = { exercises: [], index: 0, isEvaluating: false, results: [] };
+// ── Phase 5B: Accent bar helper ───────────────────────────────────────────────
+function createAccentBar(inputEl) {
+  const chars = ['à','è','é','ì','ò','ù',"'"];
+  const bar = document.createElement('div');
+  bar.className = 'accent-bar';
+  bar.setAttribute('aria-label', 'Caratteri speciali italiani');
+  chars.forEach(ch => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'accent-btn';
+    btn.textContent = ch;
+    btn.setAttribute('aria-label', `Inserisci ${ch}`);
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      const start = inputEl.selectionStart;
+      const end = inputEl.selectionEnd;
+      const val = inputEl.value;
+      inputEl.value = val.substring(0,start) + ch + val.substring(end);
+      inputEl.selectionStart = inputEl.selectionEnd = start + ch.length;
+      inputEl.focus();
+    });
+    bar.appendChild(btn);
+  });
+  return bar;
+}
 
-async function renderConjEserciziTab(container) {
-  container.innerHTML = `<div class="conj-session-wrap"><div class="loading"><div class="spinner"></div></div></div>`;
+// ── Phase 5B: Session persistence ─────────────────────────────────────────────
+const CONJ_SESSION_KEY = 'italiano_conj_session';
+function saveConjSession(state) {
   try {
-    const exercises = await API.get('/conjugations/exercises');
+    localStorage.setItem(CONJ_SESSION_KEY, JSON.stringify({
+      mode: state.mode,
+      exercises: state.exercises.map(e => e.id),
+      index: state.index,
+      results: state.results,
+      startedAt: state.startedAt || Date.now(),
+      lastActivity: Date.now(),
+    }));
+  } catch(_) {}
+}
+function clearConjSession() {
+  try { localStorage.removeItem(CONJ_SESSION_KEY); } catch(_) {}
+}
+
+// ── Phase 5: DB-driven conjugation exercises tab ──────────────────────────────
+const CONJ_MODES = [
+  { id: 'all',                   label: 'Tutti' },
+  { id: 'single_form',           label: 'Forma singola' },
+  { id: 'full_paradigm',         label: 'Paradigma completo' },
+  { id: 'auxiliary_participle',  label: 'Ausiliare & participio' },
+  { id: 'choose_tense',          label: 'Scegli il tempo' },
+  { id: 'prossimo_vs_imperfetto',label: 'Prossimo vs Imperfetto' },
+  { id: 'verbi_speciali',        label: 'Verbi speciali' },
+  { id: 'irregolarita',          label: 'Irregolarità' },
+  { id: 'riflessivi',            label: 'Riflessivi' },
+];
+let conjEsState = { exercises: [], index: 0, isEvaluating: false, results: [], mode: 'all' };
+
+async function renderConjEserciziTab(container, modeOverride) {
+  const mode = modeOverride || conjEsState.mode || 'all';
+  conjEsState.mode = mode;
+
+  // Mode selector header
+  const modeHtml = `<div class="conj-mode-pills">${CONJ_MODES.map(m =>
+    `<button class="conj-mode-pill${mode===m.id?' active':''}" data-mode="${m.id}">${escHtml(m.label)}</button>`
+  ).join('')}</div>`;
+
+  container.innerHTML = `<div>${modeHtml}<div class="conj-session-wrap"><div class="loading"><div class="spinner"></div></div></div></div>`;
+
+  container.querySelectorAll('.conj-mode-pill').forEach(btn => {
+    btn.addEventListener('click', () => renderConjEserciziTab(container, btn.dataset.mode));
+  });
+
+  try {
+    const url = mode === 'all' ? '/conjugations/exercises' : `/conjugations/exercises?type=${encodeURIComponent(mode)}`;
+    const exercises = await API.get(url);
     if (!exercises.length) {
-      container.innerHTML = `<div class="conj-session-wrap"><div class="alert">Nessun esercizio trovato.</div></div>`;
+      container.querySelector('.conj-session-wrap').innerHTML = `<div class="alert">Nessun esercizio trovato per questa modalità.</div>`;
       return;
     }
-    // Fisher-Yates shuffle
     for (let i = exercises.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [exercises[i], exercises[j]] = [exercises[j], exercises[i]];
     }
-    conjEsState = { exercises: exercises.slice(0, 10), index: 0, isEvaluating: false, results: [] };
+    conjEsState = { exercises: exercises.slice(0, 12), index: 0, isEvaluating: false, results: [], mode };
     renderConjEsExercise(container);
   } catch (e) {
-    container.innerHTML = `<div class="conj-session-wrap"><div class="alert alert-error">${escHtml(e.message)}</div></div>`;
+    container.querySelector('.conj-session-wrap').innerHTML = `<div class="alert alert-error">${escHtml(e.message)}</div>`;
   }
 }
 
@@ -1503,6 +1571,20 @@ function renderConjEsExercise(container) {
   const isChoice = distractors.length > 0;
   const person = ex.person || '';
 
+  // Keep mode pills (first child) and update session wrap
+  let modeHeader = container.querySelector('.conj-mode-pills');
+  if (!modeHeader) {
+    const modeHtml = `<div class="conj-mode-pills">${CONJ_MODES.map(m =>
+      `<button class="conj-mode-pill${conjEsState.mode===m.id?' active':''}" data-mode="${m.id}">${escHtml(m.label)}</button>`
+    ).join('')}</div>`;
+    container.innerHTML = `<div>${modeHtml}<div id="conj-es-inner"></div></div>`;
+    container.querySelectorAll('.conj-mode-pill').forEach(btn => {
+      btn.addEventListener('click', () => renderConjEserciziTab(container, btn.dataset.mode));
+    });
+  }
+  const inner = container.querySelector('#conj-es-inner') || container;
+
+  const modeLabel = CONJ_MODES.find(m => m.id === (ex.exercise_type || conjEsState.mode))?.label || '';
   let inputHtml = '';
   if (isChoice) {
     const options = [...correctAnswers.slice(0, 1), ...distractors].sort(() => Math.random() - 0.5);
@@ -1510,31 +1592,45 @@ function renderConjEsExercise(container) {
       `<button class="conj-choice-btn" data-answer="${escHtml(o)}">${escHtml(o)}</button>`
     ).join('')}</div>`;
   } else {
-    inputHtml = `<div class="mt-3 flex gap-2">
-      <input id="conj-es-input" type="text" autocomplete="off" autocorrect="off" spellcheck="false"
-        placeholder="${escHtml(person ? person + '...' : 'Risposta...')}"
-        class="input" style="max-width:260px">
-      <button class="btn btn-primary" id="conj-es-check">Verifica</button>
+    inputHtml = `<div class="mt-3">
+      <div class="flex gap-2">
+        <input id="conj-es-input" type="text" autocomplete="off" autocorrect="off" spellcheck="false"
+          placeholder="${escHtml(person ? person + '...' : 'Risposta...')}"
+          class="input" style="max-width:260px">
+        <button class="btn btn-primary" id="conj-es-check">Verifica</button>
+      </div>
+      <div id="conj-es-accent-bar"></div>
     </div>`;
   }
 
-  container.innerHTML = `<div class="conj-session-wrap">
-    <div style="color:var(--muted);font-size:0.85rem;margin-bottom:12px">${index + 1} / ${exercises.length}</div>
-    <div class="conj-verb-header">${escHtml(ex.infinitive || '')}<span class="conj-tense-label">${escHtml(getTenseLabel(ex.tense_id))}</span></div>
+  inner.innerHTML = `<div class="conj-session-wrap">
+    <div style="color:var(--muted);font-size:0.8rem;margin-bottom:10px;display:flex;justify-content:space-between">
+      <span>${index + 1} / ${exercises.length}</span>
+      <span style="font-style:italic">${escHtml(modeLabel)}</span>
+    </div>
+    <div class="conj-verb-header">${escHtml(ex.infinitive || ex.prompt_it.split(' ')[0] || '')}<span class="conj-tense-label">${escHtml(getTenseLabel(ex.tense_id))}</span></div>
     ${person ? `<div class="conj-person-label">${escHtml(person)}</div>` : ''}
     <div class="conj-ex-prompt">${escHtml(ex.prompt_it)}</div>
+    ${ex.prompt_es ? `<div style="font-size:0.85rem;color:var(--muted);margin-top:-8px;margin-bottom:8px">${escHtml(ex.prompt_es)}</div>` : ''}
     ${inputHtml}
     <div id="conj-es-feedback"></div>
   </div>`;
 
-  const feedbackWrap = container.querySelector('#conj-es-feedback');
+  // Add accent bar after rendering
+  if (!isChoice) {
+    const inp = inner.querySelector('#conj-es-input');
+    const accentWrap = inner.querySelector('#conj-es-accent-bar');
+    if (inp && accentWrap) accentWrap.appendChild(createAccentBar(inp));
+  }
+
+  const feedbackWrap = inner.querySelector('#conj-es-feedback');
 
   function submitConjEs(typed) {
     if (conjEsState.isEvaluating) return;
     conjEsState.isEvaluating = true;
-    container.querySelectorAll('.conj-choice-btn').forEach(b => { b.disabled = true; });
-    const inp = container.querySelector('#conj-es-input');
-    const checkBtn = container.querySelector('#conj-es-check');
+    inner.querySelectorAll('.conj-choice-btn').forEach(b => { b.disabled = true; });
+    const inp = inner.querySelector('#conj-es-input');
+    const checkBtn = inner.querySelector('#conj-es-check');
     if (inp) inp.disabled = true;
     if (checkBtn) checkBtn.disabled = true;
 
@@ -1552,7 +1648,7 @@ function renderConjEsExercise(container) {
     conjEsState.results.push({ ex, evaluation, typed });
 
     if (isChoice) {
-      container.querySelectorAll('.conj-choice-btn').forEach(btn => {
+      inner.querySelectorAll('.conj-choice-btn').forEach(btn => {
         if (btn.dataset.answer === correctAnswer) btn.classList.add('is-correct');
         else if (btn.dataset.answer === typed && !evaluation.accepted) btn.classList.add('is-wrong');
       });
@@ -1562,11 +1658,20 @@ function renderConjEsExercise(container) {
     if (ex.verb_id) {
       API.post('/conjugations/topic-stats', { verb_id: ex.verb_id, tense_id: ex.tense_id, result }).catch(() => {});
     }
+    if (!evaluation.accepted) {
+      API.post('/conjugations/error-log', {
+        exercise_id: ex.id, verb_id: ex.verb_id, tense_id: ex.tense_id,
+        person, exercise_mode: ex.exercise_type,
+        prompt: ex.prompt_it, user_answer: typed, correct_answer: correctAnswer,
+        evaluation_status: evaluation.status, error_type: evaluation.errorType,
+        explanation: ex.explanation_it,
+      }).catch(() => {});
+    }
 
     Feedback.render({
       container: feedbackWrap,
       evaluation,
-      context: { exerciseType: 'single_form' },
+      context: { exerciseType: ex.exercise_type || 'single_form' },
       actions: { onContinue: () => {
         conjEsState.index++;
         renderConjEsExercise(container);
@@ -1576,12 +1681,12 @@ function renderConjEsExercise(container) {
   }
 
   if (isChoice) {
-    container.querySelectorAll('.conj-choice-btn').forEach(btn => {
+    inner.querySelectorAll('.conj-choice-btn').forEach(btn => {
       btn.addEventListener('click', () => submitConjEs(btn.dataset.answer));
     });
   } else {
-    const inp = container.querySelector('#conj-es-input');
-    const checkBtn = container.querySelector('#conj-es-check');
+    const inp = inner.querySelector('#conj-es-input');
+    const checkBtn = inner.querySelector('#conj-es-check');
     if (checkBtn) checkBtn.addEventListener('click', () => {
       const typed = (inp ? inp.value : '').trim();
       if (!typed) { inp && inp.focus(); return; }
@@ -1595,11 +1700,12 @@ function renderConjEsExercise(container) {
 }
 
 function renderConjEsSummary(container) {
-  const { results } = conjEsState;
+  const { results, mode } = conjEsState;
   const correct = results.filter(r => r.evaluation.accepted).length;
   const total = results.length;
   const pct = total > 0 ? Math.round(correct / total * 100) : 0;
-  container.innerHTML = `<div class="conj-session-wrap">
+  const inner = container.querySelector('#conj-es-inner') || container;
+  inner.innerHTML = `<div class="conj-session-wrap">
     <div class="section-title mb-2">Riepilogo</div>
     <div class="prep-summary-stats">
       <div class="prep-stat-card prep-stat-correct"><div class="prep-stat-num">${correct}</div><div class="prep-stat-lbl">Corretti</div></div>
@@ -1608,7 +1714,8 @@ function renderConjEsSummary(container) {
     </div>
     <button class="btn btn-primary mt-4" id="conj-es-restart">Ricomincia</button>
   </div>`;
-  container.querySelector('#conj-es-restart').addEventListener('click', () => renderConjEserciziTab(container));
+  inner.querySelector('#conj-es-restart').addEventListener('click', () => renderConjEserciziTab(container, mode));
+  clearConjSession();
 }
 
 function renderExerciseUI(area, ex) {

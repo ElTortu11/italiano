@@ -1520,11 +1520,34 @@ router.post('/conjugations/topic-stats', (req, res) => {
 
 router.post('/conjugations/error-log', (req, res) => {
   try {
-    const { verb_id, tense_id, person, prompt, user_answer, correct_answer, evaluation_status, error_type, explanation } = req.body;
+    const { exercise_id, verb_id, tense_id, person, subject, exercise_mode, prompt,
+            user_answer, correct_answer, evaluation_status, error_type, secondary_issues,
+            explanation, auxiliary, participle, attempt_id } = req.body;
     if (!tense_id) return res.status(400).json({ error: 'tense_id required' });
-    db.prepare(`INSERT INTO conjugation_error_log(verb_id,tense_id,person,prompt,user_answer,correct_answer,evaluation_status,error_type,explanation) VALUES(?,?,?,?,?,?,?,?,?)`)
-      .run(verb_id||null, tense_id, person||null, prompt||null, user_answer||null, correct_answer||null, evaluation_status||null, error_type||null, explanation||null);
-    res.json({ ok: true });
+
+    // Idempotency: skip if same exercise+person was logged in last 60s
+    if (attempt_id && exercise_id) {
+      const existing = db.prepare("SELECT id FROM conjugation_error_log WHERE exercise_id=? AND person=? AND created_at > (unixepoch()-60) LIMIT 1")
+        .get(exercise_id || '', person || '');
+      if (existing) return res.json({ ok: true, skipped: true, id: existing.id });
+    }
+
+    const result = db.prepare(`INSERT INTO conjugation_error_log
+      (exercise_id,verb_id,tense_id,person,subject,exercise_mode,prompt,user_answer,correct_answer,
+       evaluation_status,error_type,secondary_issues,explanation,auxiliary,participle)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(exercise_id||null,verb_id||null,tense_id,person||null,subject||null,exercise_mode||null,
+           prompt||null,user_answer||null,correct_answer||null,evaluation_status||null,
+           error_type||null,JSON.stringify(secondary_issues||[]),explanation||null,
+           auxiliary||null,participle||null);
+
+    // Also write to main errors table for quaderno
+    try {
+      db.prepare(`INSERT INTO errors(category,subcategory,user_input,correct_answer,context,error_type,created_at) VALUES(?,?,?,?,?,?,unixepoch())`)
+        .run('coniugazione', tense_id, user_answer, correct_answer, prompt, error_type);
+    } catch(_) {}
+
+    res.json({ ok: true, id: result.lastInsertRowid });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1540,6 +1563,76 @@ router.get('/conjugations/error-log', (req, res) => {
     sql += ' ORDER BY created_at DESC LIMIT 100';
     res.json(db.prepare(sql).all(...params));
   } catch (_) { res.json([]); }
+});
+
+// GET /api/conjugations/error-log/grouped — for ripassa sessions
+router.get('/conjugations/error-log/grouped', (req, res) => {
+  try {
+    const groups = {
+      ausiliari: db.prepare("SELECT * FROM conjugation_error_log WHERE error_type='wrong_auxiliary' ORDER BY created_at DESC LIMIT 20").all(),
+      participi: db.prepare("SELECT * FROM conjugation_error_log WHERE error_type IN ('agreement','wrong_participle') ORDER BY created_at DESC LIMIT 20").all(),
+      passato_prossimo: db.prepare("SELECT * FROM conjugation_error_log WHERE tense_id='passato_prossimo' ORDER BY created_at DESC LIMIT 20").all(),
+      futuro: db.prepare("SELECT * FROM conjugation_error_log WHERE tense_id='future_simple' ORDER BY created_at DESC LIMIT 20").all(),
+      congiuntivo: db.prepare("SELECT * FROM conjugation_error_log WHERE tense_id='subjunctive_present' ORDER BY created_at DESC LIMIT 20").all(),
+      isc_verbs: db.prepare("SELECT cel.* FROM conjugation_error_log cel JOIN verbs v ON cel.verb_id=v.id WHERE v.is_isc=1 ORDER BY cel.created_at DESC LIMIT 20").all(),
+      riflessivi: db.prepare("SELECT * FROM conjugation_error_log WHERE exercise_mode='riflessivi' ORDER BY created_at DESC LIMIT 20").all(),
+      persona: db.prepare("SELECT * FROM conjugation_error_log WHERE error_type='wrong_person' ORDER BY created_at DESC LIMIT 20").all(),
+      frequenti: db.prepare("SELECT error_type, COUNT(*) as cnt FROM conjugation_error_log GROUP BY error_type ORDER BY cnt DESC LIMIT 10").all(),
+    };
+    res.json(groups);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// PATCH /api/conjugations/error-log/:id — update review status
+router.patch('/conjugations/error-log/:id', (req, res) => {
+  try {
+    const { correct_streak, mastery_status } = req.body;
+    db.prepare("UPDATE conjugation_error_log SET correct_streak=?, mastery_status=?, last_reviewed_at=unixepoch(), review_count=review_count+1 WHERE id=?")
+      .run(correct_streak || 0, mastery_status || 'in_apprendimento', req.params.id);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/conjugations/stats
+router.get('/conjugations/stats', (req, res) => {
+  try {
+    const byVerb = db.prepare(`
+      SELECT v.infinitive,
+             SUM(cts.attempts) as attempts,
+             SUM(cts.correct) as correct,
+             ROUND(100.0*SUM(cts.correct)/MAX(SUM(cts.attempts),1)) as accuracy,
+             MAX(cts.mastery_level) as mastery_level
+      FROM conjugation_topic_stats cts
+      JOIN verbs v ON v.id=cts.verb_id
+      GROUP BY cts.verb_id ORDER BY accuracy DESC
+    `).all();
+
+    const byTense = db.prepare(`
+      SELECT tense_id,
+             SUM(attempts) as attempts,
+             SUM(correct) as correct,
+             ROUND(100.0*SUM(correct)/MAX(SUM(attempts),1)) as accuracy
+      FROM conjugation_topic_stats GROUP BY tense_id
+    `).all();
+
+    const errorTypes = db.prepare(`
+      SELECT error_type, COUNT(*) as cnt
+      FROM conjugation_error_log
+      WHERE created_at > (unixepoch()-30*86400)
+      GROUP BY error_type ORDER BY cnt DESC
+    `).all();
+
+    const recentTrend = db.prepare(`
+      SELECT date(created_at,'unixepoch') as day,
+             COUNT(*) as total,
+             SUM(CASE WHEN evaluation_status LIKE 'correct%' THEN 1 ELSE 0 END) as correct
+      FROM conjugation_error_log
+      WHERE created_at > (unixepoch()-7*86400)
+      GROUP BY day ORDER BY day
+    `).all();
+
+    res.json({ byVerb, byTense, errorTypes, recentTrend });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;

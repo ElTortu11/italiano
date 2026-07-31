@@ -165,6 +165,106 @@ if (db) {
   });
 }
 
+// ── 6. Phase 5B additions ─────────────────────────────────────────────────────
+if (db) {
+  console.log('\n6 — Phase 5B: Verb metadata completeness:');
+  const missingAux = db.prepare("SELECT infinitive FROM verbs WHERE auxiliary IS NULL OR auxiliary=''").all();
+  assert(missingAux.length === 0, `All verbs have auxiliary (missing: ${missingAux.map(v=>v.infinitive).join(',')||'none'})`);
+
+  const missingPP = db.prepare("SELECT infinitive FROM verbs WHERE past_participle IS NULL OR past_participle=''").all();
+  assert(missingPP.length === 0, `All verbs have past_participle (missing: ${missingPP.map(v=>v.infinitive).join(',')||'none'})`);
+
+  const missingGroup = db.prepare("SELECT infinitive FROM verbs WHERE conjugation_group IS NULL OR conjugation_group=''").all();
+  assert(missingGroup.length === 0, `All verbs have conjugation_group (missing: ${missingGroup.map(v=>v.infinitive).join(',')||'none'})`);
+
+  const totalVerbs = db.prepare('SELECT COUNT(*) as n FROM verbs').get().n;
+  assert(totalVerbs >= 90, `At least 90 verbs seeded (got ${totalVerbs})`);
+}
+
+if (db) {
+  console.log('\n7 — Phase 5B: auxiliary_variants column:');
+  const cols = db.prepare("PRAGMA table_info(verbs)").all().map(c=>c.name);
+  assert(cols.includes('auxiliary_variants'), 'auxiliary_variants column exists on verbs');
+  assert(cols.includes('auxiliary_note'), 'auxiliary_note column exists on verbs');
+
+  const passare = db.prepare("SELECT auxiliary_variants FROM verbs WHERE infinitive='passare'").get();
+  if (passare && passare.auxiliary_variants) {
+    try {
+      const parsed = JSON.parse(passare.auxiliary_variants);
+      assert(parsed.length >= 2, `passare has >= 2 auxiliary_variants (got ${parsed.length})`);
+    } catch(_) { assert(false, 'passare auxiliary_variants is valid JSON'); }
+  }
+
+  const finire = db.prepare("SELECT auxiliary_variants FROM verbs WHERE infinitive='finire'").get();
+  if (finire && finire.auxiliary_variants) {
+    try {
+      const parsed = JSON.parse(finire.auxiliary_variants);
+      assert(parsed.length >= 2, `finire has >= 2 auxiliary_variants (got ${parsed.length})`);
+    } catch(_) {}
+  }
+}
+
+if (db) {
+  console.log('\n8 — Phase 5B: Critical forms:');
+  const getF = (inf, tense, person) => {
+    const v = db.prepare('SELECT id FROM verbs WHERE infinitive=?').get(inf);
+    if (!v) return null;
+    const r = db.prepare('SELECT form FROM verb_conjugations WHERE verb_id=? AND tense=? AND person=?').get(v.id, tense, person);
+    return r ? r.form : null;
+  };
+  assert(getF('piacere','present_indicative','lui/lei') === 'piace', 'piacere/presente/lui-lei = piace');
+  assert(getF('piacere','present_indicative','loro') === 'piacciono', 'piacere/presente/loro = piacciono');
+  assert(getF('morire','present_indicative','io') === 'muoio', 'morire/presente/io = muoio');
+  assert(getF('essere','future_simple','io') === 'sarò', 'essere/futuro/io = sarò');
+  assert(getF('avere','future_simple','io') === 'avrò', 'avere/futuro/io = avrò');
+  assert(getF('essere','subjunctive_present','io') === 'sia', 'essere/congiuntivo/io = sia');
+  assert(getF('avere','subjunctive_present','noi') === 'abbiamo', 'avere/congiuntivo/noi = abbiamo');
+  assert(getF('sedere','present_indicative','io') === 'siedo', 'sedere/presente/io = siedo');
+  assert(getF('rimanere','present_indicative','io') === 'rimango', 'rimanere/presente/io = rimango');
+  assert(getF('dare','present_indicative','lui/lei') === 'dà', 'dare/presente/lui-lei = dà');
+  assert(getF('finire','present_indicative','io') === 'finisco', 'finire/presente/io = finisco (isc)');
+  assert(getF('venire','future_simple','io') === 'verrò', 'venire/futuro/io = verrò');
+}
+
+if (db) {
+  console.log('\n9 — Phase 5B: New exercise types:');
+  const exRows = db.prepare('SELECT * FROM conjugation_exercises').all();
+  assert(exRows.length >= 140, `At least 140 total exercises (got ${exRows.length})`);
+
+  const exTypes = new Set(exRows.map(e => e.exercise_type));
+  ['single_form','full_paradigm','auxiliary_participle','choose_tense','prossimo_vs_imperfetto',
+   'verbi_speciali','irregolarita','riflessivi'].forEach(t => {
+    assert(exTypes.has(t), `Exercise type present: ${t}`);
+  });
+
+  const irrCount = exRows.filter(e => e.exercise_type === 'irregolarita').length;
+  assert(irrCount >= 5, `At least 5 irregolarita exercises (got ${irrCount})`);
+  const rifCount = exRows.filter(e => e.exercise_type === 'riflessivi').length;
+  assert(rifCount >= 5, `At least 5 riflessivi exercises (got ${rifCount})`);
+  const chooseCount = exRows.filter(e => e.exercise_type === 'choose_tense').length;
+  assert(chooseCount >= 15, `At least 15 choose_tense exercises (got ${chooseCount})`);
+  const piCount = exRows.filter(e => e.exercise_type === 'prossimo_vs_imperfetto').length;
+  assert(piCount >= 12, `At least 12 prossimo_vs_imperfetto exercises (got ${piCount})`);
+
+  const missingExpl = exRows.filter(e => !e.explanation_it || e.explanation_it === '').length;
+  assert(missingExpl <= 10, `Most exercises have explanation_it (${missingExpl} missing)`);
+}
+
+if (db) {
+  console.log('\n10 — Phase 5B: Error log new columns:');
+  const errCols = db.prepare("PRAGMA table_info(conjugation_error_log)").all().map(c=>c.name);
+  ['exercise_id','subject','exercise_mode','secondary_issues','auxiliary','participle',
+   'last_reviewed_at','review_count','correct_streak','mastery_status'].forEach(col => {
+    assert(errCols.includes(col), `conjugation_error_log has column: ${col}`);
+  });
+}
+
+if (db) {
+  console.log('\n11 — Phase 5B: No Spanish forms in verb_conjugations:');
+  const spanish = db.prepare("SELECT v.infinitive, vc.form FROM verb_conjugations vc JOIN verbs v ON v.id=vc.verb_id WHERE vc.form IN ('hablan','comen','viven','soy','eres','somos')").all();
+  assert(spanish.length === 0, `No Spanish forms in verb_conjugations (found: ${spanish.map(r=>r.form).join(',')||'none'})`);
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n─────────────────────────────────────`);
 console.log(`Risultato: ${passed} passati, ${failed} falliti su ${passed+failed} totali`);
