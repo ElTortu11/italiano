@@ -1425,13 +1425,13 @@ function renderDrillTense(area) {
 
   area.innerHTML = `
     <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <div style="display:flex;align-items:center;gap:6px">
-          <button type="button" id="drill-prev" class="btn btn-outline" style="padding:2px 10px;font-size:0.9rem;${canGoBack?'':'visibility:hidden'}">←</button>
-          <div style="font-size:0.8rem;color:var(--text-muted)">${progress} — ${drillState.verb} (${drillState.translation})</div>
-          <button type="button" id="drill-nav-fwd" class="btn btn-outline" style="padding:2px 10px;font-size:0.9rem;${canGoFwd?'':'visibility:hidden'}">→</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:4px;min-width:0">
+        <div style="display:flex;align-items:center;gap:4px;min-width:0;flex:1">
+          <button type="button" id="drill-prev" class="btn btn-outline" style="padding:2px 8px;font-size:0.9rem;flex-shrink:0;${canGoBack?'':'visibility:hidden'}">←</button>
+          <div class="drill-header-meta" style="font-size:0.78rem;color:var(--text-muted)">${progress} — ${drillState.verb} (${drillState.translation})</div>
+          <button type="button" id="drill-nav-fwd" class="btn btn-outline" style="padding:2px 8px;font-size:0.9rem;flex-shrink:0;${canGoFwd?'':'visibility:hidden'}">→</button>
         </div>
-        <div style="font-size:0.8rem;color:var(--text-muted)" id="drill-score-display">✓ ${drillState.score.correct}/${drillState.score.total}</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;flex-shrink:0;margin-left:6px" id="drill-score-display">✓ ${drillState.score.correct}/${drillState.score.total}</div>
       </div>
       <div style="font-weight:700;font-size:1.15rem;margin-bottom:4px">${TENSE_LABELS[tense]}</div>
       <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:16px">${TENSE_HINTS[tense]||''}</div>
