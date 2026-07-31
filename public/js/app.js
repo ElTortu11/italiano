@@ -747,7 +747,7 @@ function renderFlashcardTyping(container) {
   const input = document.getElementById('fc-type-input');
   input.focus();
 
-  function normalize(s) { return s.trim().toLowerCase().replace(/\s+/g,' '); }
+  function normalize(s) { return (s||'').normalize('NFC').trim().toLowerCase().replace(/\s+/g,' '); }
 
   function goNext() {
     // Clean up key handler before advancing so it can't fire on the next card
@@ -765,9 +765,17 @@ function renderFlashcardTyping(container) {
     if (!typed) return;
 
     const correct = card.front;
-    // Accept answer with or without parenthetical note e.g. "della (di + la)" → accept "della"
+    // Strip trailing parenthetical e.g. "della (di + la)" → accept "della"
     const correctBase = correct.replace(/\s*\([^)]*\)\s*$/, '').trim();
-    const isOk = normalize(typed) === normalize(correct) || normalize(typed) === normalize(correctBase);
+    const typedN = normalize(typed);
+    const exactOk = typedN === normalize(correct) || typedN === normalize(correctBase);
+
+    // Check accepted_answers (synonyms / alternative valid forms)
+    let acceptedAlts = [];
+    try { acceptedAlts = JSON.parse(card.accepted_answers || '[]'); } catch(_) {}
+    const synonymOk = !exactOk && acceptedAlts.some(a => typedN === normalize(a));
+
+    const isOk = exactOk || synonymOk;
     const quality = isOk ? 5 : 1;
 
     input.disabled = true;
@@ -775,10 +783,17 @@ function renderFlashcardTyping(container) {
 
     const resultEl = document.getElementById('fc-type-result');
     resultEl.style.display = 'block';
-    if (isOk) {
+    if (exactOk) {
       resultEl.innerHTML = `<div class="fc-type-feedback correct">✓ Corretto!</div>`;
+    } else if (synonymOk) {
+      resultEl.innerHTML = `<div class="fc-type-feedback correct">✓ Corretto! <span style="font-size:0.85em;opacity:.8">(sinonimo valido — parola obiettivo: <em>${correct}</em>)</span></div>`;
     } else {
-      resultEl.innerHTML = `<div class="fc-type-feedback wrong">✗ Risposta: <strong>${correct}</strong></div>`;
+      resultEl.innerHTML = `
+        <div class="fc-type-feedback wrong">
+          ✗ <span style="opacity:.75">La tua risposta:</span> <s>${typed}</s><br>
+          <span style="opacity:.75">Risposta corretta:</span> <strong>${correct}</strong>
+          ${acceptedAlts.length ? `<br><span style="font-size:0.82em;opacity:.65">Accettato anche: ${acceptedAlts.join(', ')}</span>` : ''}
+        </div>`;
     }
 
     if (card.example_it) {

@@ -229,9 +229,9 @@ function createSchema() {
       ['agli (a + gli)','a los','A1','Agli studenti piace.','A los estudiantes les gusta.','a + gli'],
       ['alle (a + le)','a las','A1','Arrivo alle tre.','Llego a las tres.','a + le — usato per l\'ora'],
       ['dal (da + il)','del / desde el','A1','Vengo dal dentista.','Vengo del dentista.','da + il'],
-      ['dallo (da + lo)','desde el','A1','Esco dallo stadio.','Salgo del estadio.','da + lo'],
+      ['dallo (da + lo)','del / desde el','A1','Esco dallo stadio.','Salgo del estadio.','da + lo'],
       ['dalla (da + la)','de la / desde la','A1','Vengo dalla stazione.','Vengo de la estación.','da + la (femminile singolare)'],
-      ['dai (da + i)','de los','A1','Torno dai nonni.','Vuelvo de los abuelos.','da + i'],
+      ['dai (da + i)','de los','A1','Torno dai nonni.','Vuelvo a casa de mis abuelos.','da + i'],
       ['dagli (da + gli)','de los','A2','Dagli amici si impara.','De los amigos se aprende.','da + gli'],
       ['dalle (da + le)','de las','A2','Arriva dalle montagne.','Viene de las montañas.','da + le (femminile plurale)'],
       ['nel (in + il)','en el','A1','Il gatto è nel giardino.','El gato está en el jardín.','in + il'],
@@ -240,12 +240,12 @@ function createSchema() {
       ["nell' (in + l')",'en el/la','A1',"Nuoto nell'acqua.",'Nado en el agua.',"in + l' (davanti a vocale)"],
       ['nei (in + i)','en los','A1','Nei weekend riposo.','Los fines de semana descanso.','in + i'],
       ['negli (in + gli)','en los','A2',"Negli anni '90 era diverso.",'En los años 90 era diferente.','in + gli'],
-      ['nelle (in + le)','en las','A1','Nelle vacanze viaggio.','En las vacaciones viajo.','in + le (femminile plurale)'],
+      ['nelle (in + le)','en las','A1','In vacanza viaggio spesso.','En las vacaciones viajo a menudo.','in + le (femminile plurale)'],
       ['sul (su + il)','en el / sobre el','A1','Il libro è sul tavolo.','El libro está sobre la mesa.','su + il'],
       ['sullo (su + lo)','en el / sobre el','A2','Scrive sullo stesso tema.','Escribe sobre el mismo tema.','su + lo'],
       ['sulla (su + la)','en la / sobre la','A1','Siediti sulla sedia.','Siéntate en la silla.','su + la (femminile singolare)'],
-      ['sui (su + i)','en los / sobre los','A2','Sui giornali si legge.','En los periódicos se lee.','su + i'],
-      ['sugli (su + gli)','en los','A2','Sugli alberi cantano uccelli.','En los árboles cantan pájaros.','su + gli'],
+      ['sui (su + i)','en los / sobre los','A2','Sui giornali si leggono molte notizie.','En los periódicos se leen muchas noticias.','su + i'],
+      ['sugli (su + gli)','en los','A2','Gli uccelli cantano sugli alberi.','Los pájaros cantan en los árboles.','su + gli'],
       ['sulle (su + le)','en las / sobre las','A2',"Sulle montagne c'è neve.",'En las montañas hay nieve.','su + le (femminile plurale)'],
       ['col (con + il)','con el','A2','Mangio col cucchiaio.','Como con la cuchara.','Forma contratta di con + il (colloquiale)'],
       ['coi (con + i)','con los','B1','Gioca coi bambini.','Juega con los niños.','Forma contratta di con + i (colloquiale/letterario)'],
@@ -266,7 +266,7 @@ function createSchema() {
       ['invece di','en vez de / en lugar de','B1','Invece di urlare, parla.','En vez de gritar, habla.','Sostituzione'],
       ['attraverso','a través de','B1','Passiamo attraverso il parco.','Pasamos a través del parque.','Attraversamento di uno spazio'],
       ['oltre','más allá de / además de','B1',"Oltre il ponte c'è un bar.",'Más allá del puente hay un bar.','Superamento di limite spaziale o aggiunta'],
-      ['secondo','según','B1','Secondo me hai torto.','Según yo tienes razón.','Fonte, punto di vista'],
+      ['secondo','según','B1','Secondo me hai torto.','Según yo, estás equivocado.','Fonte, punto di vista'],
       ['circa','aproximadamente / alrededor de','A2','Costa circa venti euro.','Cuesta aproximadamente veinte euros.','Approssimazione'],
       ['tranne','excepto / salvo','B1','Vengono tutti tranne lui.','Vienen todos excepto él.','Esclusione. Sinonimi: eccetto, salvo'],
       ['eccetto','excepto','B1','Tutti eccetto me.','Todos excepto yo.','Esclusione. Sinonimo di tranne'],
@@ -307,7 +307,77 @@ function createSchema() {
       const r = insW.run(it, es, prepCatId, 'other', null, null, null, ex_it, ex_es, lv, notes, null, '[]');
       if (r.lastInsertRowid) insF.run(r.lastInsertRowid, it, es, 'it-es', prepCatId, now);
     });
+
+    // Correct existing wrong/incomplete entries already in the DB (idempotent UPDATEs)
+    const fixPrep = db.prepare(`UPDATE vocabulary_items SET example_it=?, example_es=?, spanish=?, notes=? WHERE italian=? AND category_id=?`);
+    const fixes = [
+      // "hai torto" = estás equivocado — NOT "tienes razón"
+      ['Secondo me hai torto.', 'Según yo, estás equivocado.', 'según', 'Fonte, punto di vista', 'secondo', prepCatId],
+      // "dai nonni" here = destination (to grandparents' house), not origin
+      ['Torno dai nonni.', 'Vuelvo a casa de mis abuelos.', 'de los', 'da + i', 'dai (da + i)', prepCatId],
+      // "dallo" can mean "del" or "desde el"
+      ['Esco dallo stadio.', 'Salgo del estadio.', 'del / desde el', 'da + lo', 'dallo (da + lo)', prepCatId],
+      // Improve unnatural examples
+      ['In vacanza viaggio spesso.', 'En las vacaciones viajo a menudo.', 'en las', 'in + le (femminile plurale)', 'nelle (in + le)', prepCatId],
+      ['Sui giornali si leggono molte notizie.', 'En los periódicos se leen muchas noticias.', 'en los / sobre los', 'su + i', 'sui (su + i)', prepCatId],
+      ['Gli uccelli cantano sugli alberi.', 'Los pájaros cantan en los árboles.', 'en los', 'su + gli', 'sugli (su + gli)', prepCatId],
+    ];
+    fixes.forEach(([ex_it, ex_es, es, notes, italian, catId]) => {
+      fixPrep.run(ex_it, ex_es, es, notes, italian, catId);
+    });
   }
+
+  // ── Schema migrations for existing databases ──────────────────────────────
+  try {
+    db.exec(`ALTER TABLE vocabulary_items ADD COLUMN accepted_answers TEXT DEFAULT '[]'`);
+  } catch (_) { /* column already exists */ }
+
+  // Fix vocabulary items that have wrong/misleading data in existing DBs
+  const fixVocab = db.prepare(`
+    UPDATE vocabulary_items SET notes=?, example_it=?, example_es=?, plural=?
+    WHERE italian=? AND (notes IS NULL OR notes != ?)
+  `);
+  const vocabFixes = [
+    // sangue: plural "i sangui" is very rare — clarify in notes
+    [
+      'Normalmente usato solo al singolare. Il plurale "i sangui" è rarissimo e letterario.',
+      "C'è del sangue sulla camicia.",
+      'Hay sangre en la camisa.',
+      'i sangui (rarissimo)',
+      'il sangue',
+      'Normalmente usato solo al singolare. Il plurale "i sangui" è rarissimo e letterario.',
+    ],
+  ];
+  vocabFixes.forEach(([notes, ex_it, ex_es, plural, italian, notesCheck]) => {
+    fixVocab.run(notes, ex_it, ex_es, plural, italian, notesCheck);
+  });
+
+  // Fix specific vocab notes without touching example
+  const fixVocabNoteOnly = db.prepare(`UPDATE vocabulary_items SET notes=? WHERE italian=? AND (notes IS NULL OR notes != ?)`);
+  const noteOnlyFixes = [
+    ['Spesso invariabile (fiori arancione), ma anche "arancioni" è accettato. Dipende dal contesto.', 'arancione', 'Spesso invariabile (fiori arancione), ma anche "arancioni" è accettato. Dipende dal contesto.'],
+    ['Ausiliare per i verbi transitivi e molti intransitivi. La scelta tra avere ed essere va imparata verbo per verbo.', 'avere', 'Ausiliare per i verbi transitivi e molti intransitivi. La scelta tra avere ed essere va imparata verbo per verbo.'],
+    ['Verbo modale — di solito regge un infinito, che può essere sottinteso se chiaro dal contesto (es: "Puoi venire?" "Sì, posso.").', 'potere', 'Verbo modale — di solito regge un infinito, che può essere sottinteso se chiaro dal contesto (es: "Puoi venire?" "Sì, posso.").'],
+    ['Come l\'articolo "un": buon ragazzo, buon amico, buono studente, buono zio, buona ragazza, buon\'amica, buoni amici, buone idee.', 'buono', 'Come l\'articolo "un": buon ragazzo, buon amico, buono studente, buono zio, buona ragazza, buon\'amica, buoni amici, buone idee.'],
+    ['Sentire = oír/percibir/sentir. Ascoltare = escuchar deliberadamente. Es: "Sento un rumore" (oigo) vs "Ascolto la musica" (escucho).', 'sentire', 'Sentire = oír/percibir/sentir. Ascoltare = escuchar deliberadamente. Es: "Sento un rumore" (oigo) vs "Ascolto la musica" (escucho).'],
+    ['Tenere ≠ "tener" (poseer). Usare "avere" per il possesso. Tenere = sostenere, mantenere, custodire, tener sujeto.', 'tenere', 'Tenere ≠ "tener" (poseer). Usare "avere" per il possesso. Tenere = sostenere, mantenere, custodire, tener sujeto.'],
+    ['Pensare che + congiuntivo (soggetti diversi). Stesso soggetto: pensare di + infinito (es: "Penso di partire").', 'pensare', 'Pensare che + congiuntivo (soggetti diversi). Stesso soggetto: pensare di + infinito (es: "Penso di partire").'],
+    ['Credere che + congiuntivo (soggetti diversi). Stesso soggetto: credere di + infinito (es: "Credo di aver capito").', 'credere', 'Credere che + congiuntivo (soggetti diversi). Stesso soggetto: credere di + infinito (es: "Credo di aver capito").'],
+    ['Sperare che + congiuntivo (soggetti diversi). Stesso soggetto: sperare di + infinito (es: "Spero di riuscirci").', 'sperare', 'Sperare che + congiuntivo (soggetti diversi). Stesso soggetto: sperare di + infinito (es: "Spero di riuscirci").'],
+  ];
+  noteOnlyFixes.forEach(([notes, italian, check]) => fixVocabNoteOnly.run(notes, italian, check));
+
+  // Fix camera da letto example (dormitorio ≠ habitación genérica)
+  db.prepare(`UPDATE vocabulary_items SET example_es=? WHERE italian=? AND example_es LIKE '%habitación%' AND example_es NOT LIKE '%dormitorio%'`)
+    .run('El dormitorio está en el primer piso.', 'la camera');
+
+  // Fix conveniente false friend note (it CAN mean apropiado/adecuado per Treccani)
+  db.prepare(`UPDATE vocabulary_items SET spanish=?, false_friend_note=? WHERE italian=?`)
+    .run(
+      'conveniente / económico / adecuado',
+      '"Conveniente" puede significar barato/económico, pero también apropiado, ventajoso u oportuno. No equivale únicamente a "barato".',
+      'conveniente'
+    );
 }
 
 module.exports = { createSchema };

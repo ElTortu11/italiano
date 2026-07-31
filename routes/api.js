@@ -206,7 +206,7 @@ router.delete('/vocabulary/words/:id', (req, res) => {
 router.get('/flashcards/due', (req, res) => {
   const { category, limit = 20 } = req.query;
   let sql = `SELECT f.*, vi.italian, vi.spanish, vi.example_it, vi.example_es, vi.gender, vi.article, vi.plural,
-               vi.collocations, vi.notes, vi.word_type, vc.name as category_name, vc.icon as category_icon
+               vi.collocations, vi.notes, vi.word_type, vi.accepted_answers, vc.name as category_name, vc.icon as category_icon
              FROM flashcards f
              LEFT JOIN vocabulary_items vi ON vi.id = f.vocabulary_id
              LEFT JOIN vocabulary_categories vc ON vc.id = f.category_id
@@ -221,7 +221,7 @@ router.get('/flashcards/due', (req, res) => {
 router.get('/flashcards/new', (req, res) => {
   const { category, limit = 15 } = req.query;
   let sql = `SELECT f.*, vi.italian, vi.spanish, vi.example_it, vi.example_es, vi.gender, vi.article,
-               vi.collocations, vi.notes, vi.word_type, vc.name as category_name
+               vi.collocations, vi.notes, vi.word_type, vi.accepted_answers, vc.name as category_name
              FROM flashcards f
              LEFT JOIN vocabulary_items vi ON vi.id = f.vocabulary_id
              LEFT JOIN vocabulary_categories vc ON vc.id = f.category_id
