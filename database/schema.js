@@ -1816,18 +1816,22 @@ function createSchema() {
     /* conjugation fill errors are non-fatal */
   }
 
-  // ── Verbi Avanzati (idempotent, INSERT OR IGNORE) ─────────────────────────
-  db.prepare(`INSERT OR IGNORE INTO vocabulary_categories(name,name_it,icon,color,sort_order) VALUES(?,?,?,?,?)`)
-    .run('Verbi Avanzati', 'Verbi Avanzati', '🔥', '#7c3aed', 23);
+  // ── Verbi Avanzati (truly idempotent via SELECT-before-INSERT) ─────────────
+  if (!db.prepare(`SELECT id FROM vocabulary_categories WHERE name='Verbi Avanzati'`).get()) {
+    db.prepare(`INSERT INTO vocabulary_categories(name,name_it,icon,color,sort_order) VALUES(?,?,?,?,?)`)
+      .run('Verbi Avanzati', 'Verbi Avanzati', '🔥', '#7c3aed', 23);
+  }
 
   const _avCatId = db.prepare(`SELECT id FROM vocabulary_categories WHERE name='Verbi Avanzati'`).get()?.id;
   if (_avCatId) {
     const _insAV = db.prepare(`
-      INSERT OR IGNORE INTO vocabulary_items
+      INSERT INTO vocabulary_items
         (italian,spanish,category_id,word_type,example_it,example_es,cefr_level,notes,collocations)
       VALUES(?,?,?,?,?,?,?,?,?)
     `);
-    const _insAF = db.prepare(`INSERT OR IGNORE INTO flashcards(vocabulary_id,front,back,direction,category_id,next_review) VALUES(?,?,?,?,?,?)`);
+    const _chkAV = db.prepare(`SELECT id FROM vocabulary_items WHERE italian=? AND category_id=?`);
+    const _chkAF = db.prepare(`SELECT id FROM flashcards WHERE vocabulary_id=?`);
+    const _insAF = db.prepare(`INSERT INTO flashcards(vocabulary_id,front,back,direction,category_id,next_review) VALUES(?,?,?,?,?,?)`);
     const _now = Math.floor(Date.now()/1000);
 
     const _av = [
@@ -1884,9 +1888,518 @@ function createSchema() {
     ];
 
     _av.forEach(({ it, es, lv, ex_it, ex_es, notes, col }) => {
+      if (_chkAV.get(it, _avCatId)) return;
       const r = _insAV.run(it, es, _avCatId, 'verb', ex_it, ex_es, lv, notes || null, col || '[]');
-      if (r.lastInsertRowid) _insAF.run(r.lastInsertRowid, it, es, 'it-es', _avCatId, _now);
+      if (r.lastInsertRowid) {
+        if (!_chkAF.get(r.lastInsertRowid)) _insAF.run(r.lastInsertRowid, it, es, 'it-es', _avCatId, _now);
+      }
     });
+  }
+
+  // ── Vocabulary top-up: all categories to 30 words (truly idempotent) ────────
+  {
+    const _now2 = Math.floor(Date.now() / 1000);
+    const _insVI2 = db.prepare(`
+      INSERT INTO vocabulary_items
+        (italian,spanish,category_id,word_type,example_it,example_es,cefr_level,notes,collocations)
+      VALUES(?,?,?,?,?,?,?,?,?)
+    `);
+    const _insFC2 = db.prepare("INSERT INTO flashcards(vocabulary_id,front,back,direction,category_id,next_review) VALUES(?,?,?,?,?,?)");
+    const _chkVI = db.prepare("SELECT id FROM vocabulary_items WHERE italian=? AND category_id=?");
+    const _chkFC2 = db.prepare("SELECT id FROM flashcards WHERE vocabulary_id=?");
+    // Ensure a category exists; creates it only if absent
+    const _ensureCat = (name, nameIt, icon, color, sortOrder) => {
+      let row = db.prepare("SELECT id FROM vocabulary_categories WHERE name=?").get(name);
+      if (!row) {
+        db.prepare("INSERT INTO vocabulary_categories(name,name_it,icon,color,sort_order) VALUES(?,?,?,?,?)").run(name, nameIt, icon, color, sortOrder);
+        row = db.prepare("SELECT id FROM vocabulary_categories WHERE name=?").get(name);
+      }
+      return row?.id;
+    };
+    const _topup = (catName, words) => {
+      const cid = db.prepare("SELECT id FROM vocabulary_categories WHERE name=?").get(catName)?.id;
+      if (!cid) return;
+      words.forEach(({ it, es, lv, ex_it, ex_es, tp, notes, col }) => {
+        if (_chkVI.get(it, cid)) return;
+        const r = _insVI2.run(it, es, cid, tp || "noun", ex_it, ex_es, lv, notes || null, col || "[]");
+        if (r.lastInsertRowid && !_chkFC2.get(r.lastInsertRowid)) {
+          _insFC2.run(r.lastInsertRowid, it, es, "it-es", cid, _now2);
+        }
+      });
+    };
+
+    // Create the 6 categories that may not exist in older databases
+    _ensureCat("Il Tempo",             "Il Tempo e il Clima",       "🌤️", "#0284c7", 16);
+    _ensureCat("La Città",             "La Città e i Luoghi",       "🏙️", "#374151", 17);
+    _ensureCat("Sport e Tempo Libero", "Sport e Tempo Libero",      "⚽", "#16a34a", 18);
+    _ensureCat("La Salute",            "La Salute e la Medicina",   "🏥", "#e11d48", 19);
+    _ensureCat("Tecnologia e Media",   "Tecnologia e Media",        "💻", "#0e7490", 20);
+    _ensureCat("Il Viaggio",           "Il Viaggio e il Turismo",   "✈️", "#7c3aed", 21);
+
+    _topup("Il Corpo", [
+      { it:"il polso",    es:"la muñeca",  lv:"A2", ex_it:"Mi fa male il polso.",             ex_es:"Me duele la muñeca." },
+      { it:"il gomito",   es:"el codo",    lv:"A2", ex_it:"Ho battuto il gomito.",             ex_es:"Me golpeé el codo." },
+      { it:"la caviglia", es:"el tobillo", lv:"A2", ex_it:"Mi sono slogata la caviglia.",     ex_es:"Me torcí el tobillo." },
+      { it:"la coscia",   es:"el muslo",   lv:"B1", ex_it:"Ho un dolore alla coscia.",        ex_es:"Tengo dolor en el muslo." },
+      { it:"la pelle",    es:"la piel",    lv:"A2", ex_it:"Ha la pelle molto chiara.",        ex_es:"Tiene la piel muy clara." },
+      { it:"il labbro",   es:"el labio",   lv:"A2", ex_it:"Ha le labbra rosse.",              ex_es:"Tiene los labios rojos.", notes:"Pl. irregolare: le labbra (f.)" },
+      { it:"la guancia",  es:"la mejilla", lv:"B1", ex_it:"Le lacrime le scorrevano sulla guancia.", ex_es:"Las lágrimas le caían por la mejilla." },
+      { it:"la fronte",   es:"la frente",  lv:"B1", ex_it:"Ha la fronte sudata.",             ex_es:"Tiene la frente sudada." },
+      { it:"la lingua",   es:"la lengua",  lv:"A2", ex_it:"Ti sei morso la lingua?",          ex_es:"¿Te mordiste la lengua?", col:'["avere la lingua sciolta","tenere la lingua"]' },
+      { it:"il tallone",  es:"el talón",   lv:"B1", ex_it:"Mi fa male il tallone quando corro.", ex_es:"Me duele el talón cuando corro." },
+    ]);
+
+    _topup("Paesi e Nazionalità", [
+      { it:"l'Italia",         es:"Italia",                    lv:"A1", ex_it:"L'Italia è famosa per la cucina e l'arte.",             ex_es:"Italia es famosa por la cocina y el arte.",        notes:"nazionalità: italiano/a — in Italia" },
+      { it:"il Canada",        es:"Canadá",                    lv:"A2", ex_it:"Il Canada è il secondo paese più grande del mondo.",    ex_es:"Canadá es el segundo país más grande del mundo.", notes:"nazionalità: canadese — in Canada" },
+      { it:"l'Australia",      es:"Australia",                 lv:"A2", ex_it:"L'Australia ha una fauna unica.",                       ex_es:"Australia tiene una fauna única.",                 notes:"nazionalità: australiano/a — in Australia" },
+      { it:"la Turchia",       es:"Turquía",                   lv:"B1", ex_it:"Istanbul è la città più grande della Turchia.",          ex_es:"Estambul es la ciudad más grande de Turquía.",    notes:"nazionalità: turco/a — in Turchia" },
+      { it:"l'Egitto",         es:"Egipto",                    lv:"B1", ex_it:"L'Egitto è famoso per le piramidi.",                    ex_es:"Egipto es famoso por las pirámides.",              notes:"nazionalità: egiziano/a — in Egitto" },
+      { it:"l'India",          es:"India",                     lv:"A2", ex_it:"L'India ha la seconda popolazione più grande del mondo.", ex_es:"India tiene la segunda población más grande del mundo.", notes:"nazionalità: indiano/a — in India" },
+      { it:"la Corea del Sud", es:"Corea del Sur",             lv:"B1", ex_it:"La Corea del Sud è famosa per il K-pop.",              ex_es:"Corea del Sur es famosa por el K-pop.",            notes:"nazionalità: sudcoreano/a — in Corea del Sud" },
+      { it:"la Svezia",        es:"Suecia",                    lv:"B1", ex_it:"La Svezia è famosa per il design e l'innovazione.",     ex_es:"Suecia es famosa por el diseño y la innovación.", notes:"nazionalità: svedese — in Svezia" },
+      { it:"la Norvegia",      es:"Noruega",                   lv:"B1", ex_it:"La Norvegia ha i fiordi più belli del mondo.",          ex_es:"Noruega tiene los fiordos más bellos del mundo.", notes:"nazionalità: norvegese — in Norvegia" },
+      { it:"la Polonia",       es:"Polonia",                   lv:"B1", ex_it:"La Polonia confina con la Germania e la Russia.",       ex_es:"Polonia limita con Alemania y Rusia.",            notes:"nazionalità: polacco/a — in Polonia" },
+      { it:"l'Olanda",         es:"Holanda / los Países Bajos",lv:"B1", ex_it:"L'Olanda è famosa per i tulipani e i mulini.",         ex_es:"Holanda es famosa por los tulipanes y los molinos.", notes:"nazionalità: olandese — in Olanda" },
+      { it:"il Belgio",        es:"Bélgica",                   lv:"B1", ex_it:"Il Belgio è famoso per il cioccolato.",                 ex_es:"Bélgica es famosa por el chocolate.",             notes:"nazionalità: belga — in Belgio" },
+      { it:"l'Austria",        es:"Austria",                   lv:"B1", ex_it:"L'Austria è famosa per la musica classica e le Alpi.", ex_es:"Austria es famosa por la música clásica y los Alpes.", notes:"nazionalità: austriaco/a — in Austria" },
+      { it:"la Colombia",      es:"Colombia",                  lv:"A2", ex_it:"La Colombia produce il miglior caffè del mondo.",       ex_es:"Colombia produce el mejor café del mundo.",       notes:"nazionalità: colombiano/a — in Colombia" },
+      { it:"il Perù",          es:"Perú",                      lv:"B1", ex_it:"Il Perù è famoso per Machu Picchu.",                   ex_es:"Perú es famoso por Machu Picchu.",                notes:"nazionalità: peruviano/a — in Perù" },
+    ]);
+
+    _topup("Animali", [
+      { it:"il serpente",   es:"la serpiente",       lv:"A2", ex_it:"Il serpente striscia sul terreno.",        ex_es:"La serpiente se arrastra por el suelo." },
+      { it:"la scimmia",    es:"el mono",            lv:"A2", ex_it:"La scimmia si arrampica sugli alberi.",    ex_es:"El mono trepa por los árboles." },
+      { it:"il delfino",    es:"el delfín",          lv:"A2", ex_it:"I delfini sono molto intelligenti.",       ex_es:"Los delfines son muy inteligentes." },
+      { it:"il coccodrillo",es:"el cocodrilo",       lv:"B1", ex_it:"Il coccodrillo vive vicino ai fiumi.",    ex_es:"El cocodrilo vive cerca de los ríos." },
+      { it:"il pinguino",   es:"el pingüino",        lv:"A2", ex_it:"Il pinguino vive in Antartide.",          ex_es:"El pingüino vive en la Antártida." },
+      { it:"la giraffa",    es:"la jirafa",          lv:"A2", ex_it:"La giraffa ha il collo lunghissimo.",     ex_es:"La jirafa tiene el cuello larguísimo." },
+      { it:"l'ape",         es:"la abeja",           lv:"A2", ex_it:"L'ape produce il miele.",                 ex_es:"La abeja produce miel." },
+      { it:"la farfalla",   es:"la mariposa",        lv:"A2", ex_it:"La farfalla vola tra i fiori.",           ex_es:"La mariposa vuela entre las flores." },
+      { it:"il topo",       es:"el ratón",           lv:"A2", ex_it:"Il topo ha mangiato il formaggio.",       ex_es:"El ratón se comió el queso." },
+      { it:"il cervo",      es:"el ciervo",          lv:"B1", ex_it:"Il cervo vive nel bosco.",                ex_es:"El ciervo vive en el bosque." },
+      { it:"la capra",      es:"la cabra",           lv:"A2", ex_it:"La capra sale sulle rocce.",              ex_es:"La cabra sube por las rocas." },
+      { it:"l'asino",       es:"el burro / el asno", lv:"A2", ex_it:"L'asino porta il carico.",               ex_es:"El burro lleva la carga.", notes:"In spagnolo 'burro' = asino (non la mantequilla!)" },
+      { it:"il gufo",       es:"el búho",            lv:"B1", ex_it:"Il gufo esce di notte.",                  ex_es:"El búho sale de noche." },
+      { it:"il cinghiale",  es:"el jabalí",          lv:"B1", ex_it:"Il cinghiale vive nella foresta.",        ex_es:"El jabalí vive en el bosque." },
+      { it:"il gabbiano",   es:"la gaviota",         lv:"B1", ex_it:"I gabbiani volano vicino al mare.",       ex_es:"Las gaviotas vuelan cerca del mar." },
+    ]);
+
+    _topup("La Famiglia", [
+      { it:"la suocera",   es:"la suegra",         lv:"B1", ex_it:"La mia suocera cucina benissimo.",            ex_es:"Mi suegra cocina muy bien." },
+      { it:"il cognato",   es:"el cuñado",         lv:"B1", ex_it:"Mio cognato lavora come ingegnere.",          ex_es:"Mi cuñado trabaja como ingeniero." },
+      { it:"la cognata",   es:"la cuñada",         lv:"B1", ex_it:"Mia cognata abita a Milano.",                 ex_es:"Mi cuñada vive en Milán." },
+      { it:"il genero",    es:"el yerno",          lv:"B1", ex_it:"Il genero aiuta in giardino.",                ex_es:"El yerno ayuda en el jardín." },
+      { it:"la nuora",     es:"la nuera",          lv:"B1", ex_it:"La nuora è venuta a cena.",                   ex_es:"La nuera vino a cenar." },
+      { it:"il bisnonno",  es:"el bisabuelo",      lv:"B1", ex_it:"Mio bisnonno aveva cento anni.",              ex_es:"Mi bisabuelo tenía cien años." },
+      { it:"il fidanzato", es:"el novio",          lv:"A2", ex_it:"Il mio fidanzato si chiama Marco.",           ex_es:"Mi novio se llama Marco." },
+      { it:"la fidanzata", es:"la novia",          lv:"A2", ex_it:"Ha presentato la fidanzata ai genitori.",     ex_es:"Presentó la novia a sus padres." },
+      { it:"il gemello",   es:"el gemelo",         lv:"B1", ex_it:"Ho un fratello gemello.",                     ex_es:"Tengo un hermano gemelo." },
+      { it:"il padrino",   es:"el padrino",        lv:"B1", ex_it:"Il padrino porta i regali al battesimo.",    ex_es:"El padrino lleva los regalos al bautizo." },
+      { it:"il patrigno",  es:"el padrastro",      lv:"B1", ex_it:"Il patrigno è molto gentile.",               ex_es:"El padrastro es muy amable." },
+      { it:"la matrigna",  es:"la madrastra",      lv:"B1", ex_it:"La matrigna si prende cura dei bambini.",    ex_es:"La madrastra cuida a los niños." },
+      { it:"il bambino",   es:"el niño",           lv:"A1", ex_it:"Il bambino gioca in giardino.",              ex_es:"El niño juega en el jardín." },
+      { it:"il coniuge",   es:"el/la cónyuge",     lv:"B1", ex_it:"Il coniuge ha diritto alla pensione.",       ex_es:"El cónyuge tiene derecho a la pensión.", notes:"Termine formale/legale" },
+      { it:"il vedovo",    es:"el viudo",          lv:"B1", ex_it:"Il vedovo vive da solo da anni.",             ex_es:"El viudo vive solo desde hace años." },
+    ]);
+
+    _topup("Cibo e Bevande", [
+      { it:"il prosciutto", es:"el jamón",      lv:"A2", ex_it:"Vorrei un panino con il prosciutto.", ex_es:"Quisiera un bocadillo con jamón." },
+      { it:"la mozzarella", es:"la mozzarella", lv:"A2", ex_it:"La pizza con mozzarella fresca è buonissima.", ex_es:"La pizza con mozzarella fresca está riquísima." },
+      { it:"il cioccolato", es:"el chocolate",  lv:"A2", ex_it:"Mi piace molto il cioccolato fondente.", ex_es:"Me gusta mucho el chocolate negro." },
+      { it:"il tè",         es:"el té",         lv:"A2", ex_it:"Bevo il tè con il latte.",            ex_es:"Bebo el té con leche." },
+      { it:"la cipolla",    es:"la cebolla",    lv:"A2", ex_it:"La cipolla fa lacrimare gli occhi.",  ex_es:"La cebolla hace llorar los ojos." },
+      { it:"il peperone",   es:"el pimiento",   lv:"A2", ex_it:"Ho messo i peperoni nella pasta.",   ex_es:"Puse los pimientos en la pasta." },
+      { it:"l'aglio",       es:"el ajo",        lv:"A2", ex_it:"L'aglio dà sapore al sugo.",         ex_es:"El ajo da sabor a la salsa." },
+      { it:"il pomodoro",   es:"el tomate",     lv:"A2", ex_it:"Il pomodoro è rosso e succoso.",     ex_es:"El tomate es rojo y jugoso." },
+      { it:"la fragola",    es:"la fresa",      lv:"A2", ex_it:"Le fragole con panna sono deliziose.", ex_es:"Las fresas con nata son deliciosas." },
+      { it:"il limone",     es:"el limón",      lv:"A2", ex_it:"Metto il limone nel tè.",            ex_es:"Pongo limón en el té." },
+    ]);
+
+    _topup("Falsi Amici", [
+      { it:"guardare",       es:"mirar (≠ guardar = conservar)",            tp:"verb",      lv:"A1", ex_it:"Guarda che bello!",                          ex_es:"¡Mira qué bonito!",                       notes:"'Guardare' = mirar. 'Guardar' en español = conservar/custodiar = 'custodire/conservare' en italiano." },
+      { it:"mancare (a)",    es:"faltar / echar de menos",                  tp:"verb",      lv:"B1", ex_it:"Mi manchi molto.",                           ex_es:"Te echo mucho de menos.",                  notes:"Sintassi inversa: 'mi manchi' = te echo de menos. 'Mancar' en español = fallar." },
+      { it:"largo (agg.)",   es:"ancho (≠ largo en español = long)",        tp:"adjective", lv:"A2", ex_it:"La strada è molto larga.",                  ex_es:"La calle es muy ancha.",                   notes:"'Largo' en italiano = ancho. 'Largo' en español = lungo en italiano." },
+      { it:"lungo",          es:"largo (≠ luego en español = después)",     tp:"adjective", lv:"A2", ex_it:"Il Po è il fiume più lungo d'Italia.",       ex_es:"El Po es el río más largo de Italia.",    notes:"'Lungo' en italiano = largo. Parece 'luego' (después) pero son distintos." },
+      { it:"bravo",          es:"bueno / hábil (≠ valiente)",               tp:"adjective", lv:"A1", ex_it:"Sei molto bravo in matematica.",             ex_es:"Eres muy bueno en matemáticas.",           notes:"'Bravo' en italiano = bueno/hábil. 'Bravo' en español = valiente = 'coraggioso' en italiano." },
+      { it:"restare",        es:"quedarse (≠ restar = sustraer)",           tp:"verb",      lv:"A2", ex_it:"Resto a casa stasera.",                      ex_es:"Me quedo en casa esta noche.",             notes:"'Restare' = quedarse. 'Restar' en español = sustraer = 'sottrarre' en italiano." },
+      { it:"l'argomento",    es:"el tema (≠ el argumento = trama)",         tp:"noun",      lv:"B1", ex_it:"Di che argomento tratta il libro?",          ex_es:"¿De qué tema trata el libro?",            notes:"'Argomento' = tema/asunto. 'El argumento' (es.) = trama = 'la trama' en italiano." },
+      { it:"la libreria",    es:"la librería / la estantería (≠ biblioteca)",tp:"noun",     lv:"A2", ex_it:"Compro i libri in libreria.",                ex_es:"Compro los libros en la librería.",        notes:"'Libreria' = librería (tienda) o estantería (mueble). Biblioteca = 'la biblioteca' en italiano." },
+      { it:"la delusione",   es:"la decepción (≠ la delusión = delirio)",   tp:"noun",      lv:"B1", ex_it:"Che delusione, non ha superato l'esame.",    ex_es:"¡Qué decepción, no aprobó el examen!",    notes:"'Delusione' = decepción. 'Delusión' en español = delirio = 'il delirio' en italiano." },
+      { it:"il successo",    es:"el éxito (≠ el suceso = acontecimiento)",  tp:"noun",      lv:"B1", ex_it:"Il film ha avuto molto successo.",            ex_es:"La película tuvo mucho éxito.",            notes:"'Successo' = éxito. 'El suceso' (es.) = acontecimiento = 'l'avvenimento' en italiano." },
+      { it:"la mancia",      es:"la propina (≠ la mancha = mancha)",        tp:"noun",      lv:"B1", ex_it:"Ho lasciato una mancia al cameriere.",        ex_es:"Dejé una propina al camarero.",            notes:"'Mancia' = propina. 'La mancha' (es.) = stain = 'la macchia' en italiano." },
+      { it:"affrontare",     es:"afrontar / enfrentar (≠ afrentar = insultar)",tp:"verb",  lv:"B1", ex_it:"Devi affrontare i tuoi problemi.",            ex_es:"Tienes que afrontar tus problemas.",       notes:"'Affrontare' = afrontar/enfrentarse a. 'Afrentar' (es.) = insultar = 'insultare' en italiano." },
+      { it:"il tappeto",     es:"la alfombra (≠ el tapete = mantelito)",    tp:"noun",      lv:"B1", ex_it:"Ho un bel tappeto persiano in salotto.",     ex_es:"Tengo una bonita alfombra persa en el salón.", notes:"'Tappeto' = alfombra. 'El tapete' (es.) puede significar mantelito = 'la tovaglietta' en italiano." },
+      { it:"ancora (avv.)",  es:"todavía / aún",                            tp:"connector", lv:"A2", ex_it:"Stai ancora studiando?",                     ex_es:"¿Todavía estás estudiando?",               notes:"'Ancora' (avverbio) = todavía/aún. Non confondere con 'l'ancora' = el ancla." },
+      { it:"stare",          es:"estar (con restricciones) / quedarse",     tp:"verb",      lv:"A2", ex_it:"Come stai? — Sto bene.",                     ex_es:"¿Cómo estás? — Estoy bien.",               notes:"'Stare' ≠ 'estar' totalmente. 'Stare fermo' = quedarse quieto. Per il significato permanente = 'essere'." },
+      { it:"attento",        es:"cuidadoso / atento",                       tp:"adjective", lv:"A2", ex_it:"Stai attento quando attraversi la strada.",  ex_es:"Ten cuidado cuando cruces la calle.",      notes:"'Attento' en italiano = cuidadoso/vigilante. En español 'atento' puede significar cortés/considerado." },
+      { it:"disturbare",     es:"molestar (≠ disturbar = perturbar)",       tp:"verb",      lv:"B1", ex_it:"Scusa, ti disturbo?",                        ex_es:"Perdona, ¿te molesto?",                    notes:"'Disturbare' = molestar. Similar al español 'molestar'." },
+      { it:"il tasto",       es:"la tecla (≠ el gusto = sabor)",            tp:"noun",      lv:"B1", ex_it:"Premi il tasto Invio.",                      ex_es:"Pulsa la tecla Intro.",                    notes:"'Tasto' = tecla (de teclado). 'El gusto' (es.) = sabor = 'il gusto' en italiano." },
+    ]);
+
+    _topup("Emozioni", [
+      { it:"la gelosia",       es:"los celos",                       tp:"noun", lv:"B1", ex_it:"La gelosia può distruggere una relazione.", ex_es:"Los celos pueden destruir una relación." },
+      { it:"la solitudine",    es:"la soledad",                      tp:"noun", lv:"B1", ex_it:"Soffre di molta solitudine.",               ex_es:"Sufre de mucha soledad." },
+      { it:"l'invidia",        es:"la envidia",                      tp:"noun", lv:"B1", ex_it:"L'invidia è un sentimento negativo.",       ex_es:"La envidia es un sentimiento negativo." },
+      { it:"la tranquillità",  es:"la tranquilidad",                 tp:"noun", lv:"B1", ex_it:"Cerco tranquillità nella natura.",          ex_es:"Busco tranquilidad en la naturaleza." },
+      { it:"la felicità",      es:"la felicidad",                    tp:"noun", lv:"A2", ex_it:"La felicità non si compra.",               ex_es:"La felicidad no se compra." },
+      { it:"la speranza",      es:"la esperanza",                    tp:"noun", lv:"B1", ex_it:"Non perdere mai la speranza.",             ex_es:"Nunca pierdas la esperanza." },
+      { it:"l'amore",          es:"el amor",                         tp:"noun", lv:"A1", ex_it:"L'amore è la cosa più importante.",        ex_es:"El amor es lo más importante." },
+      { it:"l'odio",           es:"el odio",                         tp:"noun", lv:"B1", ex_it:"L'odio porta solo sofferenza.",            ex_es:"El odio solo trae sufrimiento." },
+      { it:"la gratitudine",   es:"la gratitud",                     tp:"noun", lv:"B1", ex_it:"Sento molta gratitudine verso di te.",     ex_es:"Siento mucha gratitud hacia ti." },
+      { it:"il rimpianto",     es:"el arrepentimiento / el remordimiento", tp:"noun", lv:"B1", ex_it:"Non voglio vivere con il rimpianto.", ex_es:"No quiero vivir con remordimientos." },
+      { it:"la noia",          es:"el aburrimiento",                 tp:"noun", lv:"B1", ex_it:"Sto morendo di noia.",                    ex_es:"Me estoy muriendo de aburrimiento." },
+      { it:"il coraggio",      es:"el coraje / la valentía",         tp:"noun", lv:"B1", ex_it:"Hai avuto molto coraggio.",               ex_es:"Has tenido mucho coraje." },
+      { it:"la timidezza",     es:"la timidez",                      tp:"noun", lv:"B1", ex_it:"La timidezza lo blocca in pubblico.",     ex_es:"La timidez lo bloquea en público." },
+      { it:"il disagio",       es:"la incomodidad",                  tp:"noun", lv:"B1", ex_it:"Provo disagio in queste situazioni.",     ex_es:"Siento incomodidad en estas situaciones." },
+      { it:"la meraviglia",    es:"la maravilla / el asombro",       tp:"noun", lv:"B1", ex_it:"Che meraviglia questo paesaggio!",        ex_es:"¡Qué maravilla este paisaje!" },
+      { it:"la serenità",      es:"la serenidad",                    tp:"noun", lv:"B1", ex_it:"Ho bisogno di serenità nella mia vita.",  ex_es:"Necesito serenidad en mi vida." },
+      { it:"l'imbarazzo",      es:"el apuro / la turbación",         tp:"noun", lv:"B1", ex_it:"Che imbarazzo, ho detto una cosa stupida!", ex_es:"¡Qué apuro, dije una tontería!", notes:"Diverso da 'vergogna' (shame). Imbarazzo = embarrassment/awkwardness." },
+      { it:"la rassegnazione", es:"la resignación",                  tp:"noun", lv:"B1", ex_it:"Si è arresa alla rassegnazione.",         ex_es:"Se rindió a la resignación." },
+    ]);
+
+    _topup("Aggettivi", [
+      { it:"caro",         es:"caro / querido",      tp:"adjective", lv:"A2", ex_it:"Questo ristorante è troppo caro.",        ex_es:"Este restaurante es demasiado caro.",   notes:"'Caro' = caro/costoso o querido (affetto)." },
+      { it:"economico",    es:"económico / barato",  tp:"adjective", lv:"A2", ex_it:"Ho trovato un hotel economico.",          ex_es:"Encontré un hotel económico." },
+      { it:"pulito",       es:"limpio",              tp:"adjective", lv:"A2", ex_it:"La camera è pulita e ordinata.",         ex_es:"La habitación está limpia y ordenada." },
+      { it:"sporco",       es:"sucio",               tp:"adjective", lv:"A2", ex_it:"Ho le mani sporche.",                    ex_es:"Tengo las manos sucias." },
+      { it:"libero",       es:"libre",               tp:"adjective", lv:"A2", ex_it:"Sei libero stasera?",                   ex_es:"¿Estás libre esta noche?" },
+      { it:"occupato",     es:"ocupado",             tp:"adjective", lv:"A2", ex_it:"Sono molto occupato questa settimana.",  ex_es:"Estoy muy ocupado esta semana." },
+      { it:"rumoroso",     es:"ruidoso",             tp:"adjective", lv:"B1", ex_it:"Il quartiere è molto rumoroso.",        ex_es:"El barrio es muy ruidoso." },
+      { it:"silenzioso",   es:"silencioso",          tp:"adjective", lv:"B1", ex_it:"La biblioteca deve essere silenziosa.", ex_es:"La biblioteca debe ser silenciosa." },
+      { it:"intelligente", es:"inteligente",         tp:"adjective", lv:"A2", ex_it:"È una ragazza molto intelligente.",     ex_es:"Es una chica muy inteligente." },
+      { it:"divertente",   es:"divertido",           tp:"adjective", lv:"A2", ex_it:"È un film molto divertente.",           ex_es:"Es una película muy divertida." },
+    ]);
+
+    _topup("Casa e Arredamento", [
+      { it:"il divano",     es:"el sofá",                lv:"A2", ex_it:"Mi siedo sul divano.",                      ex_es:"Me siento en el sofá." },
+      { it:"la sedia",      es:"la silla",               lv:"A1", ex_it:"Siediti su questa sedia.",                 ex_es:"Siéntate en esta silla." },
+      { it:"il tavolo",     es:"la mesa",                lv:"A1", ex_it:"Mangiamo al tavolo.",                      ex_es:"Comemos en la mesa." },
+      { it:"il letto",      es:"la cama",                lv:"A1", ex_it:"Vado a letto tardi.",                      ex_es:"Me voy a la cama tarde." },
+      { it:"l'armadio",     es:"el armario",             lv:"A2", ex_it:"Metti i vestiti nell'armadio.",             ex_es:"Pon la ropa en el armario." },
+      { it:"la cucina",     es:"la cocina",              lv:"A1", ex_it:"Cucino sempre in cucina.",                  ex_es:"Siempre cocino en la cocina." },
+      { it:"il bagno",      es:"el baño",                lv:"A1", ex_it:"Dov'è il bagno?",                          ex_es:"¿Dónde está el baño?" },
+      { it:"la finestra",   es:"la ventana",             lv:"A1", ex_it:"Apri la finestra, per favore.",             ex_es:"Abre la ventana, por favor." },
+      { it:"la porta",      es:"la puerta",              lv:"A1", ex_it:"Chiudi la porta.",                          ex_es:"Cierra la puerta." },
+      { it:"lo specchio",   es:"el espejo",              lv:"A2", ex_it:"Mi guardo allo specchio.",                  ex_es:"Me miro en el espejo." },
+      { it:"la lampada",    es:"la lámpara",             lv:"A2", ex_it:"Accendi la lampada.",                       ex_es:"Enciende la lámpara." },
+      { it:"il frigorifero",es:"la nevera",              lv:"A2", ex_it:"Metti il latte in frigo.",                  ex_es:"Pon la leche en la nevera." },
+      { it:"il balcone",    es:"el balcón",              lv:"A2", ex_it:"Ho i fiori sul balcone.",                   ex_es:"Tengo flores en el balcón." },
+      { it:"il soffitto",   es:"el techo",               lv:"B1", ex_it:"Il soffitto è molto alto.",                 ex_es:"El techo es muy alto." },
+      { it:"il salotto",    es:"el salón",               lv:"A2", ex_it:"Guardiamo la TV in salotto.",               ex_es:"Vemos la tele en el salón." },
+      { it:"il tappeto",    es:"la alfombra",            lv:"A2", ex_it:"Ho un bel tappeto persiano in salotto.",     ex_es:"Tengo una bonita alfombra persa en el salón." },
+      { it:"la tenda",      es:"la cortina",             lv:"A2", ex_it:"Chiudi le tende, c'è troppa luce.",          ex_es:"Cierra las cortinas, hay demasiada luz." },
+      { it:"il cuscino",    es:"el cojín",               lv:"A2", ex_it:"Metto i cuscini sul divano.",                ex_es:"Pongo los cojines en el sofá." },
+      { it:"il lavandino",  es:"el lavabo / el fregadero",lv:"A2", ex_it:"Il lavandino è intasato.",                  ex_es:"El lavabo está atascado." },
+      { it:"la doccia",     es:"la ducha",               lv:"A2", ex_it:"Faccio la doccia ogni mattina.",             ex_es:"Me ducho cada mañana.", col:'["fare la doccia"]' },
+      { it:"il forno",      es:"el horno",               lv:"A2", ex_it:"Ho messo la pizza nel forno.",               ex_es:"Puse la pizza en el horno." },
+      { it:"la lavatrice",  es:"la lavadora",            lv:"A2", ex_it:"Devo mettere il bucato in lavatrice.",        ex_es:"Tengo que poner la ropa en la lavadora." },
+      { it:"la libreria",   es:"la estantería",          lv:"A2", ex_it:"Ho molti libri sulla libreria.",             ex_es:"Tengo muchos libros en la estantería.", notes:"Qui 'libreria' = estantería (mueble). Come negozio = 'la libreria'. Biblioteca = 'la biblioteca'." },
+      { it:"il cassetto",   es:"el cajón",               lv:"A2", ex_it:"Le forchette sono nel cassetto.",            ex_es:"Los tenedores están en el cajón." },
+      { it:"il corridoio",  es:"el pasillo",             lv:"A2", ex_it:"Il bagno è in fondo al corridoio.",          ex_es:"El baño está al fondo del pasillo." },
+      { it:"le scale",      es:"las escaleras",          lv:"A2", ex_it:"Prendo le scale invece dell'ascensore.",     ex_es:"Subo las escaleras en lugar del ascensor." },
+      { it:"il garage",     es:"el garaje",              lv:"A2", ex_it:"Parcheggio la macchina in garage.",           ex_es:"Aparco el coche en el garaje." },
+      { it:"il giardino",   es:"el jardín",              lv:"A2", ex_it:"I bambini giocano in giardino.",             ex_es:"Los niños juegan en el jardín." },
+      { it:"il camino",     es:"la chimenea",            lv:"B1", ex_it:"Accendiamo il camino d'inverno.",            ex_es:"Encendemos la chimenea en invierno." },
+      { it:"la cantina",    es:"el sótano / la bodega",  lv:"B1", ex_it:"Il vino è conservato in cantina.",           ex_es:"El vino se guarda en la bodega." },
+    ]);
+
+    _topup("Abbigliamento", [
+      { it:"la camicia",              es:"la camisa",                lv:"A2", ex_it:"Porta una camicia bianca.",                      ex_es:"Lleva una camisa blanca." },
+      { it:"i pantaloni",             es:"los pantalones",           lv:"A1", ex_it:"Questi pantaloni sono troppo stretti.",           ex_es:"Estos pantalones son demasiado estrechos." },
+      { it:"la gonna",                es:"la falda",                 lv:"A2", ex_it:"Indossa una gonna lunga.",                        ex_es:"Lleva una falda larga." },
+      { it:"il vestito",              es:"el vestido",               lv:"A1", ex_it:"Ha un bel vestito rosso.",                        ex_es:"Tiene un bonito vestido rojo." },
+      { it:"le scarpe",               es:"los zapatos",              lv:"A1", ex_it:"Queste scarpe mi fanno male.",                    ex_es:"Estos zapatos me duelen." },
+      { it:"il maglione",             es:"el jersey / el suéter",    lv:"A2", ex_it:"Metti un maglione, fa freddo.",                   ex_es:"Ponte un jersey, hace frío." },
+      { it:"la giacca",               es:"la chaqueta",              lv:"A2", ex_it:"Ho dimenticato la giacca.",                       ex_es:"Olvidé la chaqueta." },
+      { it:"il cappotto",             es:"el abrigo",                lv:"A2", ex_it:"D'inverno metto il cappotto.",                    ex_es:"En invierno me pongo el abrigo." },
+      { it:"i calzini",               es:"los calcetines",           lv:"A2", ex_it:"Ho perso un calzino.",                            ex_es:"Perdí un calcetín." },
+      { it:"la borsa",                es:"el bolso",                 lv:"A2", ex_it:"Ho tutto nella mia borsa.",                       ex_es:"Tengo todo en mi bolso." },
+      { it:"il cappello",             es:"el sombrero",              lv:"A2", ex_it:"Porta sempre un cappello.",                        ex_es:"Siempre lleva sombrero." },
+      { it:"la sciarpa",              es:"la bufanda",               lv:"A2", ex_it:"Metti la sciarpa, c'è vento.",                    ex_es:"Ponte la bufanda, hay viento." },
+      { it:"i jeans",                 es:"los vaqueros",             lv:"A1", ex_it:"Preferisco i jeans ai pantaloni formali.",        ex_es:"Prefiero los vaqueros a los pantalones formales." },
+      { it:"le scarpe da ginnastica", es:"las zapatillas deportivas",lv:"A2", ex_it:"Vado in palestra con le scarpe da ginnastica.",   ex_es:"Voy al gimnasio con las zapatillas." },
+      { it:"la taglia",               es:"la talla",                 lv:"A2", ex_it:"Che taglia porti?",                               ex_es:"¿Qué talla usas?" },
+      { it:"la cravatta",          es:"la corbata",             lv:"A2", ex_it:"Devo mettere la cravatta per il colloquio.",    ex_es:"Tengo que ponerme la corbata para la entrevista." },
+      { it:"l'impermeabile",       es:"el impermeable",         lv:"A2", ex_it:"Ho preso l'impermeabile perché piove.",         ex_es:"Cogí el impermeable porque llueve." },
+      { it:"i guanti",             es:"los guantes",            lv:"A2", ex_it:"Metti i guanti, fa freddo.",                    ex_es:"Ponte los guantes, hace frío." },
+      { it:"il pigiama",           es:"el pijama",              lv:"A2", ex_it:"Vado a letto con il pigiama.",                  ex_es:"Me voy a dormir con el pijama." },
+      { it:"il costume da bagno",  es:"el bañador",             lv:"A2", ex_it:"Ho dimenticato il costume da bagno.",           ex_es:"Olvidé el bañador." },
+      { it:"l'ombrello",           es:"el paraguas",            lv:"A2", ex_it:"Ho dimenticato l'ombrello e mi sono bagnato.", ex_es:"Olvidé el paraguas y me mojé." },
+      { it:"la cintura",           es:"el cinturón",            lv:"A2", ex_it:"Ho bisogno di una cintura nuova.",              ex_es:"Necesito un cinturón nuevo." },
+      { it:"gli occhiali",         es:"las gafas",              lv:"A2", ex_it:"Ho dimenticato gli occhiali a casa.",           ex_es:"Olvidé las gafas en casa." },
+      { it:"la collana",           es:"el collar",              lv:"B1", ex_it:"Ha una bella collana d'oro.",                  ex_es:"Tiene un bonito collar de oro." },
+      { it:"l'orologio",           es:"el reloj",               lv:"A2", ex_it:"L'orologio da polso è rotto.",                 ex_es:"El reloj de pulsera está roto." },
+      { it:"gli stivali",          es:"las botas",              lv:"A2", ex_it:"Gli stivali di pelle sono eleganti.",           ex_es:"Las botas de cuero son elegantes." },
+      { it:"i sandali",            es:"las sandalias",          lv:"A2", ex_it:"D'estate metto i sandali.",                    ex_es:"En verano me pongo las sandalias." },
+      { it:"la felpa",             es:"la sudadera",            lv:"A2", ex_it:"Metto la felpa quando fa fresco.",              ex_es:"Me pongo la sudadera cuando refresca." },
+      { it:"lo zaino",             es:"la mochila",             lv:"A2", ex_it:"Metto i libri nello zaino.",                   ex_es:"Meto los libros en la mochila." },
+      { it:"il foulard",           es:"el pañuelo de cuello",  lv:"B1", ex_it:"Porta sempre un foulard colorato.",             ex_es:"Siempre lleva un pañuelo de colores." },
+    ]);
+
+    _topup("Trasporti", [
+      { it:"l'autobus",        es:"el autobús",           lv:"A1", ex_it:"Prendo l'autobus per andare al lavoro.",      ex_es:"Tomo el autobús para ir al trabajo." },
+      { it:"il treno",         es:"el tren",              lv:"A1", ex_it:"Il treno parte alle otto.",                   ex_es:"El tren sale a las ocho." },
+      { it:"la metropolitana", es:"el metro",             lv:"A2", ex_it:"Prendo la metro ogni giorno.",               ex_es:"Cojo el metro todos los días.", notes:"Abbreviazione: metro" },
+      { it:"l'aereo",          es:"el avión",             lv:"A1", ex_it:"Ho paura di viaggiare in aereo.",            ex_es:"Tengo miedo de viajar en avión." },
+      { it:"la macchina",      es:"el coche",             lv:"A1", ex_it:"Vado in macchina al lavoro.",                ex_es:"Voy al trabajo en coche." },
+      { it:"la bicicletta",    es:"la bicicleta",         lv:"A1", ex_it:"Vado in bici al parco.",                     ex_es:"Voy al parque en bici.", notes:"Abbreviazione: la bici" },
+      { it:"il taxi",          es:"el taxi",              lv:"A1", ex_it:"Chiamo un taxi.",                             ex_es:"Llamo un taxi." },
+      { it:"la nave",          es:"el barco",             lv:"A2", ex_it:"Siamo andati in Sardegna in nave.",           ex_es:"Fuimos a Cerdeña en barco." },
+      { it:"il biglietto",     es:"el billete",           lv:"A2", ex_it:"Ho comprato il biglietto online.",            ex_es:"Compré el billete por internet." },
+      { it:"la fermata",       es:"la parada",            lv:"A2", ex_it:"Scendo alla prossima fermata.",               ex_es:"Me bajo en la próxima parada." },
+      { it:"il traffico",      es:"el tráfico",           lv:"A2", ex_it:"C'è molto traffico in centro.",              ex_es:"Hay mucho tráfico en el centro." },
+      { it:"il parcheggio",    es:"el aparcamiento",      lv:"B1", ex_it:"Non trovo parcheggio.",                       ex_es:"No encuentro aparcamiento." },
+      { it:"la moto",          es:"la moto",                    lv:"A2", ex_it:"Vado al lavoro in moto.",                          ex_es:"Voy al trabajo en moto." },
+      { it:"il camion",        es:"el camión",                  lv:"A2", ex_it:"Il camion trasporta le merci.",                    ex_es:"El camión transporta las mercancías." },
+      { it:"l'elicottero",     es:"el helicóptero",             lv:"B1", ex_it:"L'elicottero atterra sul tetto.",                  ex_es:"El helicóptero aterriza en el tejado." },
+      { it:"la crociera",      es:"el crucero",                 lv:"B1", ex_it:"Abbiamo fatto una crociera nel Mediterraneo.",     ex_es:"Hicimos un crucero por el Mediterráneo." },
+      { it:"il traghetto",     es:"el ferry / el transbordador",lv:"B1", ex_it:"Prendiamo il traghetto per la Sardegna.",          ex_es:"Tomamos el ferry hacia Cerdeña." },
+      { it:"il porto",         es:"el puerto",                  lv:"A2", ex_it:"La nave è arrivata al porto.",                     ex_es:"El barco llegó al puerto." },
+      { it:"l'aeroporto",      es:"el aeropuerto",              lv:"A2", ex_it:"L'aeroporto è lontano dal centro.",                ex_es:"El aeropuerto está lejos del centro." },
+      { it:"la stazione",      es:"la estación",                lv:"A2", ex_it:"Ti aspetto alla stazione.",                        ex_es:"Te espero en la estación." },
+      { it:"l'autostrada",     es:"la autopista",               lv:"A2", ex_it:"Prendiamo l'autostrada per risparmiare tempo.",    ex_es:"Tomamos la autopista para ahorrar tiempo." },
+      { it:"il binario",       es:"el andén / la vía",          lv:"A2", ex_it:"Il treno parte dal binario tre.",                  ex_es:"El tren sale del andén tres." },
+      { it:"la coincidenza",   es:"el enlace / la correspondencia",lv:"B1",ex_it:"Ho perso la coincidenza a Milano.",              ex_es:"Perdí el enlace en Milán.", notes:"In contesto ferroviario/aereo = il transbordo." },
+      { it:"il ritardo",       es:"el retraso",                 lv:"A2", ex_it:"Il treno ha un ritardo di venti minuti.",          ex_es:"El tren tiene un retraso de veinte minutos." },
+      { it:"il pedone",        es:"el peatón",                  lv:"B1", ex_it:"I pedoni hanno la precedenza sulle strisce.",      ex_es:"Los peatones tienen preferencia en los pasos de cebra." },
+      { it:"la patente",       es:"el carné de conducir",       lv:"B1", ex_it:"Ho preso la patente a diciotto anni.",             ex_es:"Me saqué el carné de conducir a los dieciocho años." },
+      { it:"il carburante",    es:"el combustible",             lv:"B1", ex_it:"Il serbatoio è quasi vuoto di carburante.",        ex_es:"El depósito está casi vacío de combustible." },
+      { it:"il motore",        es:"el motor",                   lv:"B1", ex_it:"Il motore della macchina fa un rumore strano.",    ex_es:"El motor del coche hace un ruido extraño." },
+      { it:"la rotatoria",     es:"la rotonda / la glorieta",   lv:"B1", ex_it:"Gira a destra alla rotatoria.",                   ex_es:"Gira a la derecha en la rotonda." },
+      { it:"la corsia",        es:"el carril",                  lv:"B1", ex_it:"Mantieni la corsia di destra in autostrada.",      ex_es:"Mantén el carril derecho en la autopista." },
+    ]);
+
+    _topup("Lavoro e Professioni", [
+      { it:"il medico",         es:"el médico",               lv:"A2", ex_it:"Devo andare dal medico.",                      ex_es:"Tengo que ir al médico." },
+      { it:"l'avvocato",        es:"el abogado",              lv:"A2", ex_it:"Ho bisogno di un avvocato.",                   ex_es:"Necesito un abogado." },
+      { it:"l'insegnante",      es:"el profesor / la profesora",lv:"A1",ex_it:"L'insegnante spiega bene.",                  ex_es:"El profesor explica bien." },
+      { it:"l'ingegnere",       es:"el/la ingeniero/a",       lv:"A2", ex_it:"Lavoro come ingegnere informatico.",            ex_es:"Trabajo como ingeniero informático." },
+      { it:"il cuoco",          es:"el cocinero / el chef",   lv:"A2", ex_it:"Il cuoco prepara piatti deliziosi.",           ex_es:"El cocinero prepara platos deliciosos." },
+      { it:"il giornalista",    es:"el/la periodista",        lv:"A2", ex_it:"Il giornalista scrive per un quotidiano.",     ex_es:"El periodista escribe para un diario." },
+      { it:"l'architetto",      es:"el/la arquitecto/a",      lv:"B1", ex_it:"L'architetto ha progettato la casa.",          ex_es:"El arquitecto diseñó la casa." },
+      { it:"il cameriere",      es:"el camarero",             lv:"A2", ex_it:"Il cameriere porta il conto.",                 ex_es:"El camarero trae la cuenta." },
+      { it:"l'ufficio",         es:"la oficina",              lv:"A2", ex_it:"Lavoro in un ufficio in centro.",              ex_es:"Trabajo en una oficina en el centro." },
+      { it:"la riunione",       es:"la reunión",              lv:"B1", ex_it:"Ho una riunione alle dieci.",                  ex_es:"Tengo una reunión a las diez." },
+      { it:"il contratto",      es:"el contrato",             lv:"B1", ex_it:"Ho firmato il contratto.",                     ex_es:"Firmé el contrato." },
+      { it:"lo stipendio",      es:"el sueldo",               lv:"B1", ex_it:"Il mio stipendio è aumentato.",               ex_es:"Mi sueldo ha aumentado." },
+      { it:"la carriera",       es:"la carrera profesional",  lv:"B1", ex_it:"Vuole fare carriera in banca.",               ex_es:"Quiere hacer carrera en un banco." },
+      { it:"il collega",        es:"el compañero de trabajo", lv:"B1", ex_it:"I miei colleghi sono simpatici.",              ex_es:"Mis compañeros de trabajo son simpáticos." },
+      { it:"il curriculum",     es:"el currículum",           lv:"B1", ex_it:"Ho mandato il curriculum vitae.",              ex_es:"Envié el currículum vitae." },
+      { it:"il pompiere",      es:"el bombero",              lv:"A2", ex_it:"Il pompiere ha spento l'incendio.",               ex_es:"El bombero apagó el incendio." },
+      { it:"il poliziotto",    es:"el policía",              lv:"A2", ex_it:"Il poliziotto dirige il traffico.",               ex_es:"El policía dirige el tráfico." },
+      { it:"l'infermiere",     es:"el/la enfermero/a",       lv:"A2", ex_it:"L'infermiere mi ha fatto un'iniezione.",          ex_es:"El enfermero me puso una inyección." },
+      { it:"il farmacista",    es:"el farmacéutico",         lv:"A2", ex_it:"Il farmacista mi ha consigliato questa medicina.", ex_es:"El farmacéutico me recomendó este medicamento." },
+      { it:"il traduttore",    es:"el traductor",            lv:"B1", ex_it:"Lavoro come traduttore freelance.",               ex_es:"Trabajo como traductor autónomo." },
+      { it:"il programmatore", es:"el programador",          lv:"B1", ex_it:"Il programmatore ha risolto il bug.",             ex_es:"El programador resolvió el error." },
+      { it:"il contabile",     es:"el contable / el contador",lv:"B1",ex_it:"Il contabile gestisce le finanze dell'azienda.",  ex_es:"El contable gestiona las finanzas de la empresa." },
+      { it:"il musicista",     es:"el músico",               lv:"A2", ex_it:"È un musicista molto talentuoso.",               ex_es:"Es un músico muy talentoso." },
+      { it:"l'autista",        es:"el conductor / el chófer",lv:"A2", ex_it:"L'autista dell'autobus è molto gentile.",        ex_es:"El conductor del autobús es muy amable." },
+      { it:"il cassiere",      es:"el cajero",               lv:"A2", ex_it:"Il cassiere ha fatto uno sbaglio con il resto.",  ex_es:"El cajero cometió un error con el cambio." },
+      { it:"il postino",       es:"el cartero",              lv:"A2", ex_it:"Il postino ha lasciato un pacco.",                ex_es:"El cartero dejó un paquete." },
+      { it:"il portiere",      es:"el portero",              lv:"A2", ex_it:"Il portiere dell'hotel mi ha dato la chiave.",    ex_es:"El portero del hotel me dio la llave." },
+      { it:"il tirocinante",   es:"el becario / el aprendiz",lv:"B1", ex_it:"Ho lavorato come tirocinante per tre mesi.",     ex_es:"Trabajé como becario durante tres meses." },
+      { it:"l'imprenditore",   es:"el empresario",           lv:"B1", ex_it:"L'imprenditore ha fondato tre aziende.",         ex_es:"El empresario ha fundado tres empresas." },
+      { it:"il commerciante",  es:"el comerciante",          lv:"B1", ex_it:"Il commerciante vende prodotti artigianali.",     ex_es:"El comerciante vende productos artesanales." },
+    ]);
+
+    _topup("Il Tempo", [
+      { it:"la pioggia",    es:"la lluvia",          lv:"A2", ex_it:"Mi piace la pioggia.",                        ex_es:"Me gusta la lluvia." },
+      { it:"il sole",       es:"el sol",             lv:"A1", ex_it:"C'è il sole oggi.",                           ex_es:"Hoy hace sol." },
+      { it:"la neve",       es:"la nieve",           lv:"A2", ex_it:"È caduta tanta neve.",                        ex_es:"Ha caído mucha nieve." },
+      { it:"il vento",      es:"el viento",          lv:"A2", ex_it:"C'è molto vento oggi.",                      ex_es:"Hoy hace mucho viento." },
+      { it:"il temporale",  es:"la tormenta",        lv:"B1", ex_it:"Sta arrivando un temporale.",                 ex_es:"Se acerca una tormenta." },
+      { it:"la nuvola",     es:"la nube",            lv:"A2", ex_it:"Il cielo è pieno di nuvole.",                ex_es:"El cielo está lleno de nubes." },
+      { it:"la nebbia",     es:"la niebla",          lv:"B1", ex_it:"C'è molta nebbia a Milano.",                 ex_es:"Hay mucha niebla en Milán." },
+      { it:"la temperatura",es:"la temperatura",     lv:"B1", ex_it:"La temperatura è scesa sotto zero.",          ex_es:"La temperatura bajó bajo cero." },
+      { it:"l'estate",      es:"el verano",          lv:"A1", ex_it:"D'estate fa molto caldo.",                   ex_es:"En verano hace mucho calor." },
+      { it:"l'inverno",     es:"el invierno",        lv:"A1", ex_it:"D'inverno nevica spesso.",                   ex_es:"En invierno nieva a menudo." },
+      { it:"la primavera",  es:"la primavera",       lv:"A1", ex_it:"In primavera fioriscono i fiori.",           ex_es:"En primavera florecen las flores." },
+      { it:"l'autunno",     es:"el otoño",           lv:"A1", ex_it:"L'autunno è la mia stagione preferita.",     ex_es:"El otoño es mi estación favorita." },
+      { it:"il freddo",     es:"el frío",                  lv:"A2", ex_it:"Che freddo oggi! Metti il cappotto.",             ex_es:"¡Qué frío hace hoy! Ponte el abrigo." },
+      { it:"il ghiaccio",   es:"el hielo",                 lv:"A2", ex_it:"Attenzione al ghiaccio sul marciapiede.",        ex_es:"Cuidado con el hielo en la acera." },
+      { it:"la grandine",   es:"el granizo",               lv:"B1", ex_it:"La grandine ha danneggiato le auto.",            ex_es:"El granizo dañó los coches." },
+      { it:"l'arcobaleno",  es:"el arcoíris",              lv:"A2", ex_it:"Dopo la pioggia è apparso un arcobaleno.",       ex_es:"Después de la lluvia apareció un arcoíris." },
+      { it:"il fulmine",    es:"el rayo / el relámpago",   lv:"B1", ex_it:"Un fulmine ha colpito l'albero.",               ex_es:"Un rayo golpeó el árbol." },
+      { it:"il tuono",      es:"el trueno",                lv:"B1", ex_it:"Ho sentito un forte tuono.",                    ex_es:"Oí un fuerte trueno." },
+      { it:"il cielo",      es:"el cielo",                 lv:"A1", ex_it:"Il cielo è completamente blu oggi.",            ex_es:"El cielo está completamente azul hoy." },
+      { it:"la brina",      es:"la escarcha",              lv:"B1", ex_it:"C'è la brina sul parabrezza stamattina.",       ex_es:"Hay escarcha en el parabrisas esta mañana." },
+      { it:"il sereno",     es:"el tiempo despejado",      lv:"B1", ex_it:"Domani è previsto il sereno.",                  ex_es:"Mañana se prevé tiempo despejado." },
+      { it:"l'uragano",     es:"el huracán",               lv:"B1", ex_it:"L'uragano ha devastato la costa.",              ex_es:"El huracán devastó la costa." },
+      { it:"l'alluvione",   es:"la inundación",            lv:"B1", ex_it:"L'alluvione ha allagato le strade.",            ex_es:"La inundación inundó las calles." },
+      { it:"la siccità",    es:"la sequía",                lv:"B1", ex_it:"La siccità ha distrutto il raccolto.",          ex_es:"La sequía destruyó la cosecha." },
+      { it:"il clima",      es:"el clima",                 lv:"B1", ex_it:"Il clima sta cambiando rapidamente.",            ex_es:"El clima está cambiando rápidamente." },
+      { it:"il meteo",      es:"el tiempo (meteorológico)",lv:"A2", ex_it:"Ho controllato il meteo per domani.",           ex_es:"He consultado el tiempo para mañana." },
+      { it:"l'umidità",     es:"la humedad",               lv:"B1", ex_it:"L'umidità rende il caldo insopportabile.",      ex_es:"La humedad hace el calor insoportable." },
+      { it:"la brezza",     es:"la brisa",                 lv:"B1", ex_it:"Una leggera brezza rende la giornata piacevole.", ex_es:"Una suave brisa hace el día agradable." },
+      { it:"il tramonto",   es:"el atardecer",             lv:"A2", ex_it:"Il tramonto sul mare è bellissimo.",            ex_es:"El atardecer sobre el mar es precioso." },
+      { it:"l'alba",        es:"el amanecer / el alba",    lv:"A2", ex_it:"Mi sono svegliato all'alba.",                   ex_es:"Me desperté al amanecer." },
+    ]);
+
+    _topup("La Città", [
+      { it:"la piazza",          es:"la plaza",              lv:"A2", ex_it:"Ci incontriamo in piazza.",                   ex_es:"Nos vemos en la plaza." },
+      { it:"la chiesa",          es:"la iglesia",            lv:"A2", ex_it:"La chiesa è bellissima.",                     ex_es:"La iglesia es preciosa." },
+      { it:"il museo",           es:"el museo",              lv:"A2", ex_it:"Ho visitato il museo degli Uffizi.",           ex_es:"Visité el museo de los Uffizi." },
+      { it:"il supermercato",    es:"el supermercado",       lv:"A1", ex_it:"Vado al supermercato.",                       ex_es:"Voy al supermercado." },
+      { it:"la farmacia",        es:"la farmacia",           lv:"A2", ex_it:"Compra le medicine in farmacia.",             ex_es:"Compra los medicamentos en la farmacia." },
+      { it:"l'ospedale",         es:"el hospital",           lv:"A2", ex_it:"L'ospedale è vicino a casa mia.",             ex_es:"El hospital está cerca de mi casa." },
+      { it:"il ristorante",      es:"el restaurante",        lv:"A1", ex_it:"Prenoto un tavolo al ristorante.",            ex_es:"Reservo una mesa en el restaurante." },
+      { it:"il marciapiede",     es:"la acera",              lv:"B1", ex_it:"Cammina sul marciapiede.",                    ex_es:"Camina por la acera." },
+      { it:"il semaforo",        es:"el semáforo",           lv:"A2", ex_it:"Aspetta il verde al semaforo.",               ex_es:"Espera el verde en el semáforo." },
+      { it:"il ponte",           es:"el puente",             lv:"A2", ex_it:"Il Ponte Vecchio è famoso a Firenze.",        ex_es:"El Puente Vecchio es famoso en Florencia." },
+      { it:"il quartiere",       es:"el barrio",             lv:"B1", ex_it:"Abito in un bel quartiere.",                  ex_es:"Vivo en un buen barrio." },
+      { it:"la banca",           es:"el banco",              lv:"A2", ex_it:"Devo andare in banca.",                       ex_es:"Tengo que ir al banco." },
+      { it:"il parco",           es:"el parque",             lv:"A1", ex_it:"I bambini giocano al parco.",                 ex_es:"Los niños juegan en el parque." },
+      { it:"il centro storico",  es:"el casco histórico",    lv:"B1", ex_it:"Il centro storico di Roma è magnifico.",      ex_es:"El casco histórico de Roma es magnífico." },
+      { it:"la periferia",       es:"las afueras",           lv:"B1", ex_it:"La casa è in periferia.",                     ex_es:"La casa está en las afueras." },
+      { it:"il teatro",              es:"el teatro",             lv:"A2", ex_it:"Andiamo a teatro stasera.",                    ex_es:"Vamos al teatro esta noche." },
+      { it:"la biblioteca",          es:"la biblioteca",         lv:"A2", ex_it:"Studio in biblioteca ogni pomeriggio.",        ex_es:"Estudio en la biblioteca cada tarde." },
+      { it:"la scuola",              es:"la escuela",            lv:"A1", ex_it:"I bambini vanno a scuola.",                   ex_es:"Los niños van a la escuela." },
+      { it:"l'università",           es:"la universidad",        lv:"A2", ex_it:"Studio all'università di Bologna.",           ex_es:"Estudio en la universidad de Bolonia." },
+      { it:"la stazione di polizia", es:"la comisaría",          lv:"B1", ex_it:"Ho denunciato il furto alla stazione di polizia.", ex_es:"Denuncié el robo en la comisaría." },
+      { it:"l'ufficio postale",      es:"la oficina de correos", lv:"B1", ex_it:"Ho spedito il pacco all'ufficio postale.",    ex_es:"Envié el paquete en la oficina de correos." },
+      { it:"il mercato",             es:"el mercado",            lv:"A2", ex_it:"Compro la frutta al mercato.",                ex_es:"Compro la fruta en el mercado." },
+      { it:"il negozio",             es:"la tienda",             lv:"A1", ex_it:"Il negozio è aperto fino alle otto.",          ex_es:"La tienda está abierta hasta las ocho." },
+      { it:"il bar",                 es:"el bar / la cafetería", lv:"A1", ex_it:"Faccio colazione al bar.",                   ex_es:"Desayuno en el bar.", notes:"Il bar italiano = luogo per caffè, cappuccino, cornetto." },
+      { it:"il cinema",              es:"el cine",               lv:"A1", ex_it:"Andiamo al cinema questo weekend.",           ex_es:"Vamos al cine este fin de semana." },
+      { it:"lo stadio",              es:"el estadio",            lv:"A2", ex_it:"Lo stadio è pieno di tifosi.",               ex_es:"El estadio está lleno de aficionados." },
+      { it:"l'hotel",                es:"el hotel",              lv:"A1", ex_it:"Ho prenotato un hotel in centro.",            ex_es:"Reservé un hotel en el centro." },
+      { it:"il grattacielo",         es:"el rascacielos",        lv:"B1", ex_it:"Milano ha molti grattacieli moderni.",        ex_es:"Milán tiene muchos rascacielos modernos." },
+      { it:"il vicolo",              es:"el callejón",           lv:"B1", ex_it:"Il vicolo è stretto e buio.",                ex_es:"El callejón es estrecho y oscuro." },
+      { it:"la fontana",             es:"la fuente",             lv:"A2", ex_it:"Ci siamo seduti vicino alla fontana.",        ex_es:"Nos sentamos cerca de la fuente." },
+    ]);
+
+    _topup("Sport e Tempo Libero", [
+      { it:"il calcio",        es:"el fútbol",           lv:"A1", ex_it:"Il calcio è lo sport più popolare in Italia.",    ex_es:"El fútbol es el deporte más popular en Italia." },
+      { it:"il nuoto",         es:"la natación",         lv:"A2", ex_it:"Vado a nuotare tre volte a settimana.",           ex_es:"Voy a nadar tres veces por semana." },
+      { it:"la palestra",      es:"el gimnasio",         lv:"A2", ex_it:"Mi sono iscritto in palestra.",                   ex_es:"Me inscribí en el gimnasio." },
+      { it:"la squadra",       es:"el equipo",           lv:"A2", ex_it:"Tifo per la squadra di Roma.",                   ex_es:"Soy hincha del equipo de Roma." },
+      { it:"il campionato",    es:"el campeonato",       lv:"B1", ex_it:"La Juventus ha vinto il campionato.",             ex_es:"La Juventus ganó el campeonato." },
+      { it:"il tifoso",        es:"el aficionado / el hincha",lv:"B1",ex_it:"I tifosi italiani sono molto appassionati.", ex_es:"Los aficionados italianos son muy apasionados." },
+      { it:"il tennis",        es:"el tenis",            lv:"A2", ex_it:"Gioco a tennis il sabato.",                      ex_es:"Juego al tenis los sábados." },
+      { it:"la corsa",         es:"el footing / la carrera",lv:"A2",ex_it:"Faccio la corsa ogni mattina.",                ex_es:"Hago footing cada mañana." },
+      { it:"il tempo libero",  es:"el tiempo libre",     lv:"A2", ex_it:"Nel tempo libero leggo e suono la chitarra.",    ex_es:"En mi tiempo libre leo y toco la guitarra." },
+      { it:"lo sci",           es:"el esquí",            lv:"A2", ex_it:"D'inverno vado a sciare.",                       ex_es:"En invierno voy a esquiar." },
+      { it:"la piscina",       es:"la piscina",          lv:"A2", ex_it:"Andiamo in piscina questo weekend.",              ex_es:"Vamos a la piscina este fin de semana." },
+      { it:"il gol",           es:"el gol",              lv:"A2", ex_it:"Ha segnato un gol al novantesimo minuto.",        ex_es:"Marcó un gol en el minuto noventa." },
+      { it:"la pallavolo",    es:"el voleibol",          lv:"A2", ex_it:"Giochiamo a pallavolo in spiaggia.",             ex_es:"Jugamos al voleibol en la playa." },
+      { it:"il basket",       es:"el baloncesto",        lv:"A2", ex_it:"Mio figlio gioca a basket.",                    ex_es:"Mi hijo juega al baloncesto." },
+      { it:"il ciclismo",     es:"el ciclismo",          lv:"A2", ex_it:"Il ciclismo è popolare in Italia.",             ex_es:"El ciclismo es popular en Italia." },
+      { it:"il rugby",        es:"el rugby",             lv:"A2", ex_it:"La nazionale italiana di rugby gioca bene.",    ex_es:"La selección italiana de rugby juega bien." },
+      { it:"la boxe",         es:"el boxeo",             lv:"B1", ex_it:"Si allena alla boxe tre volte a settimana.",    ex_es:"Se entrena en boxeo tres veces por semana." },
+      { it:"la maratona",     es:"la maratón",           lv:"B1", ex_it:"Ha corso la maratona di Roma.",                ex_es:"Corrió la maratón de Roma." },
+      { it:"l'allenatore",    es:"el entrenador",        lv:"B1", ex_it:"L'allenatore ha motivato la squadra.",          ex_es:"El entrenador motivó al equipo." },
+      { it:"il campione",     es:"el campeón",           lv:"B1", ex_it:"È diventato campione del mondo.",              ex_es:"Se convirtió en campeón del mundo." },
+      { it:"la gara",         es:"la competición / la carrera",lv:"B1",ex_it:"Ha vinto la gara di nuoto.",              ex_es:"Ganó la competición de natación." },
+      { it:"l'arbitro",       es:"el árbitro",           lv:"B1", ex_it:"L'arbitro ha fischiato un fallo.",              ex_es:"El árbitro pitó una falta." },
+      { it:"la lettura",      es:"la lectura",           lv:"A2", ex_it:"La lettura è il mio hobby preferito.",         ex_es:"La lectura es mi hobby favorito." },
+      { it:"la pittura",      es:"la pintura",           lv:"A2", ex_it:"La pittura mi rilassa moltissimo.",            ex_es:"La pintura me relaja muchísimo." },
+      { it:"la fotografia",   es:"la fotografía",        lv:"A2", ex_it:"Faccio fotografie nel tempo libero.",          ex_es:"Hago fotografías en mi tiempo libre." },
+      { it:"il giardinaggio", es:"la jardinería",        lv:"B1", ex_it:"Il giardinaggio è una passione di mia madre.", ex_es:"La jardinería es la pasión de mi madre." },
+      { it:"i videogiochi",   es:"los videojuegos",      lv:"A2", ex_it:"I videogiochi mi fanno rilassare.",            ex_es:"Los videojuegos me hacen relajar." },
+      { it:"il ballo",        es:"el baile",             lv:"A2", ex_it:"Il ballo flamenco è molto appassionante.",     ex_es:"El baile flamenco es muy apasionante.", col:'["andare a ballare","lezione di ballo"]' },
+      { it:"la vela",         es:"la vela (deporte)",    lv:"B1", ex_it:"Faccio vela d'estate sul lago.",              ex_es:"Practico vela en verano en el lago." },
+      { it:"il fischio",      es:"il silbato / el pitido",lv:"B1",ex_it:"L'arbitro ha fischiato la fine della partita.", ex_es:"El árbitro pitó el final del partido." },
+    ]);
+
+    _topup("La Salute", [
+      { it:"il dolore",         es:"el dolor",              lv:"A2", ex_it:"Ho un forte dolore alla schiena.",              ex_es:"Tengo un fuerte dolor de espalda." },
+      { it:"la febbre",         es:"la fiebre",             lv:"A2", ex_it:"Ho la febbre a trentotto.",                     ex_es:"Tengo fiebre de treinta y ocho." },
+      { it:"l'influenza",       es:"la gripe",              lv:"A2", ex_it:"Ho preso l'influenza.",                         ex_es:"Cogí la gripe.", notes:"'Influenza' = la gripe. 'Influencia' (poder) = il potere." },
+      { it:"il raffreddore",    es:"el resfriado",          lv:"A2", ex_it:"Ho il raffreddore e non riesco a respirare.",   ex_es:"Tengo el resfriado y no puedo respirar." },
+      { it:"la medicina",       es:"el medicamento",        lv:"A2", ex_it:"Prendi la medicina dopo i pasti.",              ex_es:"Toma el medicamento después de las comidas." },
+      { it:"la ricetta medica", es:"la receta médica",      lv:"B1", ex_it:"Ho bisogno di una ricetta medica.",             ex_es:"Necesito una receta médica." },
+      { it:"l'allergia",        es:"la alergia",            lv:"B1", ex_it:"Sono allergico ai frutti di mare.",             ex_es:"Soy alérgico a los mariscos." },
+      { it:"il pronto soccorso",es:"urgencias",             lv:"B1", ex_it:"Lo hanno portato al pronto soccorso.",          ex_es:"Lo llevaron a urgencias." },
+      { it:"la tosse",          es:"la tos",                lv:"A2", ex_it:"Ho una tosse terribile.",                       ex_es:"Tengo una tos terrible." },
+      { it:"la dieta",          es:"la dieta",              lv:"B1", ex_it:"Sono a dieta da un mese.",                      ex_es:"Llevo un mes a dieta." },
+      { it:"l'ambulanza",       es:"la ambulancia",         lv:"A2", ex_it:"Chiamate un'ambulanza!",                        ex_es:"¡Llamen una ambulancia!" },
+      { it:"la visita medica",  es:"la consulta médica",    lv:"B1", ex_it:"Ho una visita medica domani.",                  ex_es:"Tengo una consulta médica mañana." },
+      { it:"il chirurgo",      es:"el cirujano",                  lv:"B1", ex_it:"Il chirurgo ha operato per ore.",                  ex_es:"El cirujano operó durante horas." },
+      { it:"lo psicologo",     es:"el psicólogo",                 lv:"B1", ex_it:"Vado dallo psicologo ogni settimana.",             ex_es:"Voy al psicólogo cada semana." },
+      { it:"l'osso",           es:"el hueso",                     lv:"A2", ex_it:"Si è rotto un osso cadendo.",                     ex_es:"Se rompió un hueso al caer." },
+      { it:"il muscolo",       es:"el músculo",                   lv:"A2", ex_it:"Ho un dolore ai muscoli dopo l'allenamento.",      ex_es:"Me duelen los músculos después del entrenamiento." },
+      { it:"la pressione",     es:"la presión (arterial)",        lv:"B1", ex_it:"Ho la pressione alta.",                           ex_es:"Tengo la presión alta." },
+      { it:"il vaccino",       es:"la vacuna",                    lv:"B1", ex_it:"Ho fatto il vaccino contro l'influenza.",          ex_es:"Me puse la vacuna contra la gripe." },
+      { it:"l'operazione",     es:"la operación",                 lv:"B1", ex_it:"L'operazione è durata tre ore.",                  ex_es:"La operación duró tres horas." },
+      { it:"la guarigione",    es:"la curación / la recuperación",lv:"B1", ex_it:"La guarigione richiederà alcune settimane.",       ex_es:"La recuperación llevará algunas semanas." },
+      { it:"la gravidanza",    es:"el embarazo",                  lv:"B1", ex_it:"La gravidanza dura nove mesi.",                   ex_es:"El embarazo dura nueve meses." },
+      { it:"il mal di testa",  es:"el dolor de cabeza",           lv:"A2", ex_it:"Ho un terribile mal di testa.",                   ex_es:"Tengo un terrible dolor de cabeza.", col:'["avere mal di testa"]' },
+      { it:"la nausea",        es:"las náuseas",                  lv:"A2", ex_it:"Sento nausea dopo aver mangiato.",                ex_es:"Siento náuseas después de comer." },
+      { it:"il diabete",       es:"la diabetes",                  lv:"B1", ex_it:"Il diabete richiede attenzione alla dieta.",       ex_es:"La diabetes requiere atención a la dieta." },
+      { it:"la ferita",        es:"la herida",                    lv:"A2", ex_it:"La ferita è profonda e sanguina.",                ex_es:"La herida es profunda y sangra." },
+      { it:"il cerotto",       es:"la tirita / la curita",        lv:"A2", ex_it:"Metti un cerotto sulla ferita.",                  ex_es:"Pon una tirita en la herida." },
+      { it:"il termometro",    es:"el termómetro",                lv:"A2", ex_it:"Ho misurato la febbre con il termometro.",        ex_es:"Medí la fiebre con el termómetro." },
+      { it:"il riposo",        es:"el descanso",                  lv:"A2", ex_it:"Il medico mi ha consigliato riposo assoluto.",    ex_es:"El médico me recomendó descanso absoluto." },
+      { it:"la fasciatura",    es:"el vendaje / la venda",        lv:"B1", ex_it:"L'infermiere ha fatto una fasciatura al polso.", ex_es:"El enfermero le puso un vendaje en la muñeca." },
+      { it:"il colesterolo",   es:"el colesterol",                lv:"B1", ex_it:"Ho il colesterolo alto.",                         ex_es:"Tengo el colesterol alto." },
+    ]);
+
+    _topup("Tecnologia e Media", [
+      { it:"lo smartphone",         es:"el smartphone / el móvil", lv:"A2", ex_it:"Ho dimenticato lo smartphone a casa.",              ex_es:"Olvidé el móvil en casa." },
+      { it:"il computer",           es:"el ordenador",             lv:"A1", ex_it:"Lavoro tutto il giorno al computer.",               ex_es:"Trabajo todo el día en el ordenador." },
+      { it:"internet",              es:"internet",                  lv:"A1", ex_it:"Ho bisogno di internet per lavorare.",              ex_es:"Necesito internet para trabajar.", notes:"Spesso senza articolo" },
+      { it:"l'applicazione",        es:"la aplicación / la app",   lv:"A2", ex_it:"Scarica l'applicazione sul telefono.",              ex_es:"Descarga la app en el teléfono." },
+      { it:"il sito web",           es:"el sitio web",             lv:"A2", ex_it:"Ho cercato sul sito web ufficiale.",                ex_es:"Busqué en el sitio web oficial." },
+      { it:"i social media",        es:"las redes sociales",        lv:"A2", ex_it:"Passo troppo tempo sui social media.",              ex_es:"Paso demasiado tiempo en las redes sociales." },
+      { it:"la password",           es:"la contraseña",            lv:"A2", ex_it:"Ho dimenticato la password.",                       ex_es:"Olvidé la contraseña." },
+      { it:"il messaggio",          es:"el mensaje",               lv:"A1", ex_it:"Ti mando un messaggio stasera.",                    ex_es:"Te mando un mensaje esta noche." },
+      { it:"lo schermo",            es:"la pantalla",              lv:"B1", ex_it:"Lo schermo del telefono si è rotto.",               ex_es:"La pantalla del teléfono se rompió." },
+      { it:"il caricatore",         es:"el cargador",              lv:"B1", ex_it:"Il telefono è scarico, dov'è il caricatore?",      ex_es:"El móvil está sin batería, ¿dónde está el cargador?" },
+      { it:"l'email",               es:"el correo electrónico",    lv:"A2", ex_it:"Ti mando un'email con i dettagli.",                 ex_es:"Te mando un email con los detalles." },
+      { it:"la rete wifi",          es:"la red wifi",              lv:"B1", ex_it:"La rete wifi non funziona.",                        ex_es:"La red wifi no funciona." },
+      { it:"il tablet",                   es:"la tableta / el tablet",    lv:"A2", ex_it:"Leggo le notizie sul tablet.",                          ex_es:"Leo las noticias en la tableta." },
+      { it:"il laptop",                   es:"el portátil",               lv:"A2", ex_it:"Porto il laptop al lavoro.",                            ex_es:"Llevo el portátil al trabajo." },
+      { it:"la stampante",                es:"la impresora",              lv:"A2", ex_it:"La stampante non funziona.",                            ex_es:"La impresora no funciona." },
+      { it:"la tastiera",                 es:"el teclado",                lv:"A2", ex_it:"Ho versato il caffè sulla tastiera.",                    ex_es:"Derramé el café en el teclado." },
+      { it:"il mouse",                    es:"el ratón",                  lv:"A2", ex_it:"Ho bisogno di un mouse wireless.",                      ex_es:"Necesito un ratón inalámbrico." },
+      { it:"il microfono",                es:"el micrófono",              lv:"A2", ex_it:"Il microfono non funziona nella videochiamata.",         ex_es:"El micrófono no funciona en la videollamada." },
+      { it:"il podcast",                  es:"el podcast",                lv:"B1", ex_it:"Ascolto un podcast di italiano.",                       ex_es:"Escucho un podcast de italiano." },
+      { it:"lo streaming",                es:"el streaming",              lv:"B1", ex_it:"Guardo i film in streaming.",                           ex_es:"Veo las películas en streaming." },
+      { it:"la notifica",                 es:"la notificación",           lv:"A2", ex_it:"Ho spento le notifiche del telefono.",                  ex_es:"Apagué las notificaciones del teléfono." },
+      { it:"il profilo",                  es:"el perfil",                 lv:"A2", ex_it:"Ho aggiornato il mio profilo sui social.",              ex_es:"Actualicé mi perfil en las redes sociales." },
+      { it:"il video",                    es:"el vídeo",                  lv:"A2", ex_it:"Ho caricato un video su YouTube.",                      ex_es:"Subí un vídeo a YouTube." },
+      { it:"il blog",                     es:"el blog",                   lv:"B1", ex_it:"Scrivo un blog di cucina italiana.",                    ex_es:"Escribo un blog de cocina italiana." },
+      { it:"il cloud",                    es:"la nube (informática)",     lv:"B1", ex_it:"Ho salvato i file nel cloud.",                          ex_es:"Guardé los archivos en la nube." },
+      { it:"il backup",                   es:"la copia de seguridad",     lv:"B1", ex_it:"Fai sempre il backup dei tuoi dati.",                   ex_es:"Haz siempre una copia de seguridad de tus datos." },
+      { it:"il virus informatico",        es:"el virus (informático)",    lv:"B1", ex_it:"Il computer ha preso un virus.",                        ex_es:"El ordenador ha cogido un virus." },
+      { it:"la batteria",                 es:"la batería",                lv:"A2", ex_it:"La batteria del telefono è scarica.",                   ex_es:"La batería del teléfono está descargada.", col:'["caricare la batteria","batteria scarica"]' },
+      { it:"la telecamera",               es:"la cámara web / la cámara", lv:"B1", ex_it:"La telecamera del laptop è rotta.",                    ex_es:"La cámara del portátil está rota." },
+      { it:"l'intelligenza artificiale",  es:"la inteligencia artificial",lv:"B1", ex_it:"L'intelligenza artificiale sta cambiando il mondo.",    ex_es:"La inteligencia artificial está cambiando el mundo." },
+    ]);
+
+    _topup("Il Viaggio", [
+      { it:"la valigia",        es:"la maleta",            lv:"A2", ex_it:"Ho fatto la valigia stanotte.",                  ex_es:"Hice la maleta anoche." },
+      { it:"il passaporto",     es:"el pasaporte",         lv:"A2", ex_it:"Non dimenticare il passaporto.",                ex_es:"No olvides el pasaporte." },
+      { it:"l'albergo",         es:"el hotel",             lv:"A2", ex_it:"Abbiamo prenotato un albergo in centro.",       ex_es:"Reservamos un hotel en el centro." },
+      { it:"la prenotazione",   es:"la reserva",           lv:"B1", ex_it:"Ho fatto la prenotazione online.",              ex_es:"Hice la reserva por internet." },
+      { it:"il volo",           es:"el vuelo",             lv:"A2", ex_it:"Il mio volo è in ritardo.",                    ex_es:"Mi vuelo tiene retraso." },
+      { it:"il check-in",       es:"el check-in",          lv:"B1", ex_it:"Devo fare il check-in online.",                ex_es:"Tengo que hacer el check-in online." },
+      { it:"la guida turistica",es:"la guía turística",    lv:"A2", ex_it:"Ho comprato una guida turistica di Roma.",     ex_es:"Compré una guía turística de Roma." },
+      { it:"il souvenir",       es:"el recuerdo",          lv:"A2", ex_it:"Ho comprato un souvenir per la famiglia.",     ex_es:"Compré un recuerdo para la familia." },
+      { it:"il turista",        es:"el/la turista",        lv:"A2", ex_it:"Roma è piena di turisti d'estate.",            ex_es:"Roma está llena de turistas en verano." },
+      { it:"la dogana",         es:"la aduana",            lv:"B1", ex_it:"Ho aspettato un'ora in dogana.",               ex_es:"Esperé una hora en la aduana." },
+      { it:"l'itinerario",      es:"el itinerario",        lv:"B1", ex_it:"Ho pianificato l'itinerario del viaggio.",     ex_es:"Planifiqué el itinerario del viaje." },
+      { it:"lo scalo",          es:"la escala",            lv:"B1", ex_it:"Ho uno scalo di tre ore a Parigi.",            ex_es:"Tengo una escala de tres horas en París." },
+      { it:"la cartina",                      es:"el mapa",                    lv:"A2", ex_it:"Ho comprato una cartina della città.",                     ex_es:"Compré un mapa de la ciudad." },
+      { it:"il campeggio",                    es:"el camping",                 lv:"A2", ex_it:"D'estate andiamo in campeggio.",                           ex_es:"En verano vamos de camping." },
+      { it:"l'escursione",                    es:"la excursión",               lv:"B1", ex_it:"Abbiamo fatto un'escursione in montagna.",                 ex_es:"Hicimos una excursión a la montaña." },
+      { it:"il fuso orario",                  es:"la zona horaria",            lv:"B1", ex_it:"C'è un fuso orario di sei ore tra Roma e New York.",       ex_es:"Hay una diferencia horaria de seis horas entre Roma y Nueva York." },
+      { it:"il biglietto di andata e ritorno",es:"el billete de ida y vuelta", lv:"B1", ex_it:"Ho comprato un biglietto di andata e ritorno.",            ex_es:"Compré un billete de ida y vuelta." },
+      { it:"l'assicurazione di viaggio",      es:"el seguro de viaje",         lv:"B1", ex_it:"Ho fatto un'assicurazione di viaggio.",                    ex_es:"Hice un seguro de viaje." },
+      { it:"la meta",                         es:"el destino",                 lv:"B1", ex_it:"La meta del viaggio è Tokyo.",                             ex_es:"El destino del viaje es Tokio." },
+      { it:"l'ostello",                       es:"el albergue / el hostel",    lv:"A2", ex_it:"Ho dormito in un ostello della gioventù.",                 ex_es:"Dormí en un albergue juvenil." },
+      { it:"il noleggio auto",                es:"el alquiler de coches",      lv:"B1", ex_it:"Ho prenotato un noleggio auto per una settimana.",          ex_es:"Reservé un alquiler de coche por una semana." },
+      { it:"la spiaggia",                     es:"la playa",                   lv:"A2", ex_it:"Passiamo le vacanze in spiaggia.",                         ex_es:"Pasamos las vacaciones en la playa." },
+      { it:"la montagna",                     es:"la montaña",                 lv:"A2", ex_it:"Andiamo in montagna d'inverno.",                           ex_es:"Vamos a la montaña en invierno." },
+      { it:"il mare",                         es:"el mar",                     lv:"A1", ex_it:"Ho voglia di stare al mare.",                              ex_es:"Tengo ganas de estar en el mar.", col:'["andare al mare","stare al mare"]' },
+      { it:"il lago",                         es:"el lago",                    lv:"A2", ex_it:"Il lago di Garda è bellissimo.",                           ex_es:"El lago de Garda es precioso." },
+      { it:"la cascata",                      es:"la cascada",                 lv:"B1", ex_it:"Le cascate del Niagara sono spettacolari.",                ex_es:"Las cataratas del Niágara son espectaculares." },
+      { it:"la frontiera",                    es:"la frontera",                lv:"B1", ex_it:"Abbiamo attraversato la frontiera in macchina.",            ex_es:"Cruzamos la frontera en coche." },
+      { it:"la valuta",                       es:"la moneda / la divisa",      lv:"B1", ex_it:"Devo cambiare valuta prima del viaggio.",                  ex_es:"Tengo que cambiar moneda antes del viaje." },
+      { it:"il jet lag",                      es:"el jet lag",                 lv:"B1", ex_it:"Ho il jet lag dopo il volo lungo.",                        ex_es:"Tengo jet lag después del vuelo largo." },
+      { it:"l'agenzia di viaggi",             es:"la agencia de viajes",       lv:"B1", ex_it:"Ho prenotato il viaggio in un'agenzia di viaggi.",          ex_es:"Reservé el viaje en una agencia de viajes." },
+    ]);
   }
 }
 
