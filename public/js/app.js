@@ -457,7 +457,7 @@ function buildSessionPlan(due, newW) {
 // ══════════════════════════════════════════════════════════════════════════════
 // FLASHCARDS
 // ══════════════════════════════════════════════════════════════════════════════
-let fcState = { cards: [], index: 0, flipped: false, reviewed: 0, correct: 0, mode: 'due', typingMode: false, pendingCategoryId: null, pendingCategoryName: '', isEvaluating: false, isFeedbackVisible: false };
+let fcState = { cards: [], index: 0, flipped: false, reviewed: 0, correct: 0, mode: 'due', typingMode: false, pendingCategoryId: null, pendingCategoryName: '', isEvaluating: false, isFeedbackVisible: false, shell: null };
 let _fcTypingKeyHandler = null; // tracks document keydown listener; always clean up before adding new one
 
 function showModeModal(el, tab) {
@@ -541,36 +541,79 @@ async function renderFlashcards(el) {
 }
 
 async function loadFlashcards(el, mode, catId = null) {
+  // Flashcard sessions open in an immersive shell
+  if (mode === 'due' || mode === 'new') {
+    await launchFlashcardSession(catId, fcState.pendingCategoryName || null, mode);
+    return;
+  }
+
   const container = document.getElementById('fc-container');
+  if (!container) return;
   container.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
 
   try {
-    let cards;
-    const catParam = catId ? `&category=${catId}` : '';
-    if (mode === 'due') cards = await API.get(`/flashcards/due?limit=50${catParam}`);
-    else if (mode === 'new') cards = await API.get(`/flashcards/new?limit=30${catParam}`);
-    else if (mode === 'verbi') {
+    if (mode === 'verbi') {
       const verbs = await API.get('/conjugation/verb-flashcards');
       renderVerbFlashcards(container, verbs);
       return;
-    } else {
-      const data = await API.get('/vocabulary/words?limit=100');
-      showWordListView(container, data.words);
-      return;
     }
+    const data = await API.get('/vocabulary/words?limit=100');
+    showWordListView(container, data.words);
+  } catch(e) {
+    container.innerHTML = `<div class="alert alert-error">${escHtml(e.message)}</div>`;
+  }
+}
+
+async function launchFlashcardSession(catId, catName, tabMode) {
+  const modeStr = fcState.typingMode ? 'Scrittura' : 'Classico';
+  const title = catName ? `${catName} — ${modeStr}` : `Flashcard — ${modeStr}`;
+
+  if (_fcTypingKeyHandler) {
+    document.removeEventListener('keydown', _fcTypingKeyHandler);
+    _fcTypingKeyHandler = null;
+  }
+
+  const shell = createSessionShell(title, () => {
+    fcState.shell = null;
+    if (_fcTypingKeyHandler) {
+      document.removeEventListener('keydown', _fcTypingKeyHandler);
+      _fcTypingKeyHandler = null;
+    }
+  });
+
+  fcState.shell = shell;
+  const body = shell.body;
+  body.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
+
+  try {
+    const catParam = catId ? `&category=${catId}` : '';
+    const cards = tabMode === 'new'
+      ? await API.get(`/flashcards/new?limit=30${catParam}`)
+      : await API.get(`/flashcards/due?limit=50${catParam}`);
 
     if (!cards.length) {
-      const msg = mode === 'due'
-        ? 'Nessun ripasso in sospeso! Torna domani o studia nuove schede.'
-        : 'Hai studiato tutte le parole disponibili!';
-      container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🎉</div><div class="empty-state-title">${msg}</div></div>`;
+      const msg = tabMode === 'new'
+        ? 'Hai studiato tutte le parole disponibili!'
+        : 'Nessun ripasso in sospeso! Torna domani o studia nuove schede.';
+      body.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🎉</div><div class="empty-state-title">${msg}</div><button class="btn btn-outline mt-4" id="fc-empty-close">← Torna indietro</button></div>`;
+      document.getElementById('fc-empty-close').addEventListener('click', () => {
+        document.getElementById('conj-session-shell')?.remove();
+        fcState.shell = null;
+      });
       return;
     }
 
-    fcState = { cards, index: 0, flipped: false, reviewed: 0, correct: 0, mode, typingMode: fcState.typingMode, pendingCategoryId: null, pendingCategoryName: '' };
-    renderFlashcard(container);
+    fcState = {
+      cards, index: 0, flipped: false, reviewed: 0, correct: 0,
+      mode: tabMode, typingMode: fcState.typingMode,
+      pendingCategoryId: null, pendingCategoryName: catName || '',
+      isEvaluating: false, isFeedbackVisible: false, shell,
+    };
+    shell.setProgress(1, cards.length);
+    renderFlashcard(body);
   } catch(e) {
-    container.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+    body.innerHTML = `<div class="alert alert-error">${escHtml(e.message)}</div>`;
+    fcState.shell = null;
   }
 }
 
@@ -625,6 +668,31 @@ function renderFlashcard(container) {
   if (index >= cards.length) {
     const acc = fcState.reviewed > 0 ? Math.round((fcState.correct / fcState.reviewed) * 100) : 0;
     const modeLabel = fcState.typingMode ? 'Modalità Scrittura' : 'Modalità Classica';
+    API.post('/milestones/check', {}).catch(() => {});
+
+    if (fcState.shell) {
+      const shell = fcState.shell;
+      shell.setProgress(cards.length, cards.length);
+      shell.setScore(`${acc}%`);
+      container.innerHTML = `
+        <div class="session-summary">
+          <div style="font-size:3rem;margin-bottom:16px">🎯</div>
+          <div class="section-title mb-2">Sessione completata</div>
+          <div class="text-muted mb-1">${modeLabel}</div>
+          <div class="text-muted mb-4">${fcState.reviewed} schede · ${acc}% di precisione</div>
+          <div class="grid-2 mb-4" style="max-width:300px;margin:0 auto">
+            <div class="stat-tile"><div class="stat-tile-label">Ripetute</div><div class="stat-tile-value">${fcState.reviewed}</div></div>
+            <div class="stat-tile stat-tile-accent"><div class="stat-tile-label">Precisione</div><div class="stat-tile-value">${acc}%</div></div>
+          </div>
+          <button class="btn btn-outline mt-2" id="fc-done-close">← Torna indietro</button>
+        </div>`;
+      document.getElementById('fc-done-close').addEventListener('click', () => {
+        document.getElementById('conj-session-shell')?.remove();
+        fcState.shell = null;
+      });
+      return;
+    }
+
     container.innerHTML = `
       <div class="card" style="text-align:center;padding:40px">
         <div style="font-size:3rem;margin-bottom:16px">🎯</div>
@@ -637,7 +705,6 @@ function renderFlashcard(container) {
         </div>
         <button class="btn btn-primary" onclick="navigate('dashboard')">Torna alla bacheca</button>
       </div>`;
-    API.post('/milestones/check', {}).catch(() => {});
     return;
   }
 
@@ -650,14 +717,22 @@ function renderFlashcard(container) {
   const progress = Math.round((index / cards.length) * 100);
   const nextReview = card.interval > 0 ? `Intervallo: ${card.interval} giorni` : 'Scheda nuova';
 
-  container.innerHTML = `
+  if (fcState.shell) {
+    fcState.shell.setProgress(index + 1, cards.length);
+    fcState.shell.setScore(card.interval > 0 ? `+${card.interval}g` : 'Nuova');
+  }
+
+  const inlineProgress = fcState.shell ? '' : `
     <div class="mb-3 flex items-center justify-between text-sm text-muted">
       <span>${index + 1} / ${cards.length}</span>
       <span>${nextReview}</span>
     </div>
     ${progressBar(progress)}
     <div style="height:16px"></div>
+  `;
 
+  container.innerHTML = `
+    ${inlineProgress}
     <div class="flashcard-scene" id="fc-scene">
       <div class="flashcard" id="fc-card">
         <div class="flashcard-face flashcard-front">
@@ -721,14 +796,22 @@ function renderFlashcardTyping(container) {
   const card = cards[index];
   const progress = Math.round((index / cards.length) * 100);
 
-  container.innerHTML = `
+  if (fcState.shell) {
+    fcState.shell.setProgress(index + 1, cards.length);
+    fcState.shell.setScore(card.interval > 0 ? `+${card.interval}g` : 'Nuova');
+  }
+
+  const inlineProgress = fcState.shell ? '' : `
     <div class="mb-3 flex items-center justify-between text-sm text-muted">
       <span>${index + 1} / ${cards.length}</span>
       <span>${card.interval > 0 ? 'Intervallo: '+card.interval+' giorni' : 'Scheda nuova'}</span>
     </div>
     ${progressBar(progress)}
     <div style="height:16px"></div>
+  `;
 
+  container.innerHTML = `
+    ${inlineProgress}
     <div class="fc-typing-card" id="fc-typing-card">
       <div class="fc-typing-lang">Spagnolo → Italiano</div>
       ${card.category_icon ? `<div class="fc-typing-cat">${card.category_icon} ${card.category_name||''}</div>` : ''}
@@ -1023,15 +1106,13 @@ async function openCategory(el, catId) {
   showModal(`${cat?.icon||'📚'} ${cat?.name||'Categoria'} · ${words.length} parole`, bodyHTML, [
     { label: '🃏 Classico', cls: 'btn-outline', action: () => {
       fcState.typingMode = false;
-      fcState.pendingCategoryId = catId;
       closeModal();
-      navigate('flashcards');
+      launchFlashcardSession(catId, cat?.name || '', 'due');
     }},
     { label: '✍️ Scrittura', cls: 'btn-primary', action: () => {
       fcState.typingMode = true;
-      fcState.pendingCategoryId = catId;
       closeModal();
-      navigate('flashcards');
+      launchFlashcardSession(catId, cat?.name || '', 'due');
     }},
   ]);
 
