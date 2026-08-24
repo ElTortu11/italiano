@@ -107,6 +107,10 @@ h1,h2,h3,h4,h5 { text-wrap: balance; font-weight: 600; line-height: 1.3; }
 .app {
   display: flex;
   min-height: 100dvh;
+  /* Prevent any child from forcing the app wider than the viewport */
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 /* Sidebar */
@@ -219,6 +223,11 @@ h1,h2,h3,h4,h5 { text-wrap: balance; font-weight: 600; line-height: 1.3; }
 /* Main content */
 .main {
   flex: 1;
+  /* min-width:0 overrides the default min-width:auto on flex children,
+     allowing .main to shrink below its content's min-content width.
+     Without this, a wide tab strip or table forces .main (and the page) wider. */
+  min-width: 0;
+  max-width: 100%;
   margin-left: var(--sidebar-w);
   min-height: 100dvh;
   transition: margin-left var(--transition);
@@ -239,16 +248,30 @@ h1,h2,h3,h4,h5 { text-wrap: balance; font-weight: 600; line-height: 1.3; }
   top: 0;
   z-index: 50;
   gap: 12px;
+  /* Topbar must stay within .main, which is now min-width:0 */
+  min-width: 0;
+  max-width: 100%;
 }
-.topbar-title { font-size: 1rem; font-weight: 600; }
-.topbar-actions { display: flex; align-items: center; gap: 8px; }
+.topbar-title {
+  font-size: 1rem;
+  font-weight: 600;
+  /* Allow title to shrink and truncate rather than forcing width */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.topbar-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
 .content {
   flex: 1;
   padding: 28px 24px;
   max-width: 1100px;
+  /* min-width:0 prevents content from forcing .main wider */
+  min-width: 0;
   width: 100%;
   margin: 0 auto;
+  box-sizing: border-box;
 }
 
 /* ── Components ─────────────────────────────────────────────────────────── */
@@ -284,8 +307,12 @@ h1,h2,h3,h4,h5 { text-wrap: balance; font-weight: 600; line-height: 1.3; }
   border-radius: var(--radius);
   padding: 20px;
   box-shadow: var(--shadow);
+  /* Cards must not expand beyond .content; wide children scroll inside their own wrapper */
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
-.card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 12px; }
+.card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 12px; min-width: 0; }
 .card-title { font-size: 0.95rem; font-weight: 600; }
 .card-subtitle { font-size: 0.8rem; color: var(--text-3); }
 
@@ -823,11 +850,30 @@ h1,h2,h3,h4,h5 { text-wrap: balance; font-weight: 600; line-height: 1.3; }
 .section-sub { font-size: 0.82rem; color: var(--text-3); margin-top: 2px; }
 
 /* ── Tabs ─────────────────────────────────────────────────────────────────── */
-.tabs { display: flex; gap: 2px; background: var(--surface-2); border-radius: var(--radius-sm); padding: 3px; margin-bottom: 20px; overflow-x: auto; }
+.tabs {
+  display: flex;
+  gap: 2px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+  margin-bottom: 20px;
+  /* Tabs scroll internally — must not expand parent */
+  overflow-x: auto;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  /* Smooth iOS scroll, hide scrollbar visually */
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
 .tab-btn {
   padding: 6px 14px;
   border-radius: 5px;
   border: none;
+  /* Tab buttons don't shrink — the strip scrolls instead */
+  flex: 0 0 auto;
   background: transparent;
   color: var(--text-3);
   font-size: 0.82rem;
@@ -895,7 +941,13 @@ h1,h2,h3,h4,h5 { text-wrap: balance; font-weight: 600; line-height: 1.3; }
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .sidebar { display: none; }
-  .main { margin-left: 0 !important; padding-bottom: 60px; }
+  .main {
+    margin-left: 0 !important;
+    padding-bottom: 60px;
+    /* On mobile, .main occupies 100% of the viewport — enforce it */
+    width: 100%;
+    max-width: 100vw;
+  }
   .mobile-nav { display: block; }
   .content { padding: 16px; }
   .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
@@ -1254,6 +1306,7 @@ body  { min-height: 100vh; min-height: 100dvh; }
   .conj-full-grid {
     grid-template-columns: 1fr;
     max-width: 100%;
+    min-width: 0;
     gap: 8px;
   }
   .conj-input-person { padding: 10px 12px; }
@@ -1307,9 +1360,11 @@ body  { min-height: 100vh; min-height: 100dvh; }
   .streak-display { font-size: 0.78rem; gap: 4px; }
   .streak-display .giorni-text { display: none; }
 
-  /* ── Horizontal overflow guard ── */
-  .content { overflow-x: hidden; }
-  .card    { overflow-x: hidden; max-width: 100%; box-sizing: border-box; }
+  /* ── Horizontal overflow containment (defensive, not the primary fix) ── */
+  /* Primary fix: min-width:0 on .main, .content, .card, .tabs (global rules above).
+     overflow-x:clip here is a last-resort guard; it does NOT replace the layout fix. */
+  .content { overflow-x: clip; }
+  .card    { overflow-x: clip; }
 
   /* ── Flashcard typing: sticky Avanti on mobile ── */
   #fc-type-actions {
@@ -1352,6 +1407,20 @@ body  { min-height: 100vh; min-height: 100dvh; }
   /* Full-width section header button */
   .section-header { flex-direction: column; align-items: flex-start; }
   .mobile-more-nav { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* ── Narrow phone (320–359 px): topbar priority adjustments ─────────────── */
+@media (max-width: 359px) {
+  /* Reduce gap so title gets more room before truncating */
+  .topbar { gap: 6px; padding: 0 10px; }
+  /* Shrink action button gap */
+  .topbar-actions { gap: 4px; }
+  /* Scale down topbar title font slightly */
+  .topbar-title { font-size: 0.9rem; }
+  /* Stack section-header fully */
+  .section-header { flex-direction: column; align-items: flex-start; gap: 6px; }
+  /* Single-column grids */
+  .grid-2, .grid-4 { grid-template-columns: 1fr; }
 }
 
 /* ── Keyboard-visible: ensure input + button stay visible ───────────────── */

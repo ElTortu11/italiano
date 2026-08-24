@@ -9,7 +9,8 @@
     "seed": "node database/seed.js",
     "test": "node --test test/conjugations.test.js test/prepositions.test.js test/evaluator.test.js test/feedback.test.js",
     "test:unit": "node --test test/evaluator.test.js test/feedback.test.js",
-    "test:content": "node --test test/conjugations.test.js test/prepositions.test.js"
+    "test:content": "node --test test/conjugations.test.js test/prepositions.test.js",
+    "test:responsive": "node test/responsive.test.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -17,7 +18,8 @@
     "express": "^4.18.2"
   },
   "devDependencies": {
-    "nodemon": "^3.0.3"
+    "nodemon": "^3.0.3",
+    "playwright": "^1.62.1"
   },
   "engines": {
     "node": ">=24.0.0"

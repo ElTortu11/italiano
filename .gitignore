@@ -5,3 +5,4 @@ node_modules/
 *.db-wal
 data/
 .DS_Store
+test/screenshots/
