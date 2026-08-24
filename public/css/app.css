@@ -1431,6 +1431,134 @@ body  { min-height: 100vh; min-height: 100dvh; }
   .topbar { position: sticky; top: 0; }
 }
 
+/* ── Verbi activity hub ──────────────────────────────────────────────────── */
+.conj-activity-list { display: flex; flex-direction: column; gap: 8px; }
+.conj-activity-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+  min-height: 64px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.conj-activity-card:hover { border-color: var(--accent); background: var(--surface-2); }
+.conj-activity-icon { font-size: 1.4rem; flex-shrink: 0; width: 32px; text-align: center; }
+.conj-activity-body { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.conj-activity-title { font-weight: 600; font-size: 0.95rem; }
+.conj-activity-desc { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
+
+/* ── Session shell (fixed overlay) ──────────────────────────────────────── */
+.conj-session-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.session-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  min-height: 52px;
+}
+.session-exit-btn {
+  font-size: 1.3rem;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  color: var(--text-2);
+}
+.session-progress-text {
+  flex: 1;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-score {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.session-progress-bar { height: 4px; background: var(--surface-2); flex-shrink: 0; }
+.session-progress-fill { height: 100%; background: var(--accent); transition: width 0.4s ease; }
+.session-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding: 20px 16px;
+  padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+}
+.session-verb {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1.1;
+  margin-bottom: 4px;
+}
+.session-input-row {
+  display: grid;
+  grid-template-columns: 60px 1fr 28px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.session-pronoun { font-size: 0.9rem; color: var(--text-2); font-weight: 500; }
+.session-input {
+  padding: 10px 12px;
+  font-size: 1rem;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  width: 100%;
+}
+.session-summary { text-align: center; padding: 32px 16px; }
+.conj-mode-list { display: flex; flex-direction: column; gap: 8px; }
+.conj-mode-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 14px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.95rem;
+  min-height: 48px;
+  transition: border-color 0.15s;
+}
+.conj-mode-card:hover, .conj-mode-card.active { border-color: var(--accent); }
+@media (min-width: 769px) { .session-body { max-width: 640px; margin: 0 auto; } }
+@media (max-width: 768px) { .session-input { font-size: 16px !important; } }
+
 /* ── Phase 4B: Preposizioni section ─────────────────────────────────────── */
 .prep-topic-grid {
   display: grid;

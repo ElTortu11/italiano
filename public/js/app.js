@@ -1368,80 +1368,198 @@ let conjState = { answered: false, streak: 0, correct: 0, total: 0, selectedTens
 const DRILL_TENSES = ['presente','passato_prossimo','imperfetto','futuro','condizionale','congiuntivo'];
 let drillState = { phase:'pick', verb:null, translation:'', conjugations:{}, tenses:[...DRILL_TENSES], tenseIndex:0, highWater:-1, mistakes:[], reviewIndex:0, score:{correct:0,total:0}, tenseScores:[], verbList:[] };
 
-async function renderConjugation(el) {
-  const verbs = await API.get('/conjugation/verbs');
+// ══════════════════════════════════════════════════════════════════════════════
+// CONIUGAZIONI — state machine + immersive session shell
+// ══════════════════════════════════════════════════════════════════════════════
 
-  el.innerHTML = `
-    <div class="section-header">
+const conjView = {
+  root: null,
+  state: 'hub',
+  verbs: null,
+  _renderGen: 0,
+  _abort: null,
+  _cleanup: null,
+  setup: {
+    tenses: [...ALL_TENSES],
+    count: 10,
+    verb: null,
+    verbTranslation: '',
+    drillTenses: [...DRILL_TENSES],
+    esMode: 'all',
+  },
+  streak: 0,
+  totalCorrect: 0,
+  totalAnswered: 0,
+};
+
+async function renderConjugation(el) {
+  const shell = document.getElementById('conj-session-shell');
+  if (!shell) { conjView.state = 'hub'; }
+  el.innerHTML = `<div id="conjugation-root"></div>`;
+  conjView.root = el.querySelector('#conjugation-root');
+
+  if (!conjView.verbs) {
+    conjView.verbs = await API.get('/conjugation/verbs').catch(() => []);
+  }
+  const verbs = conjView.verbs;
+
+  renderConjHub(conjView.root);
+}
+
+function createSessionShell(titleText, onExit) {
+  const prev = document.getElementById('conj-session-shell');
+  if (prev) prev.remove();
+
+  const shell = document.createElement('div');
+  shell.id = 'conj-session-shell';
+  shell.className = 'conj-session-shell';
+  shell.innerHTML = `
+    <div class="session-header">
+      <button class="session-exit-btn" id="session-exit-btn" aria-label="Esci">←</button>
+      <span class="session-progress-text" id="session-title">${escHtml(titleText)}</span>
+      <span class="session-score" id="session-score"></span>
+    </div>
+    <div class="session-progress-bar"><div class="session-progress-fill" id="session-progress-fill" style="width:0%"></div></div>
+    <div class="session-body" id="session-body"></div>
+  `;
+  document.body.appendChild(shell);
+
+  shell.querySelector('#session-exit-btn').addEventListener('click', () => {
+    shell.remove();
+    onExit();
+  });
+
+  return {
+    body: shell.querySelector('#session-body'),
+    setHeader: (text) => {
+      const el = shell.querySelector('#session-title');
+      if (el) el.textContent = text;
+    },
+    setScore: (text) => {
+      const el = shell.querySelector('#session-score');
+      if (el) el.textContent = text;
+    },
+    setProgress: (n, total) => {
+      const fill = shell.querySelector('#session-progress-fill');
+      if (fill) fill.style.width = total > 0 ? `${Math.round(n / total * 100)}%` : '0%';
+    },
+  };
+}
+
+function renderConjHub(root) {
+  const verbCount = (conjView.verbs || []).length;
+  const acc = conjView.totalAnswered > 0 ? Math.round(conjView.totalCorrect / conjView.totalAnswered * 100) + '%' : '—';
+  root.innerHTML = `
+    <div class="section-header" style="margin-bottom:16px">
       <div>
         <div class="section-title">Coniugazioni</div>
-        <div class="section-sub">${verbs.length} verbi disponibili</div>
+        <div class="section-sub">${verbCount} verbi disponibili</div>
       </div>
       <div class="flex items-center gap-3">
         <div class="stat-tile" style="padding:8px 16px;min-width:0">
           <div class="stat-tile-label">Serie</div>
-          <div class="stat-tile-value" id="conj-streak">0</div>
+          <div class="stat-tile-value">${conjView.streak}</div>
         </div>
         <div class="stat-tile" style="padding:8px 16px;min-width:0">
           <div class="stat-tile-label">Precisione</div>
-          <div class="stat-tile-value" id="conj-acc">—</div>
+          <div class="stat-tile-value">${acc}</div>
         </div>
       </div>
     </div>
-
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="practice">Pratica</button>
-      <button class="tab-btn" data-tab="esercizi">Esercizi</button>
-      <button class="tab-btn" data-tab="drill">Per verbo</button>
-      <button class="tab-btn" data-tab="endings">Terminazioni</button>
-      <button class="tab-btn" data-tab="reference">Riferimento</button>
-      <button class="tab-btn" data-tab="scores">Punteggi</button>
-    </div>
-
-    <div id="conj-pills-card" class="card mb-3" style="padding:12px 16px">
-      <div class="text-sm font-medium mb-2" style="color:var(--text-muted)">Tempi da praticare:</div>
-      <div class="flex flex-wrap gap-2" id="tense-pills">
-        ${ALL_TENSES.map(t => `
-          <button class="tense-pill ${conjState.selectedTenses.includes(t)?'active':''}" data-tense="${t}">
-            ${TENSE_LABELS[t]}
-          </button>`).join('')}
-      </div>
-    </div>
-    <div id="conj-tab-content">
-      <div id="conj-exercise-area"></div>
+    <div class="conj-activity-list">
+      <button class="conj-activity-card" id="hub-practice">
+        <div class="conj-activity-icon">✏️</div>
+        <div class="conj-activity-body">
+          <div class="conj-activity-title">Pratica rapida</div>
+          <div class="conj-activity-desc">Coniuga un verbo completo in un tempo scelto</div>
+        </div>
+      </button>
+      <button class="conj-activity-card" id="hub-esercizi">
+        <div class="conj-activity-icon">📝</div>
+        <div class="conj-activity-body">
+          <div class="conj-activity-title">Esercizi</div>
+          <div class="conj-activity-desc">Esercizi guidati per modalità con feedback dettagliato</div>
+        </div>
+      </button>
+      <button class="conj-activity-card" id="hub-drill">
+        <div class="conj-activity-icon">🎯</div>
+        <div class="conj-activity-body">
+          <div class="conj-activity-title">Per verbo</div>
+          <div class="conj-activity-desc">Tutti i tempi di un solo verbo scelto</div>
+        </div>
+      </button>
+      <button class="conj-activity-card" id="hub-endings">
+        <div class="conj-activity-icon">📖</div>
+        <div class="conj-activity-body">
+          <div class="conj-activity-title">Terminazioni</div>
+          <div class="conj-activity-desc">Tabella e quiz sulle desinenze dei verbi regolari</div>
+        </div>
+      </button>
+      <button class="conj-activity-card" id="hub-reference">
+        <div class="conj-activity-icon">🔍</div>
+        <div class="conj-activity-body">
+          <div class="conj-activity-title">Riferimento</div>
+          <div class="conj-activity-desc">Consulta le forme coniugate di qualsiasi verbo</div>
+        </div>
+      </button>
+      <button class="conj-activity-card" id="hub-scores">
+        <div class="conj-activity-icon">🏆</div>
+        <div class="conj-activity-body">
+          <div class="conj-activity-title">Punteggi</div>
+          <div class="conj-activity-desc">Il tuo progresso e XP guadagnati per verbo</div>
+        </div>
+      </button>
     </div>
   `;
 
-  el.querySelectorAll('[data-tab]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      el.querySelectorAll('[data-tab]').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const tab = btn.dataset.tab;
-      const pillsCard = document.getElementById('conj-pills-card');
-      if (tab === 'reference') {
-        pillsCard.style.display = 'none';
-        renderConjugationReference(el, verbs);
-      } else if (tab === 'drill') {
-        pillsCard.style.display = 'none';
-        drillState = { phase:'pick', verb:null, translation:'', conjugations:{}, tenses:[...DRILL_TENSES], tenseIndex:0, highWater:-1, mistakes:[], reviewIndex:0, score:{correct:0,total:0}, tenseScores:[], verbList:verbs };
-        renderDrillTab(document.getElementById('conj-tab-content'), verbs);
-      } else if (tab === 'endings') {
-        pillsCard.style.display = 'none';
-        renderEndingsTab(document.getElementById('conj-tab-content'));
-      } else if (tab === 'scores') {
-        pillsCard.style.display = 'none';
-        renderVerbScores(document.getElementById('conj-tab-content'));
-      } else if (tab === 'esercizi') {
-        pillsCard.style.display = 'none';
-        renderConjEserciziTab(document.getElementById('conj-tab-content'));
-      } else {
-        pillsCard.style.display = '';
-        loadConjugationExercise(el);
-      }
-    });
-  });
+  const goHub = () => renderConjHub(conjView.root);
 
-  el.querySelectorAll('.tense-pill').forEach(pill => {
+  root.querySelector('#hub-practice').addEventListener('click', () => {
+    const s = createSessionShell('Pratica rapida', goHub);
+    launchConjPractice(s);
+  });
+  root.querySelector('#hub-esercizi').addEventListener('click', () => {
+    const s = createSessionShell('Esercizi', goHub);
+    launchConjEsercizi(s, 'all');
+  });
+  root.querySelector('#hub-drill').addEventListener('click', () => {
+    drillState = { phase:'pick', verb:null, translation:'', conjugations:{}, tenses:[...DRILL_TENSES], tenseIndex:0, highWater:-1, mistakes:[], reviewIndex:0, score:{correct:0,total:0}, tenseScores:[], verbList: conjView.verbs || [] };
+    const s = createSessionShell('Per verbo', goHub);
+    launchConjDrill(s);
+  });
+  root.querySelector('#hub-endings').addEventListener('click', () => {
+    const s = createSessionShell('Terminazioni', goHub);
+    renderEndingsTab(s.body);
+  });
+  root.querySelector('#hub-reference').addEventListener('click', () => {
+    const s = createSessionShell('Riferimento', goHub);
+    renderConjugationReference(s.body, conjView.verbs || []);
+  });
+  root.querySelector('#hub-scores').addEventListener('click', () => {
+    const s = createSessionShell('Punteggi', goHub);
+    renderVerbScores(s.body);
+  });
+}
+
+// ── Pratica rapida ────────────────────────────────────────────────────────────
+
+function launchConjPractice(session) {
+  const body = session.body;
+  body.innerHTML = `
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title mb-3">Impostazioni</div>
+      <div class="text-sm font-medium mb-2" style="color:var(--text-muted)">Tempi da praticare:</div>
+      <div class="flex flex-wrap gap-2 mb-4" id="practice-tense-pills">
+        ${ALL_TENSES.map(t => `
+          <button class="tense-pill ${conjState.selectedTenses.includes(t) ? 'active' : ''}" data-tense="${t}">
+            ${TENSE_LABELS[t]}
+          </button>`).join('')}
+      </div>
+      <button class="btn btn-primary btn-block" id="practice-start-btn">Inizia →</button>
+    </div>
+  `;
+
+  body.querySelectorAll('.tense-pill').forEach(pill => {
     pill.addEventListener('click', () => {
       const t = pill.dataset.tense;
       if (conjState.selectedTenses.includes(t)) {
@@ -1455,21 +1573,751 @@ async function renderConjugation(el) {
     });
   });
 
-  loadConjugationExercise(el);
+  body.querySelector('#practice-start-btn').addEventListener('click', () => {
+    loadPracticeExercise(session);
+  });
 }
 
-async function loadConjugationExercise(el) {
-  const area = document.getElementById('conj-exercise-area');
-  if (!area) return;
-  area.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
+async function loadPracticeExercise(session) {
+  const gen = ++conjView._renderGen;
+  const body = session.body;
+  body.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
   try {
     const tenses = conjState.selectedTenses.join(',');
     const ex = await API.get(`/conjugation/exercise?tenses=${tenses}`);
+    if (gen !== conjView._renderGen) return;
     conjState.answered = false;
-    renderExerciseUI(area, ex);
+    renderPracticeExerciseUI(session, ex, gen);
   } catch(e) {
-    area.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+    if (gen !== conjView._renderGen) return;
+    body.innerHTML = `<div class="alert alert-error">${escHtml(e.message)}</div>`;
   }
+}
+
+function renderPracticeExerciseUI(session, ex, gen) {
+  const body = session.body;
+  const persons = ['io','tu','lui','noi','voi','loro'];
+  body.innerHTML = `
+    <div class="session-verb">${escHtml(ex.verb)}</div>
+    <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:8px">${escHtml(ex.tense_display)}</div>
+    <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:20px">${escHtml(TENSE_HINTS[ex.tense] || '')}</div>
+    ${persons.map(p => `
+      <div class="session-input-row">
+        <span class="session-pronoun">${p === 'lui' ? 'lui/lei' : p}</span>
+        <input class="session-input conj-input-person" data-person="${p}"
+          placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <span class="conj-row-icon" id="icon-${p}"></span>
+      </div>
+      <div class="conj-es-accent-slot" data-person="${p}" style="padding:0 0 4px 64px"></div>
+    `).join('')}
+    <div style="display:flex;gap:8px;margin-top:20px;flex-wrap:wrap;justify-content:flex-end" id="practice-action-bar">
+      <button class="btn btn-outline" id="conj-skip">Salta</button>
+      <button class="btn btn-primary" id="conj-check">Controlla</button>
+      <button class="btn btn-outline" id="conj-retry" style="display:none">Riprova</button>
+      <button class="btn btn-outline" id="conj-show" style="display:none">Mostra risposte</button>
+      <button class="btn btn-primary" id="conj-next" style="display:none">Avanti →</button>
+    </div>
+  `;
+
+  const inputs = [...body.querySelectorAll('.conj-input-person')];
+
+  inputs.forEach(inp => {
+    const slot = body.querySelector(`.conj-es-accent-slot[data-person="${inp.dataset.person}"]`);
+    inp.addEventListener('focus', () => {
+      if (slot && !slot.hasChildNodes()) slot.appendChild(createAccentBar(inp));
+    }, { once: true });
+    inp.addEventListener('keydown', e => {
+      const i = inputs.indexOf(inp);
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (i < inputs.length - 1) inputs[i + 1].focus();
+        else checkAnswers();
+      }
+    });
+  });
+
+  let arrowListener = null;
+
+  function goNext() {
+    if (arrowListener) { document.removeEventListener('keydown', arrowListener); arrowListener = null; }
+    loadPracticeExercise(session);
+  }
+
+  async function checkAnswers() {
+    if (conjState.answered) return;
+    conjState.answered = true;
+    let correctCount = 0;
+
+    for (const inp of inputs) {
+      const person = inp.dataset.person;
+      const answer = inp.value.trim();
+      const correct = (ex.all_forms || {})[person] || '';
+      const isOk = answer.toLowerCase() === correct.toLowerCase();
+      if (isOk) correctCount++;
+      inp.disabled = true;
+      inp.style.borderColor = isOk ? 'var(--accent)' : '#ef4444';
+      const icon = body.querySelector('#icon-' + person);
+      if (icon) { icon.textContent = isOk ? '✓' : '✗'; icon.style.color = isOk ? 'var(--accent)' : '#ef4444'; }
+      await API.post('/conjugation/check', { verb: ex.verb, tense: ex.tense, person, answer: answer || '__skip__' });
+    }
+
+    conjView.totalAnswered += persons.length;
+    conjView.totalCorrect += correctCount;
+    if (correctCount === persons.length) conjView.streak++;
+    else conjView.streak = 0;
+
+    const accPct = conjView.totalAnswered > 0 ? Math.round(conjView.totalCorrect / conjView.totalAnswered * 100) + '%' : '—';
+    session.setScore(`Serie ${conjView.streak} · ${accPct}`);
+
+    body.querySelector('#conj-check').style.display = 'none';
+    body.querySelector('#conj-skip').style.display = 'none';
+    body.querySelector('#conj-retry').style.display = 'inline-flex';
+    if (correctCount < persons.length) body.querySelector('#conj-show').style.display = 'inline-flex';
+    const nextBtn = body.querySelector('#conj-next');
+    nextBtn.style.display = 'inline-flex';
+    nextBtn.focus();
+    arrowListener = e => {
+      if (e.key === 'ArrowRight') { document.removeEventListener('keydown', arrowListener); arrowListener = null; goNext(); }
+    };
+    document.addEventListener('keydown', arrowListener);
+  }
+
+  body.querySelector('#conj-check').addEventListener('click', checkAnswers);
+  body.querySelector('#conj-skip').addEventListener('click', () => { conjView.streak = 0; loadPracticeExercise(session); });
+  body.querySelector('#conj-next').addEventListener('click', goNext);
+  body.querySelector('#conj-retry').addEventListener('click', () => {
+    if (arrowListener) { document.removeEventListener('keydown', arrowListener); arrowListener = null; }
+    inputs.forEach(inp => { inp.disabled = false; inp.value = ''; inp.style.borderColor = ''; });
+    persons.forEach(p => { const ic = body.querySelector('#icon-' + p); if (ic) ic.textContent = ''; });
+    body.querySelector('#conj-check').style.display = 'inline-flex';
+    body.querySelector('#conj-retry').style.display = 'none';
+    body.querySelector('#conj-show').style.display = 'none';
+    body.querySelector('#conj-next').style.display = 'none';
+    conjState.answered = false;
+  });
+  body.querySelector('#conj-show').addEventListener('click', () => {
+    inputs.forEach(inp => {
+      const person = inp.dataset.person;
+      const correct = (ex.all_forms || {})[person] || '';
+      if (inp.value.trim().toLowerCase() !== correct.toLowerCase()) {
+        inp.value = correct;
+        inp.style.borderColor = '#f59e0b';
+        const ic = body.querySelector('#icon-' + person);
+        if (ic) ic.textContent = '';
+      }
+    });
+    body.querySelector('#conj-show').style.display = 'none';
+  });
+}
+
+// ── Esercizi DB-driven ────────────────────────────────────────────────────────
+
+function launchConjEsercizi(session, modeOverride) {
+  const mode = modeOverride || conjEsState.mode || 'all';
+  conjEsState.mode = mode;
+  const body = session.body;
+  body.innerHTML = `
+    <div class="card mb-3">
+      <div class="card-title mb-3">Scegli modalità</div>
+      <div class="conj-mode-list">
+        ${CONJ_MODES.map(m =>
+          `<button class="conj-mode-card${mode === m.id ? ' active' : ''}" data-mode="${m.id}">${escHtml(m.label)}<span style="margin-left:auto;font-size:1.1rem">→</span></button>`
+        ).join('')}
+      </div>
+    </div>
+  `;
+  body.querySelectorAll('.conj-mode-card').forEach(btn => {
+    btn.addEventListener('click', () => startEserciziSession(session, btn.dataset.mode));
+  });
+}
+
+async function startEserciziSession(session, mode) {
+  const gen = ++conjView._renderGen;
+  const body = session.body;
+  conjEsState.mode = mode;
+  session.setHeader('Esercizi — ' + (CONJ_MODES.find(m => m.id === mode)?.label || mode));
+  body.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
+
+  try {
+    const url = mode === 'all' ? '/conjugations/exercises' : `/conjugations/exercises?type=${encodeURIComponent(mode)}`;
+    const exercises = await API.get(url);
+    if (gen !== conjView._renderGen) return;
+    if (!exercises.length) {
+      body.innerHTML = `<div class="alert">Nessun esercizio trovato per questa modalità.</div>`;
+      return;
+    }
+    for (let i = exercises.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [exercises[i], exercises[j]] = [exercises[j], exercises[i]];
+    }
+    conjEsState = { exercises: exercises.slice(0, 12), index: 0, isEvaluating: false, results: [], mode };
+    renderEsercizioStep(session, gen);
+  } catch(e) {
+    if (gen !== conjView._renderGen) return;
+    body.innerHTML = `<div class="alert alert-error">${escHtml(e.message)}</div>`;
+  }
+}
+
+function renderEsercizioStep(session, gen) {
+  conjEsState.isEvaluating = false;
+  const { exercises, index } = conjEsState;
+  if (index >= exercises.length) { renderEserciziSummary(session); return; }
+
+  const ex = exercises[index];
+  session.setProgress(index + 1, exercises.length);
+  const body = session.body;
+  const correctAnswers = safeJson(ex.correct_answers, []);
+  const distractors = safeJson(ex.distractors, []);
+  const isChoice = distractors.length > 0;
+  const person = ex.person || '';
+  const modeLabel = CONJ_MODES.find(m => m.id === (ex.exercise_type || conjEsState.mode))?.label || '';
+
+  let inputHtml = '';
+  if (isChoice) {
+    const options = [...correctAnswers.slice(0, 1), ...distractors].sort(() => Math.random() - 0.5);
+    inputHtml = `<div class="flex flex-wrap gap-2 mt-3">${options.map(o =>
+      `<button class="conj-choice-btn" data-answer="${escHtml(o)}">${escHtml(o)}</button>`
+    ).join('')}</div>`;
+  } else {
+    inputHtml = `<div class="mt-3">
+      <div class="flex gap-2">
+        <input id="conj-es-input" type="text" autocomplete="off" autocorrect="off" spellcheck="false"
+          placeholder="${escHtml(person ? person + '...' : 'Risposta...')}"
+          class="input" style="max-width:260px">
+        <button class="btn btn-primary" id="conj-es-check">Verifica</button>
+      </div>
+      <div id="conj-es-accent-bar"></div>
+    </div>`;
+  }
+
+  body.innerHTML = `
+    <div style="color:var(--text-muted);font-size:0.8rem;margin-bottom:10px;display:flex;justify-content:space-between">
+      <span>${index + 1} / ${exercises.length}</span>
+      <span style="font-style:italic">${escHtml(modeLabel)}</span>
+    </div>
+    <div class="conj-verb-header">${escHtml(ex.infinitive || ex.prompt_it.split(' ')[0] || '')}<span class="conj-tense-label">${escHtml(getTenseLabel(ex.tense_id))}</span></div>
+    ${person ? `<div class="conj-person-label">${escHtml(person)}</div>` : ''}
+    <div class="conj-ex-prompt">${escHtml(ex.prompt_it)}</div>
+    ${ex.prompt_es ? `<div style="font-size:0.85rem;color:var(--text-muted);margin-top:-8px;margin-bottom:8px">${escHtml(ex.prompt_es)}</div>` : ''}
+    ${inputHtml}
+    <div id="conj-es-feedback"></div>
+  `;
+
+  if (!isChoice) {
+    const inp = body.querySelector('#conj-es-input');
+    const accentWrap = body.querySelector('#conj-es-accent-bar');
+    if (inp && accentWrap) {
+      inp.addEventListener('focus', () => {
+        if (!accentWrap.hasChildNodes()) accentWrap.appendChild(createAccentBar(inp));
+      }, { once: true });
+    }
+  }
+
+  const feedbackWrap = body.querySelector('#conj-es-feedback');
+
+  function submitConjEs(typed) {
+    if (conjEsState.isEvaluating) return;
+    conjEsState.isEvaluating = true;
+    body.querySelectorAll('.conj-choice-btn').forEach(b => { b.disabled = true; });
+    const inp = body.querySelector('#conj-es-input');
+    const checkBtn = body.querySelector('#conj-es-check');
+    if (inp) inp.disabled = true;
+    if (checkBtn) checkBtn.disabled = true;
+
+    const correctAnswer = correctAnswers[0] || '';
+    const accepted = safeJson(ex.accepted_variants, []);
+    const evaluation = buildConjugationEvaluation({
+      verb: ex.infinitive || '',
+      tense: ex.tense_id,
+      person,
+      userAnswer: typed,
+      correctAnswer,
+      allCorrectForms: [...correctAnswers, ...accepted],
+      explanation: ex.explanation_it || null,
+    });
+    conjEsState.results.push({ ex, evaluation, typed });
+
+    if (isChoice) {
+      body.querySelectorAll('.conj-choice-btn').forEach(btn => {
+        if (btn.dataset.answer === correctAnswer) btn.classList.add('is-correct');
+        else if (btn.dataset.answer === typed && !evaluation.accepted) btn.classList.add('is-wrong');
+      });
+    }
+
+    const result = evaluation.accepted ? 'correct' : (evaluation.score >= 0.4 ? 'almost_correct' : 'incorrect');
+    if (ex.verb_id) {
+      API.post('/conjugations/topic-stats', { verb_id: ex.verb_id, tense_id: ex.tense_id, result }).catch(() => {});
+    }
+    if (!evaluation.accepted) {
+      API.post('/conjugations/error-log', {
+        exercise_id: ex.id, verb_id: ex.verb_id, tense_id: ex.tense_id,
+        person, exercise_mode: ex.exercise_type,
+        prompt: ex.prompt_it, user_answer: typed, correct_answer: correctAnswer,
+        evaluation_status: evaluation.status, error_type: evaluation.errorType,
+        explanation: ex.explanation_it,
+      }).catch(() => {});
+    }
+
+    Feedback.render({
+      container: feedbackWrap,
+      evaluation,
+      context: { exerciseType: ex.exercise_type || 'single_form' },
+      actions: { onContinue: () => {
+        conjEsState.index++;
+        renderEsercizioStep(session, gen);
+      }},
+      focusStrategy: 'primary-action',
+    });
+  }
+
+  if (isChoice) {
+    body.querySelectorAll('.conj-choice-btn').forEach(btn => {
+      btn.addEventListener('click', () => submitConjEs(btn.dataset.answer));
+    });
+  } else {
+    const inp = body.querySelector('#conj-es-input');
+    const checkBtn = body.querySelector('#conj-es-check');
+    if (checkBtn) checkBtn.addEventListener('click', () => {
+      const typed = (inp ? inp.value : '').trim();
+      if (!typed) { inp && inp.focus(); return; }
+      submitConjEs(typed);
+    });
+    if (inp) inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !inp.disabled) checkBtn && checkBtn.click();
+    });
+  }
+}
+
+function renderEserciziSummary(session) {
+  const { results, mode } = conjEsState;
+  const correct = results.filter(r => r.evaluation.accepted).length;
+  const total = results.length;
+  const pct = total > 0 ? Math.round(correct / total * 100) : 0;
+  session.body.innerHTML = `
+    <div class="session-summary">
+      <div class="section-title mb-2">Riepilogo</div>
+      <div class="prep-summary-stats">
+        <div class="prep-stat-card prep-stat-correct"><div class="prep-stat-num">${correct}</div><div class="prep-stat-lbl">Corretti</div></div>
+        <div class="prep-stat-card prep-stat-wrong"><div class="prep-stat-num">${total - correct}</div><div class="prep-stat-lbl">Errati</div></div>
+        <div class="prep-stat-card"><div class="prep-stat-num">${pct}%</div><div class="prep-stat-lbl">Precisione</div></div>
+      </div>
+      <button class="btn btn-primary mt-4" id="conj-es-restart">Ricomincia</button>
+    </div>
+  `;
+  session.body.querySelector('#conj-es-restart').addEventListener('click', () => startEserciziSession(session, mode));
+  clearConjSession();
+}
+
+// ── Drill per verbo ───────────────────────────────────────────────────────────
+
+function launchConjDrill(session) {
+  renderDrillPickVerb(session);
+}
+
+function renderDrillPickVerb(session) {
+  const body = session.body;
+  body.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
+
+  (async () => {
+    let verbsData;
+    try { verbsData = await API.get('/conjugation/verbs-with-translations'); }
+    catch(e) { body.innerHTML = `<div class="alert alert-error">Errore nel caricamento dei verbi</div>`; return; }
+
+    let selectedVerb = null;
+
+    const render = (filter = '') => {
+      const q = filter.toLowerCase();
+      const filtered = q
+        ? verbsData.filter(({verb, translation}) => verb.includes(q) || translation.toLowerCase().includes(q))
+        : verbsData;
+
+      body.innerHTML = `
+        <div class="card" style="padding:16px 20px">
+          <div style="font-weight:600;font-size:1.05rem;margin-bottom:10px">Scegli un verbo</div>
+          <input id="drill-search" class="input" placeholder="Cerca verbo o traduzione..." autocomplete="off" style="margin-bottom:8px">
+          <div id="drill-verb-list" style="height:190px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm)">
+            ${filtered.map(({verb, translation}) => `
+              <div class="drill-verb-row ${selectedVerb === verb ? 'drill-verb-selected' : ''}" data-verb="${verb}"
+                style="display:flex;justify-content:space-between;align-items:center;padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-subtle)">
+                <span style="font-weight:500">${escHtml(verb)}</span>
+                <span style="color:var(--text-muted);font-size:0.82rem">${escHtml(translation)}</span>
+              </div>`).join('')}
+            ${!filtered.length ? `<div style="padding:16px;text-align:center;color:var(--text-muted)">Nessun risultato</div>` : ''}
+          </div>
+          ${selectedVerb ? `<div style="margin:8px 0;font-size:0.9rem;color:var(--accent);font-weight:600">✓ ${escHtml(selectedVerb)}</div>` : `<div style="height:28px;margin:4px 0"></div>`}
+          <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:6px">Tempi:</div>
+          <div class="flex flex-wrap gap-2 mb-3" id="drill-tense-picks">
+            ${DRILL_TENSES.map(t => `<button class="tense-pill ${drillState.tenses.includes(t) ? 'active' : ''}" data-t="${t}">${TENSE_LABELS[t]}</button>`).join('')}
+          </div>
+          <button class="btn btn-primary btn-block" id="drill-start" ${selectedVerb ? '' : 'disabled'} style="margin-top:8px">Inizia →</button>
+        </div>
+      `;
+
+      const searchEl = body.querySelector('#drill-search');
+      searchEl.value = filter;
+      if (filter) searchEl.setSelectionRange(filter.length, filter.length);
+
+      searchEl.addEventListener('input', e => { selectedVerb = null; render(e.target.value); });
+
+      body.querySelector('#drill-verb-list').querySelectorAll('.drill-verb-row').forEach(row => {
+        row.addEventListener('click', () => { selectedVerb = row.dataset.verb; render(searchEl.value); });
+      });
+
+      body.querySelector('#drill-tense-picks').querySelectorAll('.tense-pill').forEach(pill => {
+        pill.addEventListener('click', () => {
+          const t = pill.dataset.t;
+          if (drillState.tenses.includes(t)) {
+            if (drillState.tenses.length === 1) return;
+            drillState.tenses = drillState.tenses.filter(x => x !== t);
+          } else {
+            drillState.tenses.push(t);
+          }
+          render(searchEl.value);
+        });
+      });
+
+      const startBtn = body.querySelector('#drill-start');
+      if (startBtn && !startBtn.disabled) {
+        startBtn.addEventListener('click', async () => {
+          try {
+            const data = await API.get(`/conjugation/verb-data/${selectedVerb}`);
+            drillState.verb = selectedVerb;
+            drillState.translation = data.translation;
+            drillState.conjugations = data.conjugations;
+            drillState.tenseIndex = 0;
+            drillState.highWater = -1;
+            drillState.mistakes = [];
+            drillState.score = { correct: 0, total: 0 };
+            drillState.tenseScores = [];
+            drillState.phase = 'practice';
+            session.setHeader(`Per verbo — ${selectedVerb}`);
+            renderDrillTenseInSession(session, body);
+          } catch(e) { toast('Errore nel caricamento del verbo', 'error'); }
+        });
+      }
+    };
+
+    render();
+  })();
+}
+
+function renderDrillTenseInSession(session, body) {
+  const activeTenses = drillState.tenses.filter(t => drillState.conjugations[t]);
+  if (drillState.tenseIndex >= activeTenses.length) {
+    if (drillState.mistakes.length > 0) {
+      drillState.phase = 'review';
+      drillState.reviewIndex = 0;
+      renderDrillReviewInSession(session, body);
+    } else {
+      drillState.phase = 'done';
+      renderDrillDoneInSession(session, body);
+    }
+    return;
+  }
+
+  const tense = activeTenses[drillState.tenseIndex];
+  const forms = drillState.conjugations[tense];
+  const alreadyScored = drillState.tenseScores.some(s => s.tense === tense);
+  const canGoBack = drillState.tenseIndex > 0;
+  const canGoFwd = drillState.highWater >= drillState.tenseIndex;
+
+  session.setProgress(drillState.tenseIndex + 1, activeTenses.length);
+
+  body.innerHTML = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:4px;min-width:0">
+        <div style="display:flex;align-items:center;gap:4px;min-width:0;flex:1">
+          <button type="button" id="drill-prev" class="btn btn-outline" style="padding:2px 8px;font-size:0.9rem;flex-shrink:0;${canGoBack ? '' : 'visibility:hidden'}">←</button>
+          <div style="font-size:0.78rem;color:var(--text-muted)">${drillState.tenseIndex + 1}/${activeTenses.length} — ${escHtml(drillState.verb)} (${escHtml(drillState.translation)})</div>
+          <button type="button" id="drill-nav-fwd" class="btn btn-outline" style="padding:2px 8px;font-size:0.9rem;flex-shrink:0;${canGoFwd ? '' : 'visibility:hidden'}">→</button>
+        </div>
+        <div style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;flex-shrink:0;margin-left:6px" id="drill-score-display">✓ ${drillState.score.correct}/${drillState.score.total}</div>
+      </div>
+      <div style="font-weight:700;font-size:1.15rem;margin-bottom:4px">${TENSE_LABELS[tense]}</div>
+      <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:16px">${escHtml(TENSE_HINTS[tense] || '')}</div>
+      <div id="drill-forms">
+        ${['io','tu','lui','noi','voi','loro'].map(person => {
+          const label = person === 'lui' ? 'lui/lei' : person;
+          return `
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <div style="width:52px;font-size:0.9rem;color:var(--text-muted);flex-shrink:0">${label}</div>
+            <input class="input drill-input" data-person="${person}"
+              placeholder="${label}..."
+              autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+              style="flex:1;padding:8px 12px">
+            <div class="drill-result" data-person="${person}" style="width:28px;text-align:center;font-size:1.1rem"></div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;flex-wrap:wrap" id="drill-btns">
+        <button type="button" class="btn btn-primary" id="drill-check">Controlla</button>
+        <button type="button" class="btn btn-outline" id="drill-show" style="display:none">Mostra risposte</button>
+        <button type="button" class="btn btn-outline" id="drill-retry" style="display:none">Riprova</button>
+        <button type="button" class="btn btn-primary" id="drill-next" style="display:none">Avanti →</button>
+      </div>
+    </div>
+  `;
+
+  const inputs = [...body.querySelectorAll('.drill-input')];
+  let isLocked = alreadyScored;
+  let pendingKey = null;
+
+  inputs.forEach((inp, i) => {
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); i < inputs.length - 1 ? inputs[i+1].focus() : doCheck(); }
+    });
+  });
+
+  function doCheck() {
+    if (body.querySelector('#drill-next').style.display !== 'none') return;
+    let correct = 0;
+    inputs.forEach(inp => {
+      const person = inp.dataset.person;
+      const typed = inp.value.normalize('NFC').toLowerCase().trim();
+      const ok = expandForms(forms[person] || '').includes(typed);
+      inp.style.borderColor = ok ? 'var(--accent)' : '#ef4444';
+      inp.disabled = true;
+      const resultEl = body.querySelector(`.drill-result[data-person="${person}"]`);
+      if (resultEl) resultEl.textContent = ok ? '✓' : '✗';
+      if (!isLocked) {
+        drillState.score.total++;
+        if (ok) { drillState.score.correct++; correct++; }
+        else { drillState.mistakes.push({ tense, person, correct: forms[person], typed: inp.value }); }
+      } else {
+        if (ok) correct++;
+      }
+    });
+    if (!isLocked) {
+      drillState.tenseScores.push({ tense, correct, total: inputs.length });
+      isLocked = true;
+    }
+    const scoreEl = body.querySelector('#drill-score-display');
+    if (scoreEl) scoreEl.textContent = `✓ ${drillState.score.correct}/${drillState.score.total}`;
+
+    body.querySelector('#drill-check').style.display = 'none';
+    if (correct < inputs.length) {
+      body.querySelector('#drill-show').style.display = 'inline-flex';
+      body.querySelector('#drill-retry').style.display = 'inline-flex';
+    }
+    const nextBtn = body.querySelector('#drill-next');
+    nextBtn.style.display = 'inline-flex';
+    nextBtn.focus();
+
+    pendingKey = e => { if (e.key === 'ArrowRight') { document.removeEventListener('keydown', pendingKey); pendingKey = null; goNext(); } };
+    setTimeout(() => document.addEventListener('keydown', pendingKey), 50);
+  }
+
+  function goNext() {
+    if (pendingKey) { document.removeEventListener('keydown', pendingKey); pendingKey = null; }
+    drillState.highWater = Math.max(drillState.highWater, drillState.tenseIndex);
+    drillState.tenseIndex++;
+    renderDrillTenseInSession(session, body);
+  }
+
+  function goPrev() {
+    if (pendingKey) { document.removeEventListener('keydown', pendingKey); pendingKey = null; }
+    drillState.tenseIndex--;
+    renderDrillTenseInSession(session, body);
+  }
+
+  body.querySelector('#drill-check').addEventListener('click', doCheck);
+  body.querySelector('#drill-show').addEventListener('click', () => {
+    inputs.forEach(inp => {
+      const person = inp.dataset.person;
+      const resultEl = body.querySelector(`.drill-result[data-person="${person}"]`);
+      if (inp.disabled && resultEl && resultEl.textContent === '✗') {
+        inp.value = forms[person] || '';
+        inp.style.borderColor = '#f59e0b';
+        resultEl.textContent = '→';
+      }
+    });
+  });
+  body.querySelector('#drill-retry').addEventListener('click', () => {
+    if (pendingKey) { document.removeEventListener('keydown', pendingKey); pendingKey = null; }
+    inputs.forEach(inp => {
+      inp.value = ''; inp.style.borderColor = ''; inp.disabled = false;
+      const resultEl = body.querySelector(`.drill-result[data-person="${inp.dataset.person}"]`);
+      if (resultEl) resultEl.textContent = '';
+    });
+    body.querySelector('#drill-check').style.display = 'inline-flex';
+    body.querySelector('#drill-show').style.display = 'none';
+    body.querySelector('#drill-retry').style.display = 'none';
+    body.querySelector('#drill-next').style.display = 'none';
+  });
+  body.querySelector('#drill-next').addEventListener('click', goNext);
+  if (canGoBack) body.querySelector('#drill-prev').addEventListener('click', goPrev);
+  if (canGoFwd) body.querySelector('#drill-nav-fwd').addEventListener('click', goNext);
+}
+
+function renderDrillReviewInSession(session, body) {
+  if (drillState.reviewIndex >= drillState.mistakes.length) {
+    drillState.phase = 'done';
+    renderDrillDoneInSession(session, body);
+    return;
+  }
+
+  const mistake = drillState.mistakes[drillState.reviewIndex];
+  const total = drillState.mistakes.length;
+  body.innerHTML = `
+    <div class="card">
+      <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:4px">Ripasso errori — ${drillState.reviewIndex + 1}/${total}</div>
+      <div style="font-weight:700;font-size:1.1rem;margin-bottom:2px">${escHtml(drillState.verb)} — ${TENSE_LABELS[mistake.tense]}</div>
+      <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px">Soggetto: <strong>${escHtml(mistake.person)}</strong></div>
+      <input id="drill-retry-input" class="input" placeholder="${escHtml(mistake.person)}..."
+        autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+        style="width:100%;font-size:1.1rem;margin-bottom:12px">
+      <div id="drill-retry-result" style="min-height:32px;margin-bottom:12px"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button type="button" class="btn btn-primary" id="drill-retry-check">Controlla</button>
+      </div>
+    </div>
+  `;
+
+  const inp = body.querySelector('#drill-retry-input');
+
+  function doRetryCheck() {
+    inp.disabled = true;
+    const evalObj = buildConjugationEvaluation({
+      verb: drillState.verb,
+      tense: mistake.tense,
+      person: mistake.person,
+      userAnswer: inp.value.trim(),
+      correctAnswer: mistake.correct,
+    });
+    inp.style.borderColor = evalObj.accepted ? 'var(--accent)' : '#ef4444';
+
+    let retryOnKey;
+    Feedback.render({
+      container: body.querySelector('#drill-retry-result'),
+      evaluation: evalObj,
+      actions: { onContinue: () => {
+        document.removeEventListener('keydown', retryOnKey);
+        drillState.reviewIndex++;
+        renderDrillReviewInSession(session, body);
+      }},
+      compact: true,
+    });
+    body.querySelector('#drill-retry-check').style.display = 'none';
+    retryOnKey = e => {
+      if ((e.key === 'ArrowRight' || e.key === 'Enter') && e.target.tagName !== 'BUTTON') {
+        document.removeEventListener('keydown', retryOnKey);
+        drillState.reviewIndex++;
+        renderDrillReviewInSession(session, body);
+      }
+    };
+    setTimeout(() => document.addEventListener('keydown', retryOnKey), 50);
+  }
+
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doRetryCheck(); } });
+  body.querySelector('#drill-retry-check').addEventListener('click', doRetryCheck);
+}
+
+function renderDrillDoneInSession(session, body) {
+  const { correct, total } = drillState.score;
+  const pct = total > 0 ? Math.round(correct / total * 100) : 0;
+  const emoji = pct >= 90 ? '🎉' : pct >= 70 ? '👍' : '💪';
+  if (drillState.tenseScores.length > 0) {
+    API.post('/verb-scores', { verb: drillState.verb, tenseScores: drillState.tenseScores }).catch(() => {});
+  }
+  body.innerHTML = `
+    <div class="session-summary">
+      <div style="font-size:2.5rem;margin-bottom:8px">${emoji}</div>
+      <div style="font-size:1.3rem;font-weight:700;margin-bottom:4px">${escHtml(drillState.verb)}</div>
+      <div style="font-size:0.9rem;color:var(--text-muted);margin-bottom:20px">${escHtml(drillState.translation)}</div>
+      <div style="font-size:2rem;font-weight:700;color:${pct >= 80 ? 'var(--accent)' : '#f59e0b'};margin-bottom:4px">${pct}%</div>
+      <div style="font-size:0.9rem;color:var(--text-muted);margin-bottom:24px">${correct} / ${total} corrette</div>
+      ${drillState.mistakes.length > 0 ? `
+        <div style="text-align:left;margin-bottom:20px">
+          <div style="font-weight:600;margin-bottom:8px;font-size:0.9rem">Errori:</div>
+          ${[...new Map(drillState.mistakes.map(m => [`${m.tense}-${m.person}`, m])).values()].map(m => `
+            <div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:4px;padding:4px 8px;background:var(--bg-secondary);border-radius:6px">
+              <span style="color:var(--text-muted)">${TENSE_LABELS[m.tense]} — ${escHtml(m.person)}</span>
+              <span style="font-weight:600">${escHtml(m.correct)}</span>
+            </div>`).join('')}
+        </div>` : ''}
+      <div style="display:flex;gap:8px;justify-content:center">
+        <button class="btn btn-outline" id="drill-again">Ripeti verbo</button>
+        <button class="btn btn-primary" id="drill-new">Nuovo verbo</button>
+      </div>
+    </div>
+  `;
+  body.querySelector('#drill-again').addEventListener('click', () => {
+    drillState.tenseIndex = 0; drillState.highWater = -1; drillState.mistakes = []; drillState.score = {correct:0,total:0}; drillState.tenseScores = []; drillState.phase = 'practice';
+    session.setHeader(`Per verbo — ${drillState.verb}`);
+    renderDrillTenseInSession(session, body);
+  });
+  body.querySelector('#drill-new').addEventListener('click', () => {
+    drillState.phase = 'pick';
+    session.setHeader('Per verbo');
+    renderDrillPickVerb(session);
+  });
+}
+
+// ── Punteggi ─────────────────────────────────────────────────────────────────
+
+async function renderVerbScores(area) {
+  area.innerHTML = `<div class="loading"><div class="spinner"></div> Caricamento...</div>`;
+  const rows = await API.get('/verb-scores').catch(() => []);
+
+  const byVerb = {};
+  rows.forEach(r => {
+    if (!byVerb[r.verb]) byVerb[r.verb] = { bestTotal: 0, xpTotal: 0, tenses: {} };
+    byVerb[r.verb].tenses[r.tense] = { best: r.best_correct, xp: r.xp };
+    byVerb[r.verb].bestTotal += r.best_correct;
+    byVerb[r.verb].xpTotal += r.xp;
+  });
+
+  const verbEntries = Object.entries(byVerb).sort((a, b) => b[1].xpTotal - a[1].xpTotal);
+  const totalXP = verbEntries.reduce((s, [, v]) => s + v.xpTotal, 0);
+  const totalBest = verbEntries.reduce((s, [, v]) => s + v.bestTotal, 0);
+  const maxPossibleAll = verbEntries.length * 36;
+
+  if (verbEntries.length === 0) {
+    area.innerHTML = `<div class="card" style="text-align:center;padding:40px 24px">
+      <div style="font-size:2.5rem;margin-bottom:12px">📚</div>
+      <div style="font-weight:600;font-size:1.1rem;margin-bottom:6px">Nessun verbo praticato ancora</div>
+      <div style="color:var(--text-muted);font-size:0.9rem">Completa un esercizio "Per verbo" per iniziare a guadagnare punti</div>
+    </div>`;
+    return;
+  }
+
+  const TENSE_SHORT = { presente:'Pres.', imperfetto:'Imperf.', futuro:'Fut.', condizionale:'Cond.', congiuntivo:'Cong.', passato_prossimo:'Pass.' };
+
+  area.innerHTML = `
+    <div class="card mb-3" style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;gap:16px;flex-wrap:wrap">
+      <div>
+        <div style="font-size:2rem;font-weight:800;color:var(--accent);line-height:1">${totalXP} XP</div>
+        <div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px">${verbEntries.length} / 100 verbi praticati</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:1rem;font-weight:700">${totalBest} / ${maxPossibleAll} pt</div>
+        <div style="font-size:0.8rem;color:var(--text-muted)">punteggio massimo raggiunto</div>
+        <div style="font-size:0.75rem;color:var(--text-muted)">max 36 pt per verbo (6 tempi × 6 forme)</div>
+      </div>
+    </div>
+    <div>
+      ${verbEntries.map(([verb, data]) => {
+        const tenseCount = Object.keys(data.tenses).length;
+        const maxPossible = tenseCount * 6;
+        const pct = maxPossible > 0 ? Math.round(data.bestTotal / maxPossible * 100) : 0;
+        const barColor = pct >= 90 ? 'var(--accent)' : pct >= 60 ? '#f59e0b' : '#ef4444';
+        return `
+        <div class="card mb-2" style="padding:12px 16px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+            <div style="font-weight:600">${escHtml(verb)}</div>
+            <div style="font-size:0.85rem;font-weight:700;color:var(--accent)">${data.xpTotal} XP</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <div style="font-size:0.78rem;color:var(--text-muted)">${Object.entries(data.tenses).map(([t, s]) => `${TENSE_SHORT[t]||t} ${s.best}/6`).join(' · ')}</div>
+            <div style="font-size:0.8rem;font-weight:600">${data.bestTotal}/${maxPossible}</div>
+          </div>
+          <div style="height:7px;background:var(--surface-2);border-radius:99px;overflow:hidden">
+            <div style="height:100%;width:${pct}%;background:${barColor};border-radius:99px;transition:width 0.6s ease"></div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
 }
 
 // ── Phase 5B: Accent bar helper ───────────────────────────────────────────────
@@ -1529,747 +2377,6 @@ const CONJ_MODES = [
   { id: 'riflessivi',            label: 'Riflessivi' },
 ];
 let conjEsState = { exercises: [], index: 0, isEvaluating: false, results: [], mode: 'all' };
-
-async function renderConjEserciziTab(container, modeOverride) {
-  const mode = modeOverride || conjEsState.mode || 'all';
-  conjEsState.mode = mode;
-
-  // Mode selector header
-  const modeHtml = `<div class="conj-mode-pills">${CONJ_MODES.map(m =>
-    `<button class="conj-mode-pill${mode===m.id?' active':''}" data-mode="${m.id}">${escHtml(m.label)}</button>`
-  ).join('')}</div>`;
-
-  container.innerHTML = `<div>${modeHtml}<div class="conj-session-wrap"><div class="loading"><div class="spinner"></div></div></div></div>`;
-
-  container.querySelectorAll('.conj-mode-pill').forEach(btn => {
-    btn.addEventListener('click', () => renderConjEserciziTab(container, btn.dataset.mode));
-  });
-
-  try {
-    const url = mode === 'all' ? '/conjugations/exercises' : `/conjugations/exercises?type=${encodeURIComponent(mode)}`;
-    const exercises = await API.get(url);
-    if (!exercises.length) {
-      container.querySelector('.conj-session-wrap').innerHTML = `<div class="alert">Nessun esercizio trovato per questa modalità.</div>`;
-      return;
-    }
-    for (let i = exercises.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [exercises[i], exercises[j]] = [exercises[j], exercises[i]];
-    }
-    conjEsState = { exercises: exercises.slice(0, 12), index: 0, isEvaluating: false, results: [], mode };
-    renderConjEsExercise(container);
-  } catch (e) {
-    container.querySelector('.conj-session-wrap').innerHTML = `<div class="alert alert-error">${escHtml(e.message)}</div>`;
-  }
-}
-
-function renderConjEsExercise(container) {
-  conjEsState.isEvaluating = false;
-  const { exercises, index } = conjEsState;
-  if (index >= exercises.length) { renderConjEsSummary(container); return; }
-  const ex = exercises[index];
-  const correctAnswers = safeJson(ex.correct_answers, []);
-  const distractors = safeJson(ex.distractors, []);
-  const isChoice = distractors.length > 0;
-  const person = ex.person || '';
-
-  // Keep mode pills (first child) and update session wrap
-  let modeHeader = container.querySelector('.conj-mode-pills');
-  if (!modeHeader) {
-    const modeHtml = `<div class="conj-mode-pills">${CONJ_MODES.map(m =>
-      `<button class="conj-mode-pill${conjEsState.mode===m.id?' active':''}" data-mode="${m.id}">${escHtml(m.label)}</button>`
-    ).join('')}</div>`;
-    container.innerHTML = `<div>${modeHtml}<div id="conj-es-inner"></div></div>`;
-    container.querySelectorAll('.conj-mode-pill').forEach(btn => {
-      btn.addEventListener('click', () => renderConjEserciziTab(container, btn.dataset.mode));
-    });
-  }
-  const inner = container.querySelector('#conj-es-inner') || container;
-
-  const modeLabel = CONJ_MODES.find(m => m.id === (ex.exercise_type || conjEsState.mode))?.label || '';
-  let inputHtml = '';
-  if (isChoice) {
-    const options = [...correctAnswers.slice(0, 1), ...distractors].sort(() => Math.random() - 0.5);
-    inputHtml = `<div class="flex flex-wrap gap-2 mt-3">${options.map(o =>
-      `<button class="conj-choice-btn" data-answer="${escHtml(o)}">${escHtml(o)}</button>`
-    ).join('')}</div>`;
-  } else {
-    inputHtml = `<div class="mt-3">
-      <div class="flex gap-2">
-        <input id="conj-es-input" type="text" autocomplete="off" autocorrect="off" spellcheck="false"
-          placeholder="${escHtml(person ? person + '...' : 'Risposta...')}"
-          class="input" style="max-width:260px">
-        <button class="btn btn-primary" id="conj-es-check">Verifica</button>
-      </div>
-      <div id="conj-es-accent-bar"></div>
-    </div>`;
-  }
-
-  inner.innerHTML = `<div class="conj-session-wrap">
-    <div style="color:var(--muted);font-size:0.8rem;margin-bottom:10px;display:flex;justify-content:space-between">
-      <span>${index + 1} / ${exercises.length}</span>
-      <span style="font-style:italic">${escHtml(modeLabel)}</span>
-    </div>
-    <div class="conj-verb-header">${escHtml(ex.infinitive || ex.prompt_it.split(' ')[0] || '')}<span class="conj-tense-label">${escHtml(getTenseLabel(ex.tense_id))}</span></div>
-    ${person ? `<div class="conj-person-label">${escHtml(person)}</div>` : ''}
-    <div class="conj-ex-prompt">${escHtml(ex.prompt_it)}</div>
-    ${ex.prompt_es ? `<div style="font-size:0.85rem;color:var(--muted);margin-top:-8px;margin-bottom:8px">${escHtml(ex.prompt_es)}</div>` : ''}
-    ${inputHtml}
-    <div id="conj-es-feedback"></div>
-  </div>`;
-
-  // Add accent bar after rendering
-  if (!isChoice) {
-    const inp = inner.querySelector('#conj-es-input');
-    const accentWrap = inner.querySelector('#conj-es-accent-bar');
-    if (inp && accentWrap) accentWrap.appendChild(createAccentBar(inp));
-  }
-
-  const feedbackWrap = inner.querySelector('#conj-es-feedback');
-
-  function submitConjEs(typed) {
-    if (conjEsState.isEvaluating) return;
-    conjEsState.isEvaluating = true;
-    inner.querySelectorAll('.conj-choice-btn').forEach(b => { b.disabled = true; });
-    const inp = inner.querySelector('#conj-es-input');
-    const checkBtn = inner.querySelector('#conj-es-check');
-    if (inp) inp.disabled = true;
-    if (checkBtn) checkBtn.disabled = true;
-
-    const correctAnswer = correctAnswers[0] || '';
-    const accepted = safeJson(ex.accepted_variants, []);
-    const evaluation = buildConjugationEvaluation({
-      verb: ex.infinitive || '',
-      tense: ex.tense_id,
-      person,
-      userAnswer: typed,
-      correctAnswer,
-      allCorrectForms: [...correctAnswers, ...accepted],
-      explanation: ex.explanation_it || null,
-    });
-    conjEsState.results.push({ ex, evaluation, typed });
-
-    if (isChoice) {
-      inner.querySelectorAll('.conj-choice-btn').forEach(btn => {
-        if (btn.dataset.answer === correctAnswer) btn.classList.add('is-correct');
-        else if (btn.dataset.answer === typed && !evaluation.accepted) btn.classList.add('is-wrong');
-      });
-    }
-
-    const result = evaluation.accepted ? 'correct' : (evaluation.score >= 0.4 ? 'almost_correct' : 'incorrect');
-    if (ex.verb_id) {
-      API.post('/conjugations/topic-stats', { verb_id: ex.verb_id, tense_id: ex.tense_id, result }).catch(() => {});
-    }
-    if (!evaluation.accepted) {
-      API.post('/conjugations/error-log', {
-        exercise_id: ex.id, verb_id: ex.verb_id, tense_id: ex.tense_id,
-        person, exercise_mode: ex.exercise_type,
-        prompt: ex.prompt_it, user_answer: typed, correct_answer: correctAnswer,
-        evaluation_status: evaluation.status, error_type: evaluation.errorType,
-        explanation: ex.explanation_it,
-      }).catch(() => {});
-    }
-
-    Feedback.render({
-      container: feedbackWrap,
-      evaluation,
-      context: { exerciseType: ex.exercise_type || 'single_form' },
-      actions: { onContinue: () => {
-        conjEsState.index++;
-        renderConjEsExercise(container);
-      }},
-      focusStrategy: 'primary-action',
-    });
-  }
-
-  if (isChoice) {
-    inner.querySelectorAll('.conj-choice-btn').forEach(btn => {
-      btn.addEventListener('click', () => submitConjEs(btn.dataset.answer));
-    });
-  } else {
-    const inp = inner.querySelector('#conj-es-input');
-    const checkBtn = inner.querySelector('#conj-es-check');
-    if (checkBtn) checkBtn.addEventListener('click', () => {
-      const typed = (inp ? inp.value : '').trim();
-      if (!typed) { inp && inp.focus(); return; }
-      submitConjEs(typed);
-    });
-    if (inp) inp.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !inp.disabled) checkBtn && checkBtn.click();
-    });
-    setTimeout(() => inp && inp.focus(), 50);
-  }
-}
-
-function renderConjEsSummary(container) {
-  const { results, mode } = conjEsState;
-  const correct = results.filter(r => r.evaluation.accepted).length;
-  const total = results.length;
-  const pct = total > 0 ? Math.round(correct / total * 100) : 0;
-  const inner = container.querySelector('#conj-es-inner') || container;
-  inner.innerHTML = `<div class="conj-session-wrap">
-    <div class="section-title mb-2">Riepilogo</div>
-    <div class="prep-summary-stats">
-      <div class="prep-stat-card prep-stat-correct"><div class="prep-stat-num">${correct}</div><div class="prep-stat-lbl">Corretti</div></div>
-      <div class="prep-stat-card prep-stat-wrong"><div class="prep-stat-num">${total - correct}</div><div class="prep-stat-lbl">Errati</div></div>
-      <div class="prep-stat-card"><div class="prep-stat-num">${pct}%</div><div class="prep-stat-lbl">Precisione</div></div>
-    </div>
-    <button class="btn btn-primary mt-4" id="conj-es-restart">Ricomincia</button>
-  </div>`;
-  inner.querySelector('#conj-es-restart').addEventListener('click', () => renderConjEserciziTab(container, mode));
-  clearConjSession();
-}
-
-function renderExerciseUI(area, ex) {
-  const persons = ['io','tu','lui','noi','voi','loro'];
-  area.innerHTML = `
-    <div class="conj-exercise">
-      <div class="conj-prompt">Coniuga al <strong>${ex.tense_display}</strong></div>
-      <div class="conj-verb">${ex.verb}</div>
-      <div class="conj-tense">${TENSE_HINTS[ex.tense] || ex.tense_display}</div>
-
-      <div class="conj-full-grid" id="conj-grid">
-        ${persons.map(p => `
-          <div class="conj-row" data-person="${p}">
-            <span class="conj-pronoun">${p}</span>
-            <input class="conj-input conj-input-person" data-person="${p}"
-              placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-            <span class="conj-row-icon" id="icon-${p}"></span>
-          </div>`).join('')}
-      </div>
-
-      <div class="flex gap-2 justify-center mt-4" id="conj-btn-row">
-        <button class="btn btn-outline" id="conj-skip">Salta</button>
-        <button class="btn btn-primary" id="conj-check">Controlla</button>
-        <button class="btn btn-outline" id="conj-retry" style="display:none">Riprova</button>
-        <button class="btn btn-outline" id="conj-show" style="display:none">Mostra le risposte</button>
-        <button class="btn btn-primary" id="conj-next" style="display:none">Avanti →</button>
-      </div>
-    </div>`;
-
-  const inputs = area.querySelectorAll('.conj-input-person');
-  inputs[0].focus();
-
-  inputs.forEach((inp, i) => {
-    inp.addEventListener('keydown', e => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        if (i < inputs.length - 1) inputs[i+1].focus();
-        else checkAnswers();
-      }
-    });
-  });
-
-  document.getElementById('conj-check').addEventListener('click', checkAnswers);
-  document.getElementById('conj-skip').addEventListener('click', () => {
-    conjState.streak = 0;
-    loadConjugationExercise(document.getElementById('app-content'));
-  });
-  let arrowListener = null;
-
-  function goNext() {
-    if (arrowListener) { document.removeEventListener('keydown', arrowListener); arrowListener = null; }
-    loadConjugationExercise(document.getElementById('app-content'));
-  }
-
-  document.getElementById('conj-next').addEventListener('click', goNext);
-  document.getElementById('conj-retry').addEventListener('click', () => {
-    if (arrowListener) { document.removeEventListener('keydown', arrowListener); arrowListener = null; }
-    inputs.forEach(inp => {
-      inp.disabled = false;
-      inp.value = '';
-      inp.style.borderColor = '';
-    });
-    persons.forEach(p => { document.getElementById('icon-' + p).textContent = ''; });
-    document.getElementById('conj-check').style.display = 'inline-flex';
-    document.getElementById('conj-retry').style.display = 'none';
-    document.getElementById('conj-show').style.display = 'none';
-    document.getElementById('conj-next').style.display = 'none';
-    conjState.answered = false;
-    inputs[0].focus();
-  });
-  document.getElementById('conj-show').addEventListener('click', () => {
-    inputs.forEach(inp => {
-      const person = inp.dataset.person;
-      const correct = (ex.all_forms || {})[person] || '';
-      const isOk = inp.value.trim().toLowerCase() === correct.toLowerCase();
-      if (!isOk) {
-        inp.value = correct;
-        inp.style.borderColor = '#f59e0b';
-        document.getElementById('icon-' + person).textContent = '';
-      }
-    });
-    document.getElementById('conj-show').style.display = 'none';
-  });
-
-  async function checkAnswers() {
-    if (conjState.answered) return;
-    conjState.answered = true;
-    let correctCount = 0;
-
-    for (const inp of inputs) {
-      const person = inp.dataset.person;
-      const answer = inp.value.trim();
-      const correct = (ex.all_forms || {})[person] || '';
-      const isOk = answer.toLowerCase() === correct.toLowerCase();
-      if (isOk) correctCount++;
-
-      inp.disabled = true;
-      inp.style.borderColor = isOk ? 'var(--accent)' : '#ef4444';
-      const icon = document.getElementById('icon-' + person);
-      icon.textContent = isOk ? '✓' : '✗';
-      icon.style.color = isOk ? 'var(--accent)' : '#ef4444';
-
-      await API.post('/conjugation/check', { verb: ex.verb, tense: ex.tense, person, answer: answer || '__skip__' });
-    }
-
-    conjState.total += persons.length;
-    conjState.correct += correctCount;
-    if (correctCount === persons.length) conjState.streak++;
-    else conjState.streak = 0;
-
-    const acc = Math.round((conjState.correct / conjState.total) * 100);
-    const streakEl = document.getElementById('conj-streak');
-    const accEl = document.getElementById('conj-acc');
-    if (streakEl) streakEl.textContent = conjState.streak;
-    if (accEl) accEl.textContent = acc + '%';
-
-    document.getElementById('conj-check').style.display = 'none';
-    document.getElementById('conj-skip').style.display = 'none';
-    document.getElementById('conj-retry').style.display = 'inline-flex';
-    if (correctCount < persons.length) document.getElementById('conj-show').style.display = 'inline-flex';
-    const nextBtn = document.getElementById('conj-next');
-    nextBtn.style.display = 'inline-flex';
-    nextBtn.focus();
-    nextBtn.addEventListener('keydown', e => { if (e.key === 'ArrowRight') { e.preventDefault(); goNext(); } });
-  }
-}
-
-// ── Verb drill mode ──────────────────────────────────────────────────────────
-function renderDrillTab(container, verbList) {
-  if (verbList) drillState.verbList = verbList;
-  const area = document.getElementById('conj-exercise-area');
-
-  if (drillState.phase === 'pick') {
-    area.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
-
-    (async () => {
-    let verbsData;
-    try { verbsData = await API.get('/conjugation/verbs-with-translations'); }
-    catch(e) { area.innerHTML = `<div class="alert alert-error">Errore nel caricamento dei verbi</div>`; return; }
-
-    let selectedVerb = null;
-
-    const render = (filter = '') => {
-      const q = filter.toLowerCase();
-      const filtered = q ? verbsData.filter(({verb, translation}) => verb.includes(q) || translation.toLowerCase().includes(q)) : verbsData;
-      area.innerHTML = `
-        <div class="card" style="padding:16px 20px">
-          <div style="font-weight:600;font-size:1.05rem;margin-bottom:10px">Scegli un verbo</div>
-          <input id="drill-search" class="input" placeholder="Cerca verbo o traduzione..." value="${filter}" style="margin-bottom:8px">
-          <div id="drill-verb-list" style="height:190px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm)">
-            ${filtered.map(({verb, translation}) => `
-              <div class="drill-verb-row ${selectedVerb===verb?'drill-verb-selected':''}" data-verb="${verb}"
-                style="display:flex;justify-content:space-between;align-items:center;padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-subtle)">
-                <span style="font-weight:500">${verb}</span>
-                <span style="color:var(--text-muted);font-size:0.82rem">${translation}</span>
-              </div>`).join('')}
-            ${filtered.length === 0 ? `<div style="padding:16px;text-align:center;color:var(--text-muted)">Nessun risultato</div>` : ''}
-          </div>
-          ${selectedVerb ? `<div style="margin:8px 0;font-size:0.9rem;color:var(--accent);font-weight:600">✓ ${selectedVerb}</div>` : `<div style="height:28px;margin:4px 0"></div>`}
-          <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:6px">Tempi:</div>
-          <div class="flex flex-wrap gap-2 mb-3" id="drill-tense-picks">
-            ${DRILL_TENSES.map(t => `<button class="tense-pill ${drillState.tenses.includes(t)?'active':''}" data-t="${t}">${TENSE_LABELS[t]}</button>`).join('')}
-          </div>
-          <button class="btn btn-primary btn-block" id="drill-start" ${selectedVerb?'':'disabled'} style="margin-top:8px">Inizia →</button>
-        </div>
-      `;
-
-      document.getElementById('drill-search').focus();
-      document.getElementById('drill-search').setSelectionRange(filter.length, filter.length);
-
-      document.getElementById('drill-search').addEventListener('input', e => render(e.target.value));
-
-      document.getElementById('drill-verb-list').querySelectorAll('.drill-verb-row').forEach(row => {
-        row.addEventListener('click', () => { selectedVerb = row.dataset.verb; render(document.getElementById('drill-search').value); });
-      });
-
-      document.getElementById('drill-tense-picks').querySelectorAll('.tense-pill').forEach(pill => {
-        pill.addEventListener('click', () => {
-          const t = pill.dataset.t;
-          if (drillState.tenses.includes(t)) {
-            if (drillState.tenses.length === 1) return;
-            drillState.tenses = drillState.tenses.filter(x => x !== t);
-          } else {
-            drillState.tenses.push(t);
-          }
-          render(document.getElementById('drill-search').value);
-        });
-      });
-
-      const startBtn = document.getElementById('drill-start');
-      if (startBtn && !startBtn.disabled) {
-        startBtn.addEventListener('click', async () => {
-          try {
-            const data = await API.get(`/conjugation/verb-data/${selectedVerb}`);
-            drillState.verb = selectedVerb;
-            drillState.translation = data.translation;
-            drillState.conjugations = data.conjugations;
-            drillState.tenseIndex = 0;
-            drillState.highWater = -1;
-            drillState.mistakes = [];
-            drillState.score = { correct: 0, total: 0 };
-            drillState.tenseScores = [];
-            drillState.phase = 'practice';
-            renderDrillTense(area);
-          } catch(e) { toast('Errore nel caricamento del verbo', 'error'); }
-        });
-      }
-    };
-
-    render();
-    })();
-    return;
-  }
-
-  if (drillState.phase === 'practice') { renderDrillTense(area); return; }
-  if (drillState.phase === 'review')   { renderDrillReview(area); return; }
-  if (drillState.phase === 'done')     { renderDrillDone(area); return; }
-}
-
-function renderDrillTense(area) {
-  const activeTenses = drillState.tenses.filter(t => drillState.conjugations[t]);
-  if (drillState.tenseIndex >= activeTenses.length) {
-    if (drillState.mistakes.length > 0) {
-      drillState.phase = 'review';
-      drillState.reviewIndex = 0;
-      renderDrillReview(area);
-    } else {
-      drillState.phase = 'done';
-      renderDrillDone(area);
-    }
-    return;
-  }
-
-  const tense = activeTenses[drillState.tenseIndex];
-  const forms = drillState.conjugations[tense];
-  const progress = `${drillState.tenseIndex + 1} / ${activeTenses.length}`;
-  const alreadyScored = drillState.tenseScores.some(s => s.tense === tense);
-  const canGoBack = drillState.tenseIndex > 0;
-  const canGoFwd = drillState.highWater >= drillState.tenseIndex;
-
-  area.innerHTML = `
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:4px;min-width:0">
-        <div style="display:flex;align-items:center;gap:4px;min-width:0;flex:1">
-          <button type="button" id="drill-prev" class="btn btn-outline" style="padding:2px 8px;font-size:0.9rem;flex-shrink:0;${canGoBack?'':'visibility:hidden'}">←</button>
-          <div class="drill-header-meta" style="font-size:0.78rem;color:var(--text-muted)">${progress} — ${drillState.verb} (${drillState.translation})</div>
-          <button type="button" id="drill-nav-fwd" class="btn btn-outline" style="padding:2px 8px;font-size:0.9rem;flex-shrink:0;${canGoFwd?'':'visibility:hidden'}">→</button>
-        </div>
-        <div style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;flex-shrink:0;margin-left:6px" id="drill-score-display">✓ ${drillState.score.correct}/${drillState.score.total}</div>
-      </div>
-      <div style="font-weight:700;font-size:1.15rem;margin-bottom:4px">${TENSE_LABELS[tense]}</div>
-      <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:16px">${TENSE_HINTS[tense]||''}</div>
-      <div id="drill-forms">
-        ${['io','tu','lui','noi','voi','loro'].map(person => {
-          const label = person === 'lui' ? 'lui/lei' : person;
-          return `
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-            <div style="width:52px;font-size:0.9rem;color:var(--text-muted);flex-shrink:0">${label}</div>
-            <input class="input drill-input" data-person="${person}"
-              placeholder="${label}..."
-              autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
-              style="flex:1;padding:8px 12px">
-            <div class="drill-result" data-person="${person}" style="width:28px;text-align:center;font-size:1.1rem"></div>
-          </div>
-        `; }).join('')}
-      </div>
-      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;flex-wrap:wrap" id="drill-btns">
-        <button type="button" class="btn btn-primary" id="drill-check">Controlla</button>
-        <button type="button" class="btn btn-outline" id="drill-show" style="display:none">Mostra risposte</button>
-        <button type="button" class="btn btn-outline" id="drill-retry" style="display:none">Riprova</button>
-        <button type="button" class="btn btn-primary" id="drill-next" style="display:none">Avanti →</button>
-      </div>
-    </div>
-  `;
-
-  const inputs = [...area.querySelectorAll('.drill-input')];
-  inputs[0].focus();
-
-  let isLocked = alreadyScored;
-  let pendingKey = null;
-
-  inputs.forEach((inp, i) => {
-    inp.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { e.preventDefault(); i < inputs.length - 1 ? inputs[i+1].focus() : doCheck(); }
-    });
-  });
-
-  function doCheck() {
-    if (area.querySelector('#drill-next').style.display !== 'none') return;
-    let correct = 0;
-    inputs.forEach(inp => {
-      const person = inp.dataset.person;
-      const typed = inp.value.normalize('NFC').toLowerCase().trim();
-      const ok = expandForms(forms[person]||'').includes(typed);
-      inp.style.borderColor = ok ? 'var(--accent)' : '#ef4444';
-      inp.disabled = true;
-      area.querySelector(`.drill-result[data-person="${person}"]`).textContent = ok ? '✓' : '✗';
-      if (!isLocked) {
-        drillState.score.total++;
-        if (ok) { drillState.score.correct++; correct++; }
-        else { drillState.mistakes.push({ tense, person, correct: forms[person], typed: inp.value }); }
-      } else {
-        if (ok) correct++;
-      }
-    });
-    if (!isLocked) {
-      drillState.tenseScores.push({ tense, correct, total: inputs.length });
-      isLocked = true;
-    }
-    const scoreEl = area.querySelector('#drill-score-display');
-    if (scoreEl) scoreEl.textContent = `✓ ${drillState.score.correct}/${drillState.score.total}`;
-
-    document.getElementById('drill-check').style.display = 'none';
-    if (correct < inputs.length) {
-      document.getElementById('drill-show').style.display = 'inline-flex';
-      document.getElementById('drill-retry').style.display = 'inline-flex';
-    }
-    document.getElementById('drill-next').style.display = 'inline-flex';
-
-    // Only ArrowRight advances — Enter is excluded to prevent autorepeat from skipping results
-    pendingKey = e => { if (e.key === 'ArrowRight') { document.removeEventListener('keydown', pendingKey); pendingKey = null; goNext(); } };
-    setTimeout(() => document.addEventListener('keydown', pendingKey), 50);
-  }
-
-  function goNext() {
-    if (pendingKey) { document.removeEventListener('keydown', pendingKey); pendingKey = null; }
-    drillState.highWater = Math.max(drillState.highWater, drillState.tenseIndex);
-    drillState.tenseIndex++;
-    renderDrillTense(area);
-  }
-
-  function goPrev() {
-    if (pendingKey) { document.removeEventListener('keydown', pendingKey); pendingKey = null; }
-    drillState.tenseIndex--;
-    renderDrillTense(area);
-  }
-
-  document.getElementById('drill-check').addEventListener('click', doCheck);
-  document.getElementById('drill-show').addEventListener('click', () => {
-    inputs.forEach(inp => {
-      const person = inp.dataset.person;
-      const resultEl = area.querySelector(`.drill-result[data-person="${person}"]`);
-      if (inp.disabled && resultEl && resultEl.textContent === '✗') {
-        inp.value = forms[person] || '';
-        inp.style.borderColor = '#f59e0b';
-        resultEl.textContent = '→';
-      }
-    });
-  });
-  document.getElementById('drill-retry').addEventListener('click', () => {
-    if (pendingKey) { document.removeEventListener('keydown', pendingKey); pendingKey = null; }
-    inputs.forEach(inp => {
-      inp.value = '';
-      inp.style.borderColor = '';
-      inp.disabled = false;
-      area.querySelector(`.drill-result[data-person="${inp.dataset.person}"]`).textContent = '';
-    });
-    document.getElementById('drill-check').style.display = 'inline-flex';
-    document.getElementById('drill-show').style.display = 'none';
-    document.getElementById('drill-retry').style.display = 'none';
-    document.getElementById('drill-next').style.display = 'none';
-    inputs[0].focus();
-  });
-  document.getElementById('drill-next').addEventListener('click', goNext);
-  if (canGoBack) document.getElementById('drill-prev').addEventListener('click', goPrev);
-  if (canGoFwd) document.getElementById('drill-nav-fwd').addEventListener('click', goNext);
-}
-
-function renderDrillReview(area) {
-  if (drillState.reviewIndex >= drillState.mistakes.length) {
-    drillState.phase = 'done';
-    renderDrillDone(area);
-    return;
-  }
-
-  const mistake = drillState.mistakes[drillState.reviewIndex];
-  const total = drillState.mistakes.length;
-  area.innerHTML = `
-    <div class="card">
-      <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:4px">Ripasso errori — ${drillState.reviewIndex+1}/${total}</div>
-      <div style="font-weight:700;font-size:1.1rem;margin-bottom:2px">${drillState.verb} — ${TENSE_LABELS[mistake.tense]}</div>
-      <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px">Soggetto: <strong>${mistake.person}</strong></div>
-      <div style="margin-bottom:12px">
-        <input id="drill-retry-input" class="input" placeholder="${mistake.person}..."
-          autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
-          style="width:100%;font-size:1.1rem">
-      </div>
-      <div id="drill-retry-result" style="min-height:32px;margin-bottom:12px"></div>
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button type="button" class="btn btn-primary" id="drill-retry-check">Controlla</button>
-        <button type="button" class="btn btn-primary" id="drill-retry-next" style="display:none">Avanti →</button>
-      </div>
-    </div>
-  `;
-
-  const inp = document.getElementById('drill-retry-input');
-  inp.focus();
-
-  function doRetryCheck() {
-    const typed = inp.value.normalize('NFC').toLowerCase().trim();
-    inp.disabled = true;
-
-    const evalObj = buildConjugationEvaluation({
-      verb:          drillState.verb,
-      tense:         mistake.tense,
-      person:        mistake.person,
-      userAnswer:    inp.value.trim(),
-      correctAnswer: mistake.correct,
-    });
-    inp.style.borderColor = evalObj.accepted ? 'var(--accent)' : '#ef4444';
-
-    const res = document.getElementById('drill-retry-result');
-    let retryOnKey;
-    Feedback.render({
-      container: res,
-      evaluation: evalObj,
-      actions: {
-        onContinue: () => {
-          document.removeEventListener('keydown', retryOnKey);
-          goRetryNext();
-        },
-      },
-      compact: true,
-    });
-
-    document.getElementById('drill-retry-check').style.display = 'none';
-    retryOnKey = e => {
-      if ((e.key === 'ArrowRight'||e.key==='Enter') && e.target.tagName !== 'BUTTON') {
-        document.removeEventListener('keydown', retryOnKey);
-        goRetryNext();
-      }
-    };
-    setTimeout(() => document.addEventListener('keydown', retryOnKey), 50);
-  }
-
-  function goRetryNext() {
-    drillState.reviewIndex++;
-    renderDrillReview(area);
-  }
-
-  inp.addEventListener('keydown', e => { if (e.key==='Enter') { e.preventDefault(); doRetryCheck(); } });
-  document.getElementById('drill-retry-check').addEventListener('click', doRetryCheck);
-  document.getElementById('drill-retry-next').addEventListener('click', goRetryNext);
-}
-
-function renderDrillDone(area) {
-  const { correct, total } = drillState.score;
-  const pct = total > 0 ? Math.round(correct/total*100) : 0;
-  const emoji = pct >= 90 ? '🎉' : pct >= 70 ? '👍' : '💪';
-  if (drillState.tenseScores.length > 0) {
-    API.post('/verb-scores', { verb: drillState.verb, tenseScores: drillState.tenseScores }).catch(() => {});
-  }
-  area.innerHTML = `
-    <div class="card" style="text-align:center;padding:32px 24px">
-      <div style="font-size:2.5rem;margin-bottom:8px">${emoji}</div>
-      <div style="font-size:1.3rem;font-weight:700;margin-bottom:4px">${drillState.verb}</div>
-      <div style="font-size:0.9rem;color:var(--text-muted);margin-bottom:20px">${drillState.translation}</div>
-      <div style="font-size:2rem;font-weight:700;color:${pct>=80?'var(--accent)':'#f59e0b'};margin-bottom:4px">${pct}%</div>
-      <div style="font-size:0.9rem;color:var(--text-muted);margin-bottom:24px">${correct} / ${total} corrette</div>
-      ${drillState.mistakes.length > 0 ? `
-        <div style="text-align:left;margin-bottom:20px">
-          <div style="font-weight:600;margin-bottom:8px;font-size:0.9rem">Errori:</div>
-          ${[...new Map(drillState.mistakes.map(m=>[`${m.tense}-${m.person}`,m])).values()].map(m => `
-            <div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:4px;padding:4px 8px;background:var(--bg-secondary);border-radius:6px">
-              <span style="color:var(--text-muted)">${TENSE_LABELS[m.tense]} — ${m.person}</span>
-              <span style="font-weight:600">${m.correct}</span>
-            </div>
-          `).join('')}
-        </div>
-      ` : ''}
-      <div style="display:flex;gap:8px;justify-content:center">
-        <button class="btn btn-outline" id="drill-again">Ripeti verbo</button>
-        <button class="btn btn-primary" id="drill-new">Nuovo verbo</button>
-      </div>
-    </div>
-  `;
-
-  document.getElementById('drill-again').addEventListener('click', () => {
-    drillState.tenseIndex = 0; drillState.highWater = -1; drillState.mistakes = []; drillState.score = {correct:0,total:0}; drillState.tenseScores = []; drillState.phase = 'practice';
-    renderDrillTense(area);
-  });
-  document.getElementById('drill-new').addEventListener('click', () => {
-    drillState.phase = 'pick';
-    renderDrillTab(null, drillState.verbList || []);
-  });
-}
-
-async function renderVerbScores(area) {
-  area.innerHTML = `<div class="loading"><div class="spinner"></div> Caricamento...</div>`;
-  const rows = await API.get('/verb-scores').catch(() => []);
-
-  // Aggregate by verb
-  const byVerb = {};
-  rows.forEach(r => {
-    if (!byVerb[r.verb]) byVerb[r.verb] = { bestTotal: 0, xpTotal: 0, tenses: {} };
-    byVerb[r.verb].tenses[r.tense] = { best: r.best_correct, xp: r.xp };
-    byVerb[r.verb].bestTotal += r.best_correct;
-    byVerb[r.verb].xpTotal += r.xp;
-  });
-
-  const verbEntries = Object.entries(byVerb).sort((a, b) => b[1].xpTotal - a[1].xpTotal);
-  const totalXP = verbEntries.reduce((s, [, v]) => s + v.xpTotal, 0);
-  const totalBest = verbEntries.reduce((s, [, v]) => s + v.bestTotal, 0);
-  const maxPossibleAll = verbEntries.length * 36;
-
-  if (verbEntries.length === 0) {
-    area.innerHTML = `<div class="card" style="text-align:center;padding:40px 24px">
-      <div style="font-size:2.5rem;margin-bottom:12px">📚</div>
-      <div style="font-weight:600;font-size:1.1rem;margin-bottom:6px">Nessun verbo praticato ancora</div>
-      <div style="color:var(--text-muted);font-size:0.9rem">Completa un esercizio "Per verbo" per iniziare a guadagnare punti</div>
-    </div>`;
-    return;
-  }
-
-  const TENSE_SHORT = { presente:'Pres.', imperfetto:'Imperf.', futuro:'Fut.', condizionale:'Cond.', congiuntivo:'Cong.', passato_prossimo:'Pass.' };
-
-  area.innerHTML = `
-    <div class="card mb-3" style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;gap:16px;flex-wrap:wrap">
-      <div>
-        <div style="font-size:2rem;font-weight:800;color:var(--accent);line-height:1">${totalXP} XP</div>
-        <div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px">${verbEntries.length} / 100 verbi praticati</div>
-      </div>
-      <div style="text-align:right">
-        <div style="font-size:1rem;font-weight:700">${totalBest} / ${maxPossibleAll} pt</div>
-        <div style="font-size:0.8rem;color:var(--text-muted)">punteggio massimo raggiunto</div>
-        <div style="font-size:0.75rem;color:var(--text-muted)">max 36 pt per verbo (6 tempi × 6 forme)</div>
-      </div>
-    </div>
-    <div id="verb-scores-list">
-      ${verbEntries.map(([verb, data]) => {
-        const tenseCount = Object.keys(data.tenses).length;
-        const maxPossible = tenseCount * 6;
-        const pct = maxPossible > 0 ? Math.round(data.bestTotal / maxPossible * 100) : 0;
-        const barColor = pct >= 90 ? 'var(--accent)' : pct >= 60 ? '#f59e0b' : '#ef4444';
-        return `
-        <div class="card mb-2" style="padding:12px 16px">
-          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
-            <div style="font-weight:600">${verb}</div>
-            <div style="font-size:0.85rem;font-weight:700;color:var(--accent)">${data.xpTotal} XP</div>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-            <div style="font-size:0.78rem;color:var(--text-muted)">${Object.entries(data.tenses).map(([t, s]) => `${TENSE_SHORT[t]||t} ${s.best}/6`).join(' · ')}</div>
-            <div style="font-size:0.8rem;font-weight:600">${data.bestTotal}/${maxPossible}</div>
-          </div>
-          <div style="height:7px;background:var(--surface-2);border-radius:99px;overflow:hidden">
-            <div style="height:100%;width:${pct}%;background:${barColor};border-radius:99px;transition:width 0.6s ease"></div>
-          </div>
-        </div>`;
-      }).join('')}
-    </div>
-  `;
-}
 
 // ─── Endings reference + quiz ────────────────────────────────────────────────
 const ENDINGS_DATA = {
@@ -2374,7 +2481,6 @@ function renderEndingsTab(area) {
     document.getElementById('endings-ref-btn').addEventListener('click', showReference);
 
     const inputs = [...area.querySelectorAll('.endings-input')];
-    // Tab between inputs, Enter on last triggers check
     inputs.forEach((inp, i) => {
       inp.addEventListener('keydown', e => {
         if (e.key === 'Enter') { e.preventDefault(); i < inputs.length - 1 ? inputs[i+1].focus() : doCheck(); }
@@ -2385,7 +2491,6 @@ function renderEndingsTab(area) {
         }
       });
     });
-    if (inputs[0]) inputs[0].focus();
 
     function doCheck() {
       let correct = 0, total = 0;
@@ -2430,7 +2535,6 @@ function renderEndingsTab(area) {
       document.getElementById('endings-show').style.display = 'none';
       document.getElementById('endings-retry').style.display = 'none';
       document.getElementById('endings-score').textContent = '';
-      if (inputs[0]) inputs[0].focus();
     });
   }
 
@@ -2438,13 +2542,12 @@ function renderEndingsTab(area) {
 }
 
 function renderConjugationReference(el, verbs) {
-  const area = document.getElementById('conj-tab-content');
-  area.innerHTML = `
+  el.innerHTML = `
     <div class="card">
       <div class="card-title mb-3">Riferimento verbi</div>
       <div class="flex gap-2 mb-4">
         <select id="ref-verb" style="max-width:200px">
-          ${verbs.map(v=>`<option>${v}</option>`).join('')}
+          ${verbs.map(v=>`<option>${escHtml(v)}</option>`).join('')}
         </select>
         <select id="ref-tense" style="max-width:200px">
           ${['presente','imperfetto','futuro','condizionale','congiuntivo','passato_prossimo'].map(t=>`<option value="${t}">${{
@@ -2458,22 +2561,20 @@ function renderConjugationReference(el, verbs) {
     </div>`;
 
   async function loadRef() {
-    const verb = document.getElementById('ref-verb').value;
-    const tense = document.getElementById('ref-tense').value;
-    const ex = await API.get(`/conjugation/exercise`);
-    // Get all forms via check endpoint trick — load exercise for that verb/tense
-    const tableEl = document.getElementById('ref-table');
+    const verb = el.querySelector('#ref-verb').value;
+    const tense = el.querySelector('#ref-tense').value;
+    const tableEl = el.querySelector('#ref-table');
     const res = await API.post('/conjugation/check', { verb, tense, person:'io', answer: '__placeholder__' });
     if (res.all_forms) {
       tableEl.innerHTML = `
         <table class="conj-table">
           <tr><th>Persona</th><th>Forma</th></tr>
-          ${Object.entries(res.all_forms).map(([p,f])=>`<tr><td style="font-weight:500">${p}</td><td>${f}</td></tr>`).join('')}
+          ${Object.entries(res.all_forms).map(([p,f])=>`<tr><td style="font-weight:500">${escHtml(p)}</td><td>${escHtml(f)}</td></tr>`).join('')}
         </table>`;
     }
   }
 
-  area.querySelector('#ref-load').addEventListener('click', loadRef);
+  el.querySelector('#ref-load').addEventListener('click', loadRef);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
