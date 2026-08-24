@@ -597,6 +597,7 @@ async function launchFlashcardSession(catId, catName, tabMode) {
         : 'Nessun ripasso in sospeso! Torna domani o studia nuove schede.';
       body.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🎉</div><div class="empty-state-title">${msg}</div><button class="btn btn-outline mt-4" id="fc-empty-close">← Torna indietro</button></div>`;
       document.getElementById('fc-empty-close').addEventListener('click', () => {
+        document.body.style.overflow = '';
         document.getElementById('conj-session-shell')?.remove();
         fcState.shell = null;
       });
@@ -687,6 +688,7 @@ function renderFlashcard(container) {
           <button class="btn btn-outline mt-2" id="fc-done-close">← Torna indietro</button>
         </div>`;
       document.getElementById('fc-done-close').addEventListener('click', () => {
+        document.body.style.overflow = '';
         document.getElementById('conj-session-shell')?.remove();
         fcState.shell = null;
       });
@@ -1498,9 +1500,15 @@ function createSessionShell(titleText, onExit) {
     <div class="session-body" id="session-body"></div>
   `;
   document.body.appendChild(shell);
+  document.body.style.overflow = 'hidden';
+
+  function _closeShell() {
+    document.body.style.overflow = '';
+    shell.remove();
+  }
 
   shell.querySelector('#session-exit-btn').addEventListener('click', () => {
-    shell.remove();
+    _closeShell();
     onExit();
   });
 
