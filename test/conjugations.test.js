@@ -265,6 +265,51 @@ if (db) {
   assert(spanish.length === 0, `No Spanish forms in verb_conjugations (found: ${spanish.map(r=>r.form).join(',')||'none'})`);
 }
 
+if (db) {
+  console.log('\n12 — 100 verbs, exact list, no duplicates:');
+  const CRITICAL_VERBS = ['aiutare','alzarsi','chiamarsi','fermarsi','lavarsi','ricordarsi',
+    'sedersi','sentirsi','vestirsi','svegliarsi','essere','avere','andare','fare','venire',
+    'parlare','studiare','capire','piacere','mancare'];
+  const actualVerbs = db.prepare('SELECT infinitive FROM verbs').all().map(r=>r.infinitive);
+  assert(actualVerbs.length === 100, `Exactly 100 verbs (found ${actualVerbs.length})`);
+  const dups = db.prepare('SELECT infinitive, COUNT(*) as n FROM verbs GROUP BY infinitive HAVING n>1').all();
+  assert(dups.length === 0, `No duplicate verb infinitives (found: ${dups.map(d=>d.infinitive).join(',')||'none'})`);
+  CRITICAL_VERBS.forEach(inf => {
+    assert(actualVerbs.includes(inf), `Verb present: ${inf}`);
+  });
+}
+
+if (db) {
+  console.log('\n13 — Full conjugation audit (3600 positions):');
+  const TENSES = ['present_indicative','passato_prossimo','imperfect_indicative','future_simple','conditional_present','subjunctive_present'];
+  const PERSONS = ['io','tu','lui/lei','noi','voi','loro'];
+  const totalV = db.prepare('SELECT COUNT(*) as n FROM verbs').get().n;
+  const totalForms = db.prepare("SELECT COUNT(*) as n FROM verb_conjugations WHERE form IS NOT NULL AND form != ''").get().n;
+  const expected = totalV * 6 * 6;
+  assert(totalForms === expected, `Form coverage: ${totalForms}/${expected} (${totalV} verbs × 36)`);
+  assert(totalForms >= 3600, `At least 3600 forms stored (found ${totalForms})`);
+
+  // Check a sample of reflexive forms
+  const rfVerb = db.prepare("SELECT id FROM verbs WHERE infinitive='alzarsi'").get();
+  if (rfVerb) {
+    const rf = db.prepare("SELECT form FROM verb_conjugations WHERE verb_id=? AND tense='present_indicative' AND person='io'").get(rfVerb.id);
+    assert(rf && rf.form === 'mi alzo', `alzarsi io = mi alzo (found: ${rf && rf.form})`);
+    const rfPP = db.prepare("SELECT form FROM verb_conjugations WHERE verb_id=? AND tense='passato_prossimo' AND person='io'").get(rfVerb.id);
+    assert(rfPP && rfPP.form.includes('sono'), `alzarsi passato prossimo has essere (found: ${rfPP && rfPP.form})`);
+  }
+}
+
+if (db) {
+  console.log('\n14 — Reflexive exercises: 8 priority verbs covered:');
+  const REFL_VERBS = ['chiamarsi','lavarsi','fermarsi','ricordarsi','sentirsi','sedersi','vestirsi','svegliarsi'];
+  const rifCount = db.prepare("SELECT COUNT(*) as n FROM conjugation_exercises WHERE exercise_type='riflessivi'").get().n;
+  assert(rifCount >= 16, `At least 16 riflessivi exercises (found ${rifCount})`);
+  REFL_VERBS.forEach(inf => {
+    const n = db.prepare("SELECT COUNT(*) as n FROM conjugation_exercises WHERE exercise_type='riflessivi' AND (prompt_it LIKE ? OR context_sentence LIKE ?)").get('%'+inf+'%', '%'+inf+'%').n;
+    assert(n >= 1, `Reflexive exercise exists for ${inf} (found ${n})`);
+  });
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n─────────────────────────────────────`);
 console.log(`Risultato: ${passed} passati, ${failed} falliti su ${passed+failed} totali`);

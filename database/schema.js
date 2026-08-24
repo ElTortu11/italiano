@@ -1575,9 +1575,240 @@ function createSchema() {
       ['conj_rif_003','riflessivi',null,'passato_prossimo','io (m)','Ieri io ___ (lavarsi)','Yesterday I washed myself.','["mi sono lavato"]','["lavato"]','["ho lavato","si sono lavato","mi sono lavata"]','Riflessivo con essere: mi sono lavato (m).',null,2,'A2','Ieri mi sono lavato i capelli.','mi sono lavato'],
       ['conj_rif_004','riflessivi',null,'present_indicative','io','io ___ (fermarsi)','I stop.','["mi fermo"]','[]','["fermo","si ferma","mi fermisco"]','Fermarsi: mi fermo.',null,1,'A1','Mi fermo qui per un momento.','mi fermo'],
       ['conj_rif_005','riflessivi',null,'present_indicative','lui/lei','lui/lei ___ (vestirsi)','He/she gets dressed.','["si veste"]','[]','["veste","si vestisce","si vesta"]','Vestirsi: lui si veste. Non usa -isc.',null,1,'A2','Si veste sempre elegante.','si veste'],
+      // additional riflessivi — 2 per verb, all 8 priority verbs
+      ['conj_rif_006','riflessivi',null,'present_indicative','io','io ___ il suo nome. (ricordarsi)','I remember his name.','["mi ricordo"]','[]','["ricordo","si ricorda","mi ricordisco"]','Ricordarsi: mi ricordo. Non usa -isc.',null,1,'A2','Mi ricordo il suo nome.','mi ricordo'],
+      ['conj_rif_007','riflessivi',null,'passato_prossimo','Giulia (f)','Giulia ___ di chiamare. (ricordarsi)','Giulia remembered to call.','["si è ricordata"]','[]','["ha ricordato","si è ricordato","si ha ricordata"]','Ricordarsi al passato prossimo con essere. Femminile: ricordata.',null,2,'A2','Giulia si è ricordata di chiamare.','si è ricordata'],
+      ['conj_rif_008','riflessivi',null,'present_indicative','io','Come ___ oggi? (sentirsi)','How do I feel today?','["mi sento"]','[]','["sento","si sente","mi sentisco"]','Sentirsi: mi sento.',null,1,'A2','Come mi sento oggi?','mi sento'],
+      ['conj_rif_009','riflessivi',null,'passato_prossimo','noi (m pl)','Ieri noi non ___ bene. (sentirsi)','Yesterday we did not feel well.','["ci siamo sentiti"]','[]','["abbiamo sentito","ci siamo sentite","siamo sentiti"]','Sentirsi al passato prossimo: ci siamo sentiti (maschile/misto plurale).',null,2,'A2','Ieri non ci siamo sentiti bene.','ci siamo sentiti'],
+      ['conj_rif_010','riflessivi',null,'present_indicative','lui/lei','Ogni mattina lui ___ in fretta. (vestirsi)','Every morning he gets dressed quickly.','["si veste"]','[]','["veste","si vestisce","si veste"]','Vestirsi: lui si veste.',null,1,'A2','Ogni mattina si veste in fretta.','si veste'],
+      ['conj_rif_011','riflessivi',null,'passato_prossimo','le ragazze (f pl)','Le ragazze ___ in fretta. (vestirsi)','The girls got dressed quickly.','["si sono vestite"]','[]','["si sono vestiti","hanno vestito","si hanno vestite"]','Vestirsi al passato prossimo: si sono vestite. Femminile plurale.',null,2,'A2','Le ragazze si sono vestite in fretta.','si sono vestite'],
+      ['conj_rif_012','riflessivi',null,'present_indicative','io','A che ora ___ di solito? (alzarsi)','What time do you usually get up?','["mi alzo"]','[]','["alzo","si alza","mi alzisco"]','Alzarsi: mi alzo.',null,1,'A1','Di solito mi alzo alle sette.','mi alzo'],
+      ['conj_rif_013','riflessivi',null,'passato_prossimo','Marco (m)','Stamattina Marco ___ molto presto. (alzarsi)','This morning Marco got up very early.','["si è alzato"]','[]','["ha alzato","si è alzata","si ha alzato"]','Alzarsi al passato prossimo con essere. Maschile: alzato.',null,1,'A2','Stamattina Marco si è alzato molto presto.','si è alzato'],
+      ['conj_rif_014','riflessivi',null,'present_indicative','loro','Per favore, ___ ! (sedersi)','Please, sit down!','["si siedono"]','[]','["si sedono","siedono","si sedano"]','Sedersi: loro si siedono.',null,2,'A2','Per favore si siedono tutti.','si siedono'],
+      ['conj_rif_015','riflessivi',null,'passato_prossimo','io (f)','Mi ___ vicino alla finestra. (sedersi)','I sat down near the window.','["mi sono seduta"]','["seduta"]','["ho seduto","mi sono seduto","mi sono sieda"]','Sedersi al passato prossimo con essere. Femminile: seduta.',null,2,'A2','Mi sono seduta vicino alla finestra.','mi sono seduta'],
+      ['conj_rif_016','riflessivi',null,'passato_prossimo','i bambini (m pl)','I bambini ___ le mani. (lavarsi)','The children washed their hands.','["si sono lavati"]','[]','["hanno lavato","si sono lavate","si ha lavato"]','Lavarsi al passato prossimo: si sono lavati (maschile plurale).',null,2,'A2','I bambini si sono lavati le mani.','si sono lavati'],
+      ['conj_rif_017','riflessivi',null,'present_indicative','lui/lei','Come ___ tua sorella? (chiamarsi)','What is your sister\'s name?','["si chiama"]','[]','["chiama","si chiamisce","chiamasi"]','Chiamarsi: lei si chiama.',null,1,'A1','Come si chiama tua sorella?','si chiama'],
+      ['conj_rif_018','riflessivi',null,'passato_prossimo','il treno (m)','Il treno ___ alla stazione. (fermarsi)','The train stopped at the station.','["si è fermato"]','[]','["ha fermato","si è fermata","si ha fermato"]','Fermarsi al passato prossimo con essere: si è fermato.',null,1,'A2','Il treno si è fermato alla stazione.','si è fermato'],
+      ['conj_rif_019','riflessivi',null,'present_indicative','voi','A che ora ___ domani? (svegliarsi)','What time are you (pl) waking up tomorrow?','["vi svegliate"]','[]','["vi sveglite","si svegliate","vi svegliete"]','Svegliarsi: voi vi svegliate.',null,2,'A2','A che ora vi svegliate domani?','vi svegliate'],
+      ['conj_rif_020','riflessivi',null,'passato_prossimo','Marco e Giulia','Marco e Giulia ___ tardi. (svegliarsi)','Marco and Giulia woke up late.','["si sono svegliati"]','[]','["si sono svegliate","hanno svegliato","si è svegliati"]','Gruppo misto (m+f): si sono svegliati. Il gruppo misto usa il maschile plurale.',null,3,'A2','Marco e Giulia si sono svegliati tardi.','si sono svegliati'],
     ];
     exB.forEach(e => { try { insExB.run(...e); } catch(_) {} });
   } catch(_) {}
+
+  // ── 10 MISSING REFLEXIVE VERBS ──────────────────────────────────────────
+  try {
+    const insV2 = db.prepare(`INSERT OR IGNORE INTO verbs(infinitive,translation,conjugation_group,is_regular,is_isc,auxiliary,past_participle,gerund,transitivity,irregularity_tags,review_status) VALUES(?,?,?,?,?,?,?,?,?,?,?)`);
+    [
+      ['aiutare','to help','are',1,0,'avere','aiutato','aiutando','transitive','[]','ok'],
+      ['alzarsi','to get up','are',1,0,'essere','alzato','alzandosi','intransitive','[]','ok'],
+      ['chiamarsi','to be called','are',1,0,'essere','chiamato','chiamandosi','intransitive','[]','ok'],
+      ['fermarsi','to stop','are',1,0,'essere','fermato','fermandosi','intransitive','[]','ok'],
+      ['lavarsi','to wash oneself','are',1,0,'essere','lavato','lavandosi','intransitive','[]','ok'],
+      ['ricordarsi','to remember','are',1,0,'essere','ricordato','ricordandosi','intransitive','[]','ok'],
+      ['sedersi','to sit down','ere',0,0,'essere','seduto','sedendosi','intransitive','["presente_irregolare"]','ok'],
+      ['sentirsi','to feel','ire',1,0,'essere','sentito','sentendosi','intransitive','[]','ok'],
+      ['vestirsi','to get dressed','ire',1,0,'essere','vestito','vestendosi','intransitive','[]','ok'],
+      ['svegliarsi','to wake up','are',1,0,'essere','svegliato','svegliandosi','intransitive','[]','ok'],
+    ].forEach(r => insV2.run(...r));
+  } catch(_) {}
+
+  // ── FULL CONJUGATION FILL (programmatic, INSERT OR IGNORE) ──────────────
+  // This fills all 6×6=36 positions per verb using rules. Irregular forms
+  // already in the DB are preserved (INSERT OR IGNORE never overwrites).
+  try {
+    const insF = db.prepare(`INSERT OR IGNORE INTO verb_conjugations(verb_id,tense,person,form) VALUES(?,?,?,?)`);
+    const persons = ['io','tu','lui/lei','noi','voi','loro'];
+    const tenses = ['present_indicative','passato_prossimo','imperfect_indicative','future_simple','conditional_present','subjunctive_present'];
+
+    // Reflexive pronoun map
+    const rfPron = {io:'mi',tu:'ti','lui/lei':'si',noi:'ci',voi:'vi',loro:'si'};
+
+    // Essere present forms (for passato prossimo construction)
+    const essereAux = {io:'sono',tu:'sei','lui/lei':'è',noi:'siamo',voi:'siete',loro:'sono'};
+    const avereAux  = {io:'ho',  tu:'hai','lui/lei':'ha',noi:'abbiamo',voi:'avete',loro:'hanno'};
+
+    function ppForms(aux, pp) {
+      if (aux === 'essere') {
+        return {io:`sono ${pp}`,tu:`sei ${pp}`,'lui/lei':`è ${pp}`,noi:`siamo ${pp}i`,voi:`siete ${pp}i`,loro:`sono ${pp}i`};
+      }
+      return {io:`ho ${pp}`,tu:`hai ${pp}`,'lui/lei':`ha ${pp}`,noi:`abbiamo ${pp}`,voi:`avete ${pp}`,loro:`hanno ${pp}`};
+    }
+
+    function ppFormsRefl(pp, rfPron) {
+      // reflexive pp: aux is always essere, add pronoun
+      return {
+        io:`mi sono ${pp}`,tu:`ti sei ${pp}`,'lui/lei':`si è ${pp}`,
+        noi:`ci siamo ${pp}i`,voi:`vi siete ${pp}i`,loro:`si sono ${pp}i`
+      };
+    }
+
+    // Pattern generators for non-reflexive verbs
+    function areConj(stem) {
+      // Handle -care/-gare: add h before e/i
+      const isCareGare = /[cg]$/.test(stem);
+      const hs = isCareGare ? stem + 'h' : stem;
+      // Handle -ciare/-giare/-iare: stem already ends in i, drop one i before i
+      const stemI = stem.endsWith('i') ? stem.slice(0,-1) : stem; // for tu present
+      return {
+        present_indicative: {io:stem+'o',tu:stemI+'i','lui/lei':stem+'a',noi:stem+'iamo',voi:stem+'ate',loro:stem+'ano'},
+        imperfect_indicative: {io:stem+'avo',tu:stem+'avi','lui/lei':stem+'ava',noi:stem+'avamo',voi:stem+'avate',loro:stem+'avano'},
+        future_simple: {io:hs+'erò',tu:hs+'erai','lui/lei':hs+'erà',noi:hs+'eremo',voi:hs+'erete',loro:hs+'eranno'},
+        conditional_present: {io:hs+'erei',tu:hs+'eresti','lui/lei':hs+'erebbe',noi:hs+'eremmo',voi:hs+'ereste',loro:hs+'erebbero'},
+        subjunctive_present: {io:stemI+'i',tu:stemI+'i','lui/lei':stemI+'i',noi:stem+'iamo',voi:stem+'iate',loro:stemI+'ino'},
+      };
+    }
+
+    function ereConj(stem) {
+      return {
+        present_indicative: {io:stem+'o',tu:stem+'i','lui/lei':stem+'e',noi:stem+'iamo',voi:stem+'ete',loro:stem+'ono'},
+        imperfect_indicative: {io:stem+'evo',tu:stem+'evi','lui/lei':stem+'eva',noi:stem+'evamo',voi:stem+'evate',loro:stem+'evano'},
+        future_simple: {io:stem+'erò',tu:stem+'erai','lui/lei':stem+'erà',noi:stem+'eremo',voi:stem+'erete',loro:stem+'eranno'},
+        conditional_present: {io:stem+'erei',tu:stem+'eresti','lui/lei':stem+'erebbe',noi:stem+'eremmo',voi:stem+'ereste',loro:stem+'erebbero'},
+        subjunctive_present: {io:stem+'a',tu:stem+'a','lui/lei':stem+'a',noi:stem+'iamo',voi:stem+'iate',loro:stem+'ano'},
+      };
+    }
+
+    function ireConj(stem) {
+      return {
+        present_indicative: {io:stem+'o',tu:stem+'i','lui/lei':stem+'e',noi:stem+'iamo',voi:stem+'ite',loro:stem+'ono'},
+        imperfect_indicative: {io:stem+'ivo',tu:stem+'ivi','lui/lei':stem+'iva',noi:stem+'ivamo',voi:stem+'ivate',loro:stem+'ivano'},
+        future_simple: {io:stem+'irò',tu:stem+'irai','lui/lei':stem+'irà',noi:stem+'iremo',voi:stem+'irete',loro:stem+'iranno'},
+        conditional_present: {io:stem+'irei',tu:stem+'iresti','lui/lei':stem+'irebbe',noi:stem+'iremmo',voi:stem+'ireste',loro:stem+'irebbero'},
+        subjunctive_present: {io:stem+'a',tu:stem+'a','lui/lei':stem+'a',noi:stem+'iamo',voi:stem+'iate',loro:stem+'ano'},
+      };
+    }
+
+    function ireIscConj(stem) {
+      return {
+        present_indicative: {io:stem+'isco',tu:stem+'isci','lui/lei':stem+'isce',noi:stem+'iamo',voi:stem+'ite',loro:stem+'iscono'},
+        imperfect_indicative: {io:stem+'ivo',tu:stem+'ivi','lui/lei':stem+'iva',noi:stem+'ivamo',voi:stem+'ivate',loro:stem+'ivano'},
+        future_simple: {io:stem+'irò',tu:stem+'irai','lui/lei':stem+'irà',noi:stem+'iremo',voi:stem+'irete',loro:stem+'iranno'},
+        conditional_present: {io:stem+'irei',tu:stem+'iresti','lui/lei':stem+'irebbe',noi:stem+'iremmo',voi:stem+'ireste',loro:stem+'irebbero'},
+        subjunctive_present: {io:stem+'isca',tu:stem+'isca','lui/lei':stem+'isca',noi:stem+'iamo',voi:stem+'iate',loro:stem+'iscano'},
+      };
+    }
+
+    // Reflexive conjugation: prefix pronoun to each form
+    function reflConj(baseForms, inf) {
+      const pron = rfPron;
+      const out = {};
+      for (const [tense, forms] of Object.entries(baseForms)) {
+        out[tense] = {};
+        for (const p of persons) {
+          out[tense][p] = pron[p] + ' ' + forms[p];
+        }
+      }
+      return out;
+    }
+
+    // Reflexive pp: mi sono lavato etc.
+    function reflPP(pp) {
+      return {io:`mi sono ${pp}`,tu:`ti sei ${pp}`,'lui/lei':`si è ${pp}`,
+              noi:`ci siamo ${pp}i`,voi:`vi siete ${pp}i`,loro:`si sono ${pp}i`};
+    }
+
+    const allVerbs = db.prepare('SELECT id, infinitive, conjugation_group, is_isc, auxiliary, past_participle FROM verbs').all();
+
+    const reflexiveInfinitives = new Set(['alzarsi','chiamarsi','fermarsi','lavarsi','ricordarsi','sedersi','sentirsi','vestirsi','svegliarsi']);
+
+    for (const verb of allVerbs) {
+      const { id, infinitive, conjugation_group: grp, is_isc, auxiliary, past_participle: pp } = verb;
+      if (!grp || !pp) continue;
+
+      const isRefl = reflexiveInfinitives.has(infinitive);
+
+      // Get base infinitive stem
+      let stem, baseForms;
+
+      if (isRefl) {
+        // Reflexive: strip 'si' suffix and conjugation ending
+        const baseInf = infinitive.slice(0,-2); // e.g. 'alzarsi' -> 'alzar'
+        const grpSuffix = grp === 'are' ? 'are' : grp === 'ere' ? 'ere' : 'ire';
+        const baseStem = baseInf.slice(0, -(grpSuffix.length - 2)); // 'alzar' -> 'alz'
+        // For sedersi (irregular), we'll rely on INSERT OR IGNORE to not overwrite the critical forms
+        // For regular reflexives:
+        if (infinitive === 'sedersi') {
+          // Irregular - critical forms already inserted; use sedere forms with pronouns for missing tenses
+          const sedStem = 'sed';
+          const sedBase = ereConj(sedStem);
+          const refl = reflConj(sedBase, infinitive);
+          refl.passato_prossimo = reflPP('seduto');
+          for (const tense of tenses) {
+            if (!refl[tense]) continue;
+            for (const p of persons) {
+              if (refl[tense][p]) insF.run(id, tense, p, refl[tense][p]);
+            }
+          }
+          continue;
+        }
+        // Regular reflexive
+        const actualStem = infinitive.endsWith('arsi') ? infinitive.slice(0,-4) :
+                           infinitive.endsWith('ersi') ? infinitive.slice(0,-4) :
+                           infinitive.slice(0,-4); // irsi
+        let baseConj;
+        if (grp === 'are') baseConj = areConj(actualStem);
+        else if (grp === 'ire' && is_isc) baseConj = ireIscConj(actualStem);
+        else if (grp === 'ire') baseConj = ireConj(actualStem);
+        else baseConj = ereConj(actualStem);
+        const refl = reflConj(baseConj, infinitive);
+        refl.passato_prossimo = reflPP(pp);
+        for (const tense of tenses) {
+          if (!refl[tense]) continue;
+          for (const p of persons) {
+            if (refl[tense][p]) insF.run(id, tense, p, refl[tense][p]);
+          }
+        }
+        continue;
+      }
+
+      // Non-reflexive
+      if (grp === 'are') stem = infinitive.slice(0, -3); // e.g. 'parlare' -> 'parl'
+      else if (grp === 'ere') stem = infinitive.slice(0, -3); // 'leggere' -> 'legger', but we use stem = 'legg'
+      else stem = infinitive.slice(0, -3); // ire
+
+      // For -ere verbs: stem is infinitive minus last 3 chars (ere)
+      // 'leggere' -> 'legg', 'vendere' -> 'vend', 'mettere' -> 'mett'
+      // But regular -ere future: vendere -> vender + endings = venderò
+      // However 'ere' stem for futuro needs 'er': vend+erò
+
+      if (grp === 'are') baseForms = areConj(stem);
+      else if (grp === 'ere') {
+        // For -ere: stem = infinitive - 'ere' but keep the e for future/conditional
+        // 'vendere': root='vend', future base='vender'
+        const ereStem = infinitive.slice(0, -3);
+        baseForms = ereConj(ereStem);
+        // Override future/conditional to use correct stem (root + er)
+        const futBase = infinitive.slice(0, -1); // 'vendere' -> 'vender' -> 'venderò'
+        baseForms.future_simple = {io:futBase+'ò',tu:futBase+'ai','lui/lei':futBase+'à',noi:futBase+'emo',voi:futBase+'ete',loro:futBase+'anno'};
+        baseForms.conditional_present = {io:futBase+'ei',tu:futBase+'esti','lui/lei':futBase+'ebbe',noi:futBase+'emmo',voi:futBase+'este',loro:futBase+'ebbero'};
+      }
+      else if (grp === 'ire' && is_isc) {
+        const ireStem = infinitive.slice(0, -3);
+        baseForms = ireIscConj(ireStem);
+        const futBase = infinitive.slice(0, -1);
+        baseForms.future_simple = {io:futBase+'ò',tu:futBase+'ai','lui/lei':futBase+'à',noi:futBase+'emo',voi:futBase+'ete',loro:futBase+'anno'};
+        baseForms.conditional_present = {io:futBase+'ei',tu:futBase+'esti','lui/lei':futBase+'ebbe',noi:futBase+'emmo',voi:futBase+'este',loro:futBase+'ebbero'};
+      }
+      else { // ire non-isc
+        const ireStem = infinitive.slice(0, -3);
+        baseForms = ireConj(ireStem);
+        const futBase = infinitive.slice(0, -1);
+        baseForms.future_simple = {io:futBase+'ò',tu:futBase+'ai','lui/lei':futBase+'à',noi:futBase+'emo',voi:futBase+'ete',loro:futBase+'anno'};
+        baseForms.conditional_present = {io:futBase+'ei',tu:futBase+'esti','lui/lei':futBase+'ebbe',noi:futBase+'emmo',voi:futBase+'este',loro:futBase+'ebbero'};
+      }
+
+      // Passato prossimo
+      baseForms.passato_prossimo = ppForms(auxiliary || 'avere', pp);
+
+      // Insert all tense/person combinations (INSERT OR IGNORE preserves irregular forms)
+      for (const tense of tenses) {
+        if (!baseForms[tense]) continue;
+        for (const p of persons) {
+          if (baseForms[tense][p]) insF.run(id, tense, p, baseForms[tense][p]);
+        }
+      }
+    }
+  } catch(e) { /* conjugation fill errors are non-fatal */ }
 }
 
 module.exports = { createSchema };
