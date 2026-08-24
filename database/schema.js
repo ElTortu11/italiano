@@ -1613,10 +1613,12 @@ function createSchema() {
   } catch(_) {}
 
   // ── FULL CONJUGATION FILL (programmatic, INSERT OR IGNORE) ──────────────
-  // This fills all 6×6=36 positions per verb using rules. Irregular forms
-  // already in the DB are preserved (INSERT OR IGNORE never overwrites).
+  // Wrapped in a single transaction: 3600 INSERTs take ~ms instead of ~minutes
+  // without it (each auto-commit = separate fsync on cloud filesystems).
+  // INSERT OR IGNORE preserves irregular forms already in the DB.
   try {
     const insF = db.prepare(`INSERT OR IGNORE INTO verb_conjugations(verb_id,tense,person,form) VALUES(?,?,?,?)`);
+    db.exec('BEGIN');
     const persons = ['io','tu','lui/lei','noi','voi','loro'];
     const tenses = ['present_indicative','passato_prossimo','imperfect_indicative','future_simple','conditional_present','subjunctive_present'];
 
@@ -1808,7 +1810,11 @@ function createSchema() {
         }
       }
     }
-  } catch(e) { /* conjugation fill errors are non-fatal */ }
+    db.exec('COMMIT');
+  } catch(e) {
+    try { db.exec('ROLLBACK'); } catch(_) {}
+    /* conjugation fill errors are non-fatal */
+  }
 }
 
 module.exports = { createSchema };
