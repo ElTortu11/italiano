@@ -968,13 +968,42 @@ h1,h2,h3,h4,h5 { text-wrap: balance; font-weight: 600; line-height: 1.3; }
 .border       { border: 1px solid var(--border); }
 .border-b     { border-bottom: 1px solid var(--border); }
 
+/* ── SW update banner ────────────────────────────────────────────────────── */
+#sw-update-banner {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 16px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.18);
+  display: none;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.9rem;
+  /* Sit above bottom nav on mobile, use desktop default otherwise */
+  bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  max-width: calc(100vw - 32px);
+  width: max-content;
+}
+#sw-update-banner.visible { display: flex; }
+@media (min-width: 768px) {
+  #sw-update-banner { bottom: 24px; }
+}
+#sw-update-banner .sw-msg { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 /* ── Completamento (cloze) ────────────────────────────────────────────────── */
 .cloze-text {
-  line-height: 2.6;
+  line-height: 2.8;
   font-size: 1rem;
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 .cloze-input {
   display: inline-block;
+  vertical-align: baseline;
   border: none;
   border-bottom: 2px solid var(--border);
   background: transparent;
@@ -992,6 +1021,10 @@ h1,h2,h3,h4,h5 { text-wrap: balance; font-weight: 600; line-height: 1.3; }
 }
 .cloze-input:focus { border-bottom-color: var(--accent); }
 .cloze-input:disabled { cursor: default; }
+.cloze-chunk {
+  display: inline-block;
+  white-space: nowrap;
+}
 
 /* ════════════════════════════════════════════════════════════════════════════
    MOBILE UX OVERHAUL — safe areas · touch targets · drawers · keyboard

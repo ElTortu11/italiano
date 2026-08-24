@@ -6,7 +6,10 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "seed": "node database/seed.js"
+    "seed": "node database/seed.js",
+    "test": "node --test test/conjugations.test.js test/prepositions.test.js test/evaluator.test.js test/feedback.test.js",
+    "test:unit": "node --test test/evaluator.test.js test/feedback.test.js",
+    "test:content": "node --test test/conjugations.test.js test/prepositions.test.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -17,6 +20,6 @@
     "nodemon": "^3.0.3"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=24.0.0"
   }
 }

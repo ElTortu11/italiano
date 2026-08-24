@@ -198,9 +198,11 @@ function navigate(route) {
   const content = document.getElementById('app-content');
   content.innerHTML = `<div class="loading"><div class="spinner"></div> Caricamento...</div>`;
 
-  ROUTES[route].render(content).catch(err => {
-    content.innerHTML = `<div class="alert alert-error">Errore: ${err.message}</div>`;
-  });
+  Promise.resolve()
+    .then(() => ROUTES[route].render(content))
+    .catch(err => {
+      content.innerHTML = `<div class="alert alert-error">Errore: ${err.message}</div>`;
+    });
 }
 
 // ── Sidebar toggle ────────────────────────────────────────────────────────
@@ -3889,10 +3891,17 @@ function renderClozeEx(el) {
 
   let textHTML = '';
   parts.forEach((part, i) => {
-    textHTML += part;
-    if (i < parts.length - 1) {
+    const isLast = i === parts.length - 1;
+    if (isLast) {
+      textHTML += part;
+    } else {
       const w = Math.max((ex.answers[i]?.length || 4) * 13 + 16, 44);
-      textHTML += `<input class="cloze-input" data-index="${i}" style="width:${w}px" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">`;
+      // Wrap trailing word + input in a no-break span so the input stays
+      // visually attached to the word immediately before it.
+      const trailingWord = part.match(/\S+\s*$/)?.[0] ?? '';
+      const beforeWord = part.slice(0, part.length - trailingWord.length);
+      textHTML += beforeWord;
+      textHTML += `<span class="cloze-chunk">${trailingWord}<input class="cloze-input" data-index="${i}" style="width:${w}px" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></span>`;
     }
   });
 
@@ -4234,15 +4243,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     navigator.serviceWorker.addEventListener('message', e => {
       if (e.data?.type === 'SW_UPDATED') {
         const banner = document.getElementById('sw-update-banner');
-        if (banner) banner.style.display = 'flex';
+        if (!banner) return;
+        banner.innerHTML = `
+          <span class="sw-msg">Nuova versione disponibile.</span>
+          <button id="sw-update-btn" class="btn btn-primary" style="font-size:0.85rem;padding:4px 12px;white-space:nowrap">Aggiorna</button>
+          <button id="sw-dismiss-btn" class="btn btn-outline" style="font-size:0.85rem;padding:4px 10px;white-space:nowrap" aria-label="Ignora">×</button>
+        `;
+        banner.classList.add('visible');
+        banner.querySelector('#sw-update-btn').addEventListener('click', () => location.reload());
+        banner.querySelector('#sw-dismiss-btn').addEventListener('click', () => banner.classList.remove('visible'));
       }
-    });
-    const updateBtn = document.getElementById('sw-update-btn');
-    const dismissBtn = document.getElementById('sw-dismiss-btn');
-    if (updateBtn) updateBtn.addEventListener('click', () => location.reload());
-    if (dismissBtn) dismissBtn.addEventListener('click', () => {
-      const banner = document.getElementById('sw-update-banner');
-      if (banner) banner.style.display = 'none';
     });
   }
 
