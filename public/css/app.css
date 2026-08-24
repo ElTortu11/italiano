@@ -533,47 +533,53 @@ h1,h2,h3,h4,h5 { text-wrap: balance; font-weight: 600; line-height: 1.3; }
 
 /* ── Feedback component (feedback.js) ───────────────────────────────────── */
 .fb-card {
-  border-radius: 10px;
-  padding: 14px 16px;
-  margin-top: 10px;
-  font-size: 0.92rem;
-  border: 1px solid transparent;
+  border-radius: 14px;
+  padding: 18px 20px 16px;
+  margin-top: 0;
+  border: 1.5px solid transparent;
 }
 .fb-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 700;
-  font-size: 1rem;
-  margin-bottom: 6px;
+  gap: 12px;
+  margin-bottom: 10px;
 }
-.fb-icon { font-size: 1.1rem; }
+.fb-icon {
+  font-size: 1.2rem;
+  width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: rgba(0,0,0,.10);
+  flex-shrink: 0;
+}
+.fb-title { font-size: 1rem; font-weight: 700; }
 .fb-answer-block {
-  background: rgba(0,0,0,.05);
-  border-radius: 6px;
-  padding: 8px 10px;
+  background: rgba(0,0,0,.09);
+  border-radius: 8px;
+  padding: 10px 12px;
   margin: 8px 0;
-  font-size: 0.88rem;
+  font-size: 0.9rem;
 }
-.fb-answer-row { display: flex; gap: 8px; align-items: baseline; margin-bottom: 2px; }
-.fb-answer-label { color: var(--text-muted); white-space: nowrap; }
-.fb-answer-user { text-decoration: line-through; opacity: .75; }
-.fb-answer-correct { font-weight: 600; }
+.fb-answer-row { display: flex; gap: 8px; align-items: baseline; margin-bottom: 4px; }
+.fb-answer-label { color: inherit; opacity: .65; white-space: nowrap; font-size: 0.82rem; }
+.fb-answer-user { text-decoration: line-through; opacity: .6; }
+.fb-answer-correct { font-weight: 700; font-size: 1.05rem; }
 .fb-explanation { margin: 6px 0 4px; font-size: 0.88rem; opacity: .9; }
 .fb-secondary { font-size: 0.82rem; opacity: .75; margin: 4px 0; }
 .fb-example {
   margin-top: 8px;
   font-size: 0.85rem;
   border: none;
-  color: var(--text-muted);
+  color: inherit;
+  opacity: .8;
 }
 .fb-example-toggle { cursor: pointer; user-select: none; list-style: none; }
 .fb-example-toggle::before { content: '▶ '; font-size: .7em; }
 .fb-example[open] .fb-example-toggle::before { content: '▼ '; }
 .fb-example-text { margin: 4px 0 0 8px; font-style: italic; }
 .fb-alternatives { font-size: 0.85rem; margin: 6px 0 0; }
-.fb-alt-label { color: var(--text-muted); }
-.fb-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.fb-alt-label { color: inherit; opacity: .65; }
+.fb-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
 
 /* Colori per stato */
 .fb-correct   { background: var(--accent-bg);  color: var(--accent);  border-color: var(--accent); }
@@ -587,15 +593,65 @@ h1,h2,h3,h4,h5 { text-wrap: balance; font-weight: 600; line-height: 1.3; }
   .fb-synonym    { background: #134e4a; color: #5eead4; border-color: #065f46; }
   .fb-contextual { background: #1e3a5f; color: #93c5fd; border-color: #1d4ed8; }
   .fb-almost     { background: #451a03; color: #fbbf24; border-color: #92400e; }
-  .fb-answer-block { background: rgba(255,255,255,.07); }
+  .fb-answer-block { background: rgba(255,255,255,.09); }
+  .fb-icon { background: rgba(255,255,255,.10); }
 }
 :root[data-theme="dark"] .fb-synonym    { background: #134e4a; color: #5eead4; border-color: #065f46; }
 :root[data-theme="dark"] .fb-contextual { background: #1e3a5f; color: #93c5fd; border-color: #1d4ed8; }
 :root[data-theme="dark"] .fb-almost     { background: #451a03; color: #fbbf24; border-color: #92400e; }
-:root[data-theme="dark"] .fb-answer-block { background: rgba(255,255,255,.07); }
+:root[data-theme="dark"] .fb-answer-block { background: rgba(255,255,255,.09); }
+:root[data-theme="dark"] .fb-icon { background: rgba(255,255,255,.10); }
 :root[data-theme="light"] .fb-synonym    { background: #ccfbf1; color: #0d9488; border-color: #5eead4; }
 :root[data-theme="light"] .fb-contextual { background: #dbeafe; color: #1d4ed8; border-color: #93c5fd; }
 :root[data-theme="light"] .fb-almost     { background: #fef3c7; color: #b45309; border-color: #fde68a; }
+
+/* ── Flashcard feedback panel (outside card, Duolingo-style) ─────────────── */
+/* Overrides the tinted fb-card colors with solid high-contrast backgrounds   */
+#fc-type-result { margin-top: 14px; }
+#fc-type-result .fb-card { margin-top: 0; border-radius: 14px; }
+
+#fc-type-result .fb-wrong     { background: #dc2626; color: #fff; border-color: #dc2626; }
+#fc-type-result .fb-correct   { background: #166534; color: #fff; border-color: #166534; }
+#fc-type-result .fb-almost    { background: #b45309; color: #fff; border-color: #b45309; }
+#fc-type-result .fb-synonym   { background: #0f766e; color: #fff; border-color: #0f766e; }
+#fc-type-result .fb-contextual{ background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+
+/* Answer block: semi-transparent dark overlay so text stays readable */
+#fc-type-result .fb-answer-block { background: rgba(0,0,0,.18); }
+#fc-type-result .fb-answer-label { color: rgba(255,255,255,.75); opacity: 1; }
+#fc-type-result .fb-answer-user  { color: rgba(255,255,255,.65); opacity: 1; }
+#fc-type-result .fb-answer-correct { color: #fff; font-size: 1.1rem; }
+#fc-type-result .fb-icon { background: rgba(255,255,255,.2); }
+#fc-type-result .fb-explanation { color: rgba(255,255,255,.9); opacity: 1; }
+
+/* Continua: white pill button against the colored background */
+#fc-type-result .fb-actions { flex-direction: column; gap: 8px; }
+#fc-type-result .fb-actions .btn-primary {
+  background: #fff;
+  border-color: #fff;
+  border-radius: 12px;
+  padding: 13px;
+  font-size: 1rem;
+  width: 100%;
+}
+#fc-type-result .fb-wrong   .fb-actions .btn-primary { color: #dc2626; }
+#fc-type-result .fb-correct .fb-actions .btn-primary { color: #166534; }
+#fc-type-result .fb-almost  .fb-actions .btn-primary { color: #b45309; }
+#fc-type-result .fb-synonym .fb-actions .btn-primary { color: #0f766e; }
+#fc-type-result .fb-contextual .fb-actions .btn-primary { color: #1d4ed8; }
+#fc-type-result .fb-actions .btn-primary:hover { background: rgba(255,255,255,.9); }
+
+/* Secondary buttons (Riprova, Quaderno): transparent white outline */
+#fc-type-result .fb-actions .btn-outline {
+  background: transparent;
+  color: rgba(255,255,255,.85);
+  border-color: rgba(255,255,255,.4);
+}
+#fc-type-result .fb-actions .btn-outline:hover {
+  background: rgba(255,255,255,.15);
+  border-color: rgba(255,255,255,.7);
+  color: #fff;
+}
 
 /* ── Conjugation ─────────────────────────────────────────────────────────── */
 .tense-pill {

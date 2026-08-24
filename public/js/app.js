@@ -827,13 +827,12 @@ function renderFlashcardTyping(container) {
           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
         <button class="btn btn-primary" id="fc-type-check">Controlla</button>
       </div>
-      <div id="fc-type-result" style="display:none;margin-top:12px"></div>
-      <div id="fc-type-example" style="display:none;margin-top:8px;font-size:0.85rem" class="flashcard-example"></div>
     </div>
+
+    <div id="fc-type-result" style="display:none"></div>
 
     <div class="flex gap-2 justify-center mt-3" id="fc-type-actions">
       <button class="btn btn-outline btn-sm" id="fc-type-skip">Salta</button>
-      <button class="btn btn-primary" id="fc-type-next" style="display:none">Avanti → <span style="opacity:.6;font-size:0.8em">→</span></button>
     </div>
     <div style="display:none;text-align:center;font-size:0.75rem;color:var(--text-muted);margin-top:6px" id="fc-key-hint"></div>
   `;
@@ -912,10 +911,6 @@ function renderFlashcardTyping(container) {
     fcState.isEvaluating = false;
     fcState.isFeedbackVisible = true;
 
-    // L'esempio ora è nella feedback card — nascondi il div separato
-    const exEl = document.getElementById('fc-type-example');
-    if (exEl) exEl.style.display = 'none';
-
     document.getElementById('fc-type-check').style.display = 'none';
     document.getElementById('fc-type-skip').style.display = 'none';
     document.getElementById('fc-key-hint').textContent = 'Enter / → per avanzare';
@@ -972,7 +967,6 @@ function renderFlashcardTyping(container) {
     renderFlashcard(container);
   });
 
-  document.getElementById('fc-type-next').addEventListener('click', goNext);
 }
 
 function showWordListView(container, words) {
