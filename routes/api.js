@@ -192,7 +192,15 @@ router.put('/vocabulary/words/:id', (req, res) => {
   const updates = fields.filter(f => req.body[f] !== undefined);
   if (!updates.length) return res.json({ ok: true });
   const sql = `UPDATE vocabulary_items SET ${updates.map(f=>f+'=?').join(',')}, updated_at=? WHERE id=?`;
-  db.prepare(sql).run(...updates.map(f => req.body[f]), now(), req.params.id);
+  db.exec('BEGIN');
+  try {
+    db.prepare(sql).run(...updates.map(f => req.body[f]), now(), req.params.id);
+    if (updates.includes('italian') || updates.includes('spanish')) {
+      const v = db.prepare('SELECT italian, spanish FROM vocabulary_items WHERE id=?').get(req.params.id);
+      if (v) db.prepare('UPDATE flashcards SET front=?,back=? WHERE vocabulary_id=?').run(v.italian, v.spanish, req.params.id);
+    }
+    db.exec('COMMIT');
+  } catch(e) { db.exec('ROLLBACK'); throw e; }
   res.json({ ok: true });
 });
 

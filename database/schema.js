@@ -2547,6 +2547,137 @@ function createSchema() {
       { it:"per quanto",       es:"por cuánto (tiempo) / aunque",      tp:"adverb", lv:"B2", ex_it:"Per quanto tempo rimarrai via?",    ex_es:"¿Por cuánto tiempo te quedarás fuera?" },
     ]);
   }
+
+  // ── Correzioni di dati (idempotenti) — audit 2026-08-27 ──────────────────
+  {
+    const upd = (sql, ...p) => db.prepare(sql).run(...p);
+    const syncFC = (vid) => {
+      const v = db.prepare('SELECT italian, spanish FROM vocabulary_items WHERE id=?').get(vid);
+      if (!v) return;
+      db.prepare('UPDATE flashcards SET front=?,back=? WHERE vocabulary_id=? AND (front!=? OR back!=?)').run(v.italian, v.spanish, vid, v.italian, v.spanish);
+    };
+
+    // P0: flashcard desyncs
+    [144, 153, 346, 390, 402].forEach(syncFC);
+
+    // P0: il fischio (2851) — articolo italiano nel campo spagnolo
+    upd("UPDATE vocabulary_items SET spanish=?,updated_at=unixepoch() WHERE id=2851 AND spanish=?",
+      'el silbido / el pitido', 'il silbato / el pitido');
+
+    // P0: possibilmente (3209) — falso amico con "posiblemente"
+    upd("UPDATE vocabulary_items SET spanish=?,example_es=?,updated_at=unixepoch() WHERE id=3209 AND spanish=?",
+      'si es posible / a ser posible', 'Si es posible, respóndeme hoy.', 'posiblemente / si es posible');
+
+    // P0: appena (3180) — esempio temporale con traduzione quantitativa
+    upd("UPDATE vocabulary_items SET spanish=?,example_it=?,example_es=?,notes=?,updated_at=unixepoch() WHERE id=3180 AND example_it=?",
+      'apenas / casi no', 'Si sentiva appena da lontano.', 'Apenas se oía desde lejos.',
+      "Senso quantitativo: appena = apenas/casi no. Senso temporale (Avverbi di Tempo): «L'ho appena sentito» = Acabo de oírlo.",
+      "L'ho appena sentito da lontano.");
+
+    // P0: per quanto (3223) — mescola uso interrogativo e concessivo
+    upd("UPDATE vocabulary_items SET spanish=?,notes=?,updated_at=unixepoch() WHERE id=3223 AND spanish=?",
+      '¿por cuánto tiempo? / aunque + congiuntivo',
+      'Due usi distinti: (1) interrogativo: «Per quanto tempo rimarrai?» = ¿Por cuánto tiempo te quedarás?; (2) concessivo + congiuntivo: «Per quanto studi, non riesce» = Aunque estudie, no lo consigue.',
+      'por cuánto (tiempo) / aunque');
+
+    // P1
+    upd("UPDATE vocabulary_items SET example_es=?,updated_at=unixepoch() WHERE id=22 AND example_es=?",
+      'Mañana salgo para Francia.', 'Parto hacia Francia mañana.');
+    upd("UPDATE vocabulary_items SET example_it=?,updated_at=unixepoch() WHERE id=128 AND example_it=?",
+      'Tieni a mente questa regola.', 'Tieni in mente questa regola.');
+    upd("UPDATE vocabulary_items SET spanish=?,updated_at=unixepoch() WHERE id=147 AND spanish=?",
+      'caliente / calor', 'caliente (NO el caldo)');
+    upd("UPDATE vocabulary_items SET false_friend_note=NULL,updated_at=unixepoch() WHERE id=148 AND false_friend_note IS NOT NULL");
+    upd("UPDATE vocabulary_items SET false_friend_note=?,updated_at=unixepoch() WHERE id=152",
+      '«Pretendere» (it.) = exigir/reclamar/esperar. «Pretender» (es.) = intentar/aspirar (NON fingir). «Fingir» = «fingere».');
+    upd("UPDATE vocabulary_items SET false_friend_note=?,updated_at=unixepoch() WHERE id=154",
+      '«La firma» (it.) = la firma/rúbrica. En español «firma» también puede significar empresa/razón social; el contraste no es absoluto.');
+    upd("UPDATE vocabulary_items SET false_friend_note=NULL,updated_at=unixepoch() WHERE id=156 AND false_friend_note IS NOT NULL");
+    upd("UPDATE vocabulary_items SET false_friend_note=?,updated_at=unixepoch() WHERE id=157",
+      '«Il pavimento» (it.) = el suelo / el piso / el pavimento según el contexto. La RAE define «pavimento» como suelo artificial; no hay falso amigo absoluto.');
+    upd("UPDATE vocabulary_items SET italian=?,article=?,gender=?,plural=?,updated_at=unixepoch() WHERE id=168 AND italian=?",
+      "l'entusiasmo", "l'", 'm', 'gli entusiasmi', 'entusiasmo');
+    syncFC(168);
+    upd("UPDATE vocabulary_items SET example_es=?,updated_at=unixepoch() WHERE id=209 AND example_es=?",
+      'Estos zapatos me hacen daño.', 'Estos zapatos me duelen.');
+    upd("UPDATE vocabulary_items SET example_it=?,example_es=?,updated_at=unixepoch() WHERE id=261 AND example_it=?",
+      'Ho visitato gli Uffizi.', 'Visité la Galería de los Uffizi.', 'Ho visitato il museo degli Uffizi.');
+    upd("UPDATE vocabulary_items SET example_it=?,example_es=?,updated_at=unixepoch() WHERE id=277 AND example_it=?",
+      'Tifo per la Roma.', 'Soy hincha de la Roma.', 'Tifo per la squadra di Roma.');
+    upd("UPDATE vocabulary_items SET example_it=?,example_es=?,updated_at=unixepoch() WHERE id=281 AND example_it=?",
+      'Ogni mattina faccio una corsa di cinque chilometri.', 'Cada mañana corro cinco kilómetros.', 'Faccio la corsa ogni mattina.');
+    upd("UPDATE vocabulary_items SET example_it=?,example_es=?,updated_at=unixepoch() WHERE id=357 AND example_it=?",
+      'Nelle grandi città il traffico è intenso.', 'En las grandes ciudades el tráfico es intenso.', 'In vacanza viaggio spesso.');
+    upd("UPDATE vocabulary_items SET example_it=?,updated_at=unixepoch() WHERE id=376 AND example_it=?",
+      'È andato a sbattere contro il muro.', 'È caduto contro il muro.');
+    upd("UPDATE vocabulary_items SET example_it=?,example_es=?,updated_at=unixepoch() WHERE id=416 AND example_it=?",
+      'Accetto a condizione di poter scegliere.', 'Acepto con la condición de poder elegir.', 'Ti aiuto a condizione di ricevere il tuo aiuto.');
+    upd("UPDATE vocabulary_items SET notes=?,updated_at=unixepoch() WHERE id=2491 AND notes LIKE ?",
+      'PP: raggiunto. «Raggiungere un obiettivo» = alcanzar una meta. «Raggiungere qualcuno» = alcanzar/juntarse con alguien en el lugar donde ya está; no equivale en general a «reunirse».',
+      '%reunirse con alguien%');
+    upd("UPDATE vocabulary_items SET notes=?,updated_at=unixepoch() WHERE id=2505 AND notes LIKE ?",
+      'PP: scoperto. «Scoprire che» = descubrir/darse cuenta de que. «Scoprirsi» = destaparse o quedar al descubierto (no equivale en general a «darse cuenta de»). «Ho scoperto che…» = He descubierto que…',
+      '%darse cuenta de / descubrirse%');
+    upd("UPDATE vocabulary_items SET italian=?,updated_at=unixepoch() WHERE id=2512 AND italian=?",
+      'insistere (a/su/per)', 'insistere (su/per)');
+    syncFC(2512);
+    upd("UPDATE vocabulary_items SET example_es=?,updated_at=unixepoch() WHERE id=2526 AND example_es=?",
+      'No podía contener la risa.', 'No podía contenerme la risa.');
+    upd("UPDATE vocabulary_items SET notes=?,updated_at=unixepoch() WHERE id=2700 AND notes LIKE ?",
+      '«Delusione» = decepción. «La delusión» (es., poco usual) = ilusión sin base real; NON significa «delirio» = «il delirio» en italiano.',
+      '%delirio%');
+    upd("UPDATE vocabulary_items SET spanish=?,notes=?,updated_at=unixepoch() WHERE id=2704 AND spanish=?",
+      'la alfombra / el tapete (varía según región)',
+      '«Tappeto» = alfombra. «El tapete» puede significar mantelito en España, pero en México y otras variedades designa también una alfombra pequeña.',
+      'la alfombra (≠ el tapete = mantelito)');
+    upd("UPDATE vocabulary_items SET notes=?,updated_at=unixepoch() WHERE id=2709 AND notes LIKE ?",
+      '«Il tasto» = la tecla/el botón. FALSO AMICO: «el tacto» (es.) = «il tatto» (it.). «El gusto» (es.) = «il gusto» (it.). Il vero falso amico è tasto/tacto, non tasto/gusto.',
+      '%gusto%');
+    upd("UPDATE vocabulary_items SET example_it=?,example_es=?,updated_at=unixepoch() WHERE id=2727 AND example_it=?",
+      'Ha accettato la situazione con rassegnazione.', 'Aceptó la situación con resignación.', 'Si è arresa alla rassegnazione.');
+    upd("UPDATE vocabulary_items SET example_it=?,updated_at=unixepoch() WHERE id=2745 AND example_it=?",
+      'Ho molti libri nella libreria.', 'Ho molti libri sulla libreria.');
+    upd("UPDATE vocabulary_items SET spanish=?,updated_at=unixepoch() WHERE id=2777 AND spanish=?",
+      'la vía (férrea) / el andén (contextual)', 'el andén / la vía');
+    upd("UPDATE vocabulary_items SET example_es=?,updated_at=unixepoch() WHERE id=2848 AND example_es=?",
+      'Los videojuegos me relajan.', 'Los videojuegos me hacen relajar.');
+    upd("UPDATE vocabulary_items SET spanish=?,example_it=?,example_es=?,updated_at=unixepoch() WHERE id=2886 AND example_it=?",
+      'la cámara de vídeo / la cámara de seguridad',
+      'La telecamera di sicurezza ha registrato tutto.',
+      'La cámara de seguridad lo ha grabado todo.',
+      'La telecamera del laptop è rotta.');
+    upd("UPDATE vocabulary_items SET example_it=?,updated_at=unixepoch() WHERE id=3122 AND example_it=?",
+      'Perfino lui ha ammesso di aver sbagliato.', 'Perfino lui ha ammesso di sbagliare.');
+    upd("UPDATE vocabulary_items SET example_it=?,updated_at=unixepoch() WHERE id=3149 AND example_it=?",
+      'A volte dimentico le chiavi.', 'A volte mi dimentico le chiavi.');
+    upd("UPDATE vocabulary_items SET example_it=?,example_es=?,updated_at=unixepoch() WHERE id=3165 AND example_it=?",
+      'Abito molto vicino.', 'Vivo muy cerca.', 'La fermata è molto vicino.');
+    upd("UPDATE vocabulary_items SET example_it=?,example_es=?,updated_at=unixepoch() WHERE id=3189 AND example_it=?",
+      'Buon fine settimana! — Altrettanto!', '¡Buen fin de semana! — ¡Igualmente!', 'Grazie! — Altrettanto!');
+    upd("UPDATE vocabulary_items SET notes=?,updated_at=unixepoch() WHERE id=3222",
+      'Particella presentativa, non avverbio interrogativo. «Ecco il treno!» = ¡Aquí está el tren! Serve anche per sottolineare: «Ecco perché!» = ¡Por eso! Forme tipiche: eccomi, eccolo, eccoci.');
+
+    // P2
+    upd("UPDATE vocabulary_items SET notes=TRIM(REPLACE(REPLACE(notes,'Come «tenere». ',''),'Come tenere. ','')),updated_at=unixepoch() WHERE id=2515 AND notes LIKE ?",
+      '%tenere%');
+    upd("UPDATE vocabulary_items SET notes=?,updated_at=unixepoch() WHERE id=2647 AND notes=?",
+      'Nazionalità: olandese — in Olanda/nei Paesi Bassi. Nota: «Olanda» si riferisce tecnicamente solo ad alcune province; il nome ufficiale è «i Paesi Bassi». Entrambe le forme sono accettate nel parlato.',
+      'nazionalità: olandese — in Olanda');
+    upd("UPDATE vocabulary_items SET notes=?,updated_at=unixepoch() WHERE id=2698 AND notes LIKE ?",
+      '«Argomento» = tema/asunto/argomento. FALSO AMICO PARZIALE: español «argumento» también puede significar razonamiento y tema; el contraste solo vale en contextos narrativos (trama).',
+      '%trama%');
+    upd("UPDATE vocabulary_items SET spanish=?,updated_at=unixepoch() WHERE id=2891 AND spanish=?",
+      'el huso horario / la zona horaria', 'la zona horaria');
+    upd("UPDATE vocabulary_items SET example_it=?,example_es=?,updated_at=unixepoch() WHERE id=2896 AND example_it=?",
+      "Ho prenotato un'auto a noleggio per una settimana.",
+      'Reservé un coche de alquiler por una semana.',
+      'Ho prenotato un noleggio auto per una settimana.');
+    upd("UPDATE vocabulary_items SET example_it=?,example_es=?,updated_at=unixepoch() WHERE id=3158 AND example_it=?",
+      'Vai giù, la cena è pronta.', 'Ve abajo, la cena está lista.', 'Scendi giù, è pronta la cena.');
+    upd("UPDATE vocabulary_items SET notes=?,updated_at=unixepoch() WHERE id=3210 AND notes LIKE ?",
+      'FALSO AMICO (italiano–spagnolo): italiano «eventualmente» = si necesario / llegado el caso; español «eventualmente» = de manera casual o accidental. Non usare per tradurre «eventually» inglese (= «alla fine / prima o poi»).',
+      '%eventually%');
+  }
 }
 
 module.exports = { createSchema };
