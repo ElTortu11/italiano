@@ -2400,6 +2400,152 @@ function createSchema() {
       { it:"il jet lag",                      es:"el jet lag",                 lv:"B1", ex_it:"Ho il jet lag dopo il volo lungo.",                        ex_es:"Tengo jet lag después del vuelo largo." },
       { it:"l'agenzia di viaggi",             es:"la agencia de viajes",       lv:"B1", ex_it:"Ho prenotato il viaggio in un'agenzia di viaggi.",          ex_es:"Reservé el viaje en una agencia de viajes." },
     ]);
+
+    // ── Avverbi (6 categorie) ────────────────────────────────────────────────
+    _ensureCat("Avverbi di Modo",        "Avverbi di Modo",                     "🎯", "#0f766e", 24);
+    _ensureCat("Avverbi di Tempo",       "Avverbi di Tempo",                    "⏰", "#b45309", 25);
+    _ensureCat("Avverbi di Luogo",       "Avverbi di Luogo",                    "📍", "#1d4ed8", 26);
+    _ensureCat("Avverbi di Quantità",    "Avverbi di Quantità",                 "📊", "#7c3aed", 27);
+    _ensureCat("Avverbi di Valutazione", "Avverbi di Valutazione",              "✅", "#dc2626", 28);
+    _ensureCat("Avverbi Interrogativi",  "Avverbi Interrogativi ed Esclamativi","❓", "#0891b2", 29);
+
+    _topup("Avverbi di Modo", [
+      { it:"bene",             es:"bien",                              tp:"adverb", lv:"A1", ex_it:"Parla italiano molto bene.",                 ex_es:"Habla italiano muy bien." },
+      { it:"male",             es:"mal",                               tp:"adverb", lv:"A1", ex_it:"Ha dormito male stanotte.",                  ex_es:"Durmió mal anoche." },
+      { it:"velocemente",      es:"rápidamente",                       tp:"adverb", lv:"A2", ex_it:"Corre velocemente.",                        ex_es:"Corre rápidamente." },
+      { it:"lentamente",       es:"lentamente / despacio",             tp:"adverb", lv:"A2", ex_it:"Parla lentamente, per favore.",              ex_es:"Habla despacio, por favor." },
+      { it:"facilmente",       es:"fácilmente",                        tp:"adverb", lv:"B1", ex_it:"Si stanca facilmente.",                     ex_es:"Se cansa fácilmente." },
+      { it:"difficilmente",    es:"difícilmente",                      tp:"adverb", lv:"B1", ex_it:"Difficilmente cambierà idea.",              ex_es:"Difícilmente cambiará de opinión." },
+      { it:"gentilmente",      es:"amablemente",                       tp:"adverb", lv:"A2", ex_it:"Mi ha risposto gentilmente.",               ex_es:"Me respondió amablemente." },
+      { it:"volentieri",       es:"con gusto / de buena gana",         tp:"adverb", lv:"A2", ex_it:"Vengo volentieri alla festa.",              ex_es:"Voy a la fiesta con mucho gusto." },
+      { it:"purtroppo",        es:"desgraciadamente / por desgracia",  tp:"adverb", lv:"A2", ex_it:"Purtroppo non posso venire.",               ex_es:"Desgraciadamente no puedo ir." },
+      { it:"fortunatamente",   es:"afortunadamente",                   tp:"adverb", lv:"B1", ex_it:"Fortunatamente non è successo niente.",     ex_es:"Afortunadamente no pasó nada." },
+      { it:"apposta",          es:"a propósito / adrede",              tp:"adverb", lv:"B1", ex_it:"L'ha fatto apposta per farmi arrabbiare.",  ex_es:"Lo hizo adrede para hacerme enojar." },
+      { it:"piano",            es:"despacio / suavemente",             tp:"adverb", lv:"A1", ex_it:"Parla piano, il bambino dorme.",            ex_es:"Habla despacio, el niño duerme." },
+      { it:"forte",            es:"fuerte / en voz alta",              tp:"adverb", lv:"A1", ex_it:"Non urlare così forte!",                    ex_es:"¡No grites tan fuerte!" },
+      { it:"insieme",          es:"juntos",                            tp:"adverb", lv:"A1", ex_it:"Andiamo insieme al cinema.",               ex_es:"Vamos juntos al cine." },
+      { it:"così",             es:"así / de esta manera",              tp:"adverb", lv:"A1", ex_it:"Perché mi guardi così?",                   ex_es:"¿Por qué me miras así?" },
+      { it:"altrimenti",       es:"de lo contrario / si no",           tp:"adverb", lv:"B1", ex_it:"Studia di più, altrimenti non passi l'esame.", ex_es:"Estudia más, de lo contrario no aprobarás el examen." },
+      { it:"soprattutto",      es:"sobre todo / especialmente",        tp:"adverb", lv:"B1", ex_it:"Mi piace l'Italia, soprattutto la cucina.", ex_es:"Me gusta Italia, sobre todo la cocina." },
+      { it:"comunque",         es:"de todas formas / de todos modos",  tp:"adverb", lv:"B1", ex_it:"Comunque vada, sarò con te.",              ex_es:"De todas formas, estaré contigo." },
+      { it:"perfino",          es:"incluso / hasta",                   tp:"adverb", lv:"B2", ex_it:"Perfino lui ha ammesso di sbagliare.",     ex_es:"Incluso él admitió haberse equivocado." },
+      { it:"esattamente",      es:"exactamente",                       tp:"adverb", lv:"A2", ex_it:"Hai detto esattamente quello che pensavo.", ex_es:"Dijiste exactamente lo que pensaba." },
+      { it:"principalmente",   es:"principalmente",                    tp:"adverb", lv:"B1", ex_it:"Lavoro principalmente da casa.",           ex_es:"Trabajo principalmente desde casa." },
+      { it:"malvolentieri",    es:"de mala gana",                      tp:"adverb", lv:"B2", ex_it:"Ha accettato malvolentieri la proposta.",  ex_es:"Aceptó la propuesta de mala gana." },
+      { it:"improvvisamente",  es:"de repente / de pronto",            tp:"adverb", lv:"B1", ex_it:"Improvvisamente ha smesso di piovere.",    ex_es:"De repente dejó de llover." },
+      { it:"precisamente",     es:"precisamente",                      tp:"adverb", lv:"B2", ex_it:"Non è precisamente quello che intendevo.", ex_es:"No es precisamente lo que quería decir." },
+      { it:"sinceramente",     es:"sinceramente",                      tp:"adverb", lv:"B1", ex_it:"Sinceramente non so cosa fare.",           ex_es:"Sinceramente no sé qué hacer." },
+    ]);
+
+    _topup("Avverbi di Tempo", [
+      { it:"adesso",           es:"ahora",                             tp:"adverb", lv:"A1", ex_it:"Adesso non posso, sono impegnato.",        ex_es:"Ahora no puedo, estoy ocupado." },
+      { it:"ancora",           es:"todavía / aún",                     tp:"adverb", lv:"A1", ex_it:"Sei ancora qui? Pensavo fossi uscito.",    ex_es:"¿Todavía estás aquí? Pensaba que habías salido." },
+      { it:"mai",              es:"nunca / jamás",                      tp:"adverb", lv:"A1", ex_it:"Non ho mai mangiato sushi.",              ex_es:"Nunca he comido sushi." },
+      { it:"sempre",           es:"siempre",                           tp:"adverb", lv:"A1", ex_it:"È sempre in ritardo.",                    ex_es:"Siempre llega tarde." },
+      { it:"spesso",           es:"a menudo / con frecuencia",         tp:"adverb", lv:"A1", ex_it:"Vai spesso al cinema?",                   ex_es:"¿Vas al cine a menudo?" },
+      { it:"raramente",        es:"raramente / pocas veces",           tp:"adverb", lv:"B1", ex_it:"Raramente bevo caffè di sera.",           ex_es:"Raramente bebo café por la noche." },
+      { it:"già",              es:"ya",                                 tp:"adverb", lv:"A1", ex_it:"Hai già fatto colazione?",                ex_es:"¿Ya has desayunado?" },
+      { it:"subito",           es:"enseguida / inmediatamente",        tp:"adverb", lv:"A1", ex_it:"Vieni qui subito!",                       ex_es:"¡Ven aquí enseguida!" },
+      { it:"presto",           es:"pronto / temprano",                 tp:"adverb", lv:"A1", ex_it:"Alzati presto domani mattina.",           ex_es:"Levántate temprano mañana por la mañana." },
+      { it:"tardi",            es:"tarde",                             tp:"adverb", lv:"A1", ex_it:"È tornato a casa molto tardi.",           ex_es:"Volvió a casa muy tarde." },
+      { it:"prima",            es:"antes / primero",                   tp:"adverb", lv:"A1", ex_it:"Prima mangia, poi parla.",                ex_es:"Primero come, luego habla." },
+      { it:"dopo",             es:"después / luego",                   tp:"adverb", lv:"A1", ex_it:"Ci vediamo dopo.",                       ex_es:"Nos vemos después." },
+      { it:"poi",              es:"luego / después / y entonces",      tp:"adverb", lv:"A1", ex_it:"Prima lavoro, poi mi riposo.",            ex_es:"Primero trabajo, luego descanso." },
+      { it:"ieri",             es:"ayer",                              tp:"adverb", lv:"A1", ex_it:"Ieri ho visto un bel film.",              ex_es:"Ayer vi una buena película." },
+      { it:"oggi",             es:"hoy",                               tp:"adverb", lv:"A1", ex_it:"Oggi è il tuo compleanno!",              ex_es:"¡Hoy es tu cumpleaños!" },
+      { it:"domani",           es:"mañana",                            tp:"adverb", lv:"A1", ex_it:"A domani!",                              ex_es:"¡Hasta mañana!" },
+      { it:"recentemente",     es:"recientemente",                     tp:"adverb", lv:"B1", ex_it:"L'ha detto recentemente in un'intervista.", ex_es:"Lo dijo recientemente en una entrevista." },
+      { it:"finalmente",       es:"finalmente / por fin",              tp:"adverb", lv:"A2", ex_it:"Finalmente sei arrivato!",               ex_es:"¡Por fin has llegado!" },
+      { it:"intanto",          es:"mientras tanto / entretanto",       tp:"adverb", lv:"B1", ex_it:"Intanto aspettami qui.",                 ex_es:"Mientras tanto espérame aquí." },
+      { it:"ormai",            es:"ya / a estas alturas",              tp:"adverb", lv:"B1", ex_it:"Ormai è troppo tardi per cambiare idea.", ex_es:"A estas alturas es demasiado tarde para cambiar de opinión." },
+      { it:"a volte",          es:"a veces",                           tp:"adverb", lv:"A2", ex_it:"A volte mi dimentico le chiavi.",        ex_es:"A veces me olvido las llaves." },
+      { it:"di tanto in tanto", es:"de vez en cuando",                 tp:"adverb", lv:"B1", ex_it:"Di tanto in tanto vado a trovare i nonni.", ex_es:"De vez en cuando voy a visitar a los abuelos." },
+      { it:"prossimamente",    es:"próximamente / en breve",           tp:"adverb", lv:"B1", ex_it:"Il film uscirà prossimamente.",          ex_es:"La película saldrá próximamente." },
+      { it:"tuttora",          es:"todavía / hasta ahora",             tp:"adverb", lv:"B2", ex_it:"È tuttora irrisolto il problema.",       ex_es:"El problema todavía no está resuelto." },
+      { it:"nel frattempo",    es:"mientras tanto",                    tp:"adverb", lv:"B1", ex_it:"Nel frattempo, leggiti questo articolo.", ex_es:"Mientras tanto, lee este artículo." },
+    ]);
+
+    _topup("Avverbi di Luogo", [
+      { it:"qui",              es:"aquí",                              tp:"adverb", lv:"A1", ex_it:"Siediti qui accanto a me.",              ex_es:"Siéntate aquí a mi lado." },
+      { it:"lì",               es:"allí",                              tp:"adverb", lv:"A1", ex_it:"Il libro è lì sul tavolo.",              ex_es:"El libro está allí sobre la mesa." },
+      { it:"là",               es:"allá (más lejos)",                  tp:"adverb", lv:"A1", ex_it:"Vai là e aspettami.",                    ex_es:"Ve allá y espérame." },
+      { it:"su",               es:"arriba / encima",                   tp:"adverb", lv:"A1", ex_it:"Vieni su, siamo al terzo piano.",        ex_es:"Sube, estamos en el tercer piso." },
+      { it:"giù",              es:"abajo",                             tp:"adverb", lv:"A1", ex_it:"Scendi giù, è pronta la cena.",         ex_es:"Baja, la cena está lista." },
+      { it:"davanti",          es:"delante / enfrente",                tp:"adverb", lv:"A1", ex_it:"Siediti davanti, hai più spazio.",      ex_es:"Siéntate delante, tienes más espacio." },
+      { it:"dietro",           es:"detrás / atrás",                    tp:"adverb", lv:"A1", ex_it:"C'è qualcuno dietro di te.",            ex_es:"Hay alguien detrás de ti." },
+      { it:"sopra",            es:"encima / arriba",                   tp:"adverb", lv:"A1", ex_it:"Il gatto è sopra il divano.",           ex_es:"El gato está encima del sofá." },
+      { it:"sotto",            es:"debajo / abajo",                    tp:"adverb", lv:"A1", ex_it:"Il cane si è nascosto sotto il letto.", ex_es:"El perro se escondió debajo de la cama." },
+      { it:"dentro",           es:"dentro / adentro",                  tp:"adverb", lv:"A1", ex_it:"Rimani dentro, fa freddo.",             ex_es:"Quédate dentro, hace frío." },
+      { it:"fuori",            es:"fuera / afuera",                    tp:"adverb", lv:"A1", ex_it:"I bambini giocano fuori.",              ex_es:"Los niños juegan afuera." },
+      { it:"vicino",           es:"cerca",                             tp:"adverb", lv:"A1", ex_it:"La fermata è molto vicino.",            ex_es:"La parada está muy cerca." },
+      { it:"lontano",          es:"lejos",                             tp:"adverb", lv:"A1", ex_it:"Abita lontano dal centro.",             ex_es:"Vive lejos del centro." },
+      { it:"dappertutto",      es:"por todas partes / en todos lados", tp:"adverb", lv:"B1", ex_it:"Ho cercato dappertutto le chiavi.",    ex_es:"Busqué las llaves por todas partes." },
+      { it:"altrove",          es:"en otro lugar / en otra parte",     tp:"adverb", lv:"B2", ex_it:"Se non ti piace, puoi andare altrove.", ex_es:"Si no te gusta, puedes ir a otro lugar." },
+      { it:"intorno",          es:"alrededor",                         tp:"adverb", lv:"B1", ex_it:"Guardatevi intorno, siamo circondati.", ex_es:"Mirad alrededor, estamos rodeados." },
+      { it:"laggiù",           es:"allá abajo / allá en el fondo",     tp:"adverb", lv:"B1", ex_it:"Vedi quell'isola laggiù?",             ex_es:"¿Ves aquella isla allá en el fondo?" },
+      { it:"lassù",            es:"allá arriba",                       tp:"adverb", lv:"B1", ex_it:"Lassù in montagna fa molto freddo.",   ex_es:"Allá arriba en la montaña hace mucho frío." },
+      { it:"ovunque",          es:"en cualquier lugar / dondequiera",  tp:"adverb", lv:"B1", ex_it:"Lo cerco ovunque e non lo trovo.",     ex_es:"Lo busco en todas partes y no lo encuentro." },
+      { it:"in fondo",         es:"al fondo / en el fondo",            tp:"adverb", lv:"B1", ex_it:"In fondo al corridoio c'è il bagno.",  ex_es:"Al fondo del pasillo está el baño." },
+    ]);
+
+    _topup("Avverbi di Quantità", [
+      { it:"molto",            es:"mucho / muy",                       tp:"adverb", lv:"A1", ex_it:"Ho mangiato molto stasera.",             ex_es:"He comido mucho esta noche." },
+      { it:"poco",             es:"poco / un poco",                    tp:"adverb", lv:"A1", ex_it:"Mangia poco, è sempre a dieta.",        ex_es:"Come poco, siempre está a dieta." },
+      { it:"tanto",            es:"tanto / mucho",                     tp:"adverb", lv:"A1", ex_it:"Ti voglio tanto bene.",                  ex_es:"Te quiero tanto." },
+      { it:"troppo",           es:"demasiado",                         tp:"adverb", lv:"A1", ex_it:"Hai bevuto troppo stanotte.",            ex_es:"Has bebido demasiado esta noche." },
+      { it:"abbastanza",       es:"bastante / suficiente",             tp:"adverb", lv:"A2", ex_it:"Hai dormito abbastanza?",               ex_es:"¿Has dormido suficiente?" },
+      { it:"quasi",            es:"casi",                              tp:"adverb", lv:"A2", ex_it:"Ho quasi finito.",                      ex_es:"Casi he terminado." },
+      { it:"appena",           es:"apenas / a duras penas",            tp:"adverb", lv:"B1", ex_it:"L'ho appena sentito da lontano.",       ex_es:"Apenas lo oí desde lejos." },
+      { it:"più",              es:"más",                               tp:"adverb", lv:"A1", ex_it:"Voglio più tempo per pensare.",         ex_es:"Quiero más tiempo para pensar." },
+      { it:"meno",             es:"menos",                             tp:"adverb", lv:"A1", ex_it:"Lavora meno degli altri.",              ex_es:"Trabaja menos que los demás." },
+      { it:"parecchio",        es:"bastante / mucho",                  tp:"adverb", lv:"B1", ex_it:"Ha piovuto parecchio ieri.",            ex_es:"Llovió bastante ayer." },
+      { it:"assai",            es:"mucho / bastante (letterario)",     tp:"adverb", lv:"B2", ex_it:"Era assai difficile da comprendere.",   ex_es:"Era bastante difícil de comprender." },
+      { it:"piuttosto",        es:"bastante / más bien",               tp:"adverb", lv:"B1", ex_it:"È piuttosto stanco dopo la gara.",     ex_es:"Está bastante cansado después de la carrera." },
+      { it:"circa",            es:"aproximadamente / alrededor de",    tp:"adverb", lv:"A2", ex_it:"Ci vorranno circa due ore.",            ex_es:"Harán falta aproximadamente dos horas." },
+      { it:"per lo più",       es:"en su mayor parte / principalmente", tp:"adverb", lv:"B2", ex_it:"Per lo più la gente è buona.",        ex_es:"En su mayor parte la gente es buena." },
+      { it:"affatto",          es:"en absoluto / para nada",           tp:"adverb", lv:"B2", ex_it:"Non mi dispiace affatto.",             ex_es:"No me molesta en absoluto." },
+      { it:"altrettanto",      es:"igualmente / lo mismo",             tp:"adverb", lv:"B2", ex_it:"Grazie! — Altrettanto!",               ex_es:"¡Gracias! — ¡Igualmente!" },
+      { it:"almeno",           es:"al menos / por lo menos",           tp:"adverb", lv:"A2", ex_it:"Almeno chiamami se arrivi tardi.",     ex_es:"Al menos llámame si llegas tarde." },
+      { it:"alquanto",         es:"bastante / algo (formal)",          tp:"adverb", lv:"C1", ex_it:"La situazione è alquanto preoccupante.", ex_es:"La situación es bastante preocupante." },
+      { it:"niente",           es:"nada",                              tp:"adverb", lv:"A1", ex_it:"Non capisce niente.",                  ex_es:"No entiende nada." },
+      { it:"davvero",          es:"de verdad / realmente",             tp:"adverb", lv:"A2", ex_it:"Sei davvero sicuro di questo?",        ex_es:"¿Estás de verdad seguro de esto?" },
+    ]);
+
+    _topup("Avverbi di Valutazione", [
+      { it:"sì",               es:"sí",                                tp:"adverb", lv:"A1", ex_it:"Sì, certo, vieni pure.",               ex_es:"Sí, claro, pasa." },
+      { it:"certo",            es:"claro / por supuesto",              tp:"adverb", lv:"A1", ex_it:"Certo che lo so!",                     ex_es:"¡Claro que lo sé!" },
+      { it:"certamente",       es:"ciertamente / por supuesto",        tp:"adverb", lv:"B1", ex_it:"Certamente, sarò lì alle otto.",       ex_es:"Por supuesto, estaré allí a las ocho." },
+      { it:"sicuramente",      es:"seguramente / sin duda",            tp:"adverb", lv:"A2", ex_it:"Sicuramente ha già sentito la notizia.", ex_es:"Seguramente ya ha oído la noticia." },
+      { it:"ovviamente",       es:"obviamente",                        tp:"adverb", lv:"A2", ex_it:"Ovviamente non sono d'accordo.",       ex_es:"Obviamente no estoy de acuerdo." },
+      { it:"naturalmente",     es:"naturalmente / claro",              tp:"adverb", lv:"A2", ex_it:"Naturalmente puoi venire alla festa.", ex_es:"Naturalmente puedes venir a la fiesta." },
+      { it:"esatto",           es:"exacto / correcto",                 tp:"adverb", lv:"A2", ex_it:"Esatto, hai capito bene.",             ex_es:"Exacto, lo has entendido bien." },
+      { it:"assolutamente",    es:"absolutamente",                     tp:"adverb", lv:"B1", ex_it:"Assolutamente sì, è una buona idea.", ex_es:"Absolutamente sí, es una buena idea." },
+      { it:"appunto",          es:"exactamente / precisamente",        tp:"adverb", lv:"B1", ex_it:"Appunto! Questo è il problema.",      ex_es:"¡Exactamente! Ese es el problema." },
+      { it:"no",               es:"no",                                tp:"adverb", lv:"A1", ex_it:"No, grazie, non ne ho bisogno.",      ex_es:"No, gracias, no lo necesito." },
+      { it:"non",              es:"no (partícula negativa)",            tp:"adverb", lv:"A1", ex_it:"Non ho capito niente.",               ex_es:"No he entendido nada." },
+      { it:"nemmeno",          es:"ni siquiera / tampoco",             tp:"adverb", lv:"B1", ex_it:"Non mi ha nemmeno salutato.",         ex_es:"Ni siquiera me saludó." },
+      { it:"mica",             es:"para nada / en absoluto (coloquial)", tp:"adverb", lv:"B2", ex_it:"Non è mica stupido, eh!",          ex_es:"¡Para nada es tonto, eh!" },
+      { it:"forse",            es:"quizás / tal vez",                  tp:"adverb", lv:"A2", ex_it:"Forse domani pioverà.",              ex_es:"Quizás mañana lloverá." },
+      { it:"probabilmente",    es:"probablemente",                     tp:"adverb", lv:"B1", ex_it:"Probabilmente arriverà in ritardo.", ex_es:"Probablemente llegará tarde." },
+      { it:"possibilmente",    es:"posiblemente / si es posible",      tp:"adverb", lv:"B2", ex_it:"Rispondimi possibilmente entro oggi.", ex_es:"Respóndeme posiblemente antes de hoy." },
+      { it:"eventualmente",    es:"en su caso / llegado el momento",   tp:"adverb", lv:"B2", ex_it:"Eventualmente potremmo rimandare.",  ex_es:"En su caso podríamos aplazarlo.", notes:"FALSO AMICO: 'eventualmente' ≠ 'eventually' (inglese). Significa 'llegado el caso', NON 'alla fine'." },
+      { it:"magari",           es:"ojalá / quizás / si acaso",         tp:"adverb", lv:"B1", ex_it:"Magari potessi venire con te!",      ex_es:"¡Ojalá pudiera ir contigo!", notes:"'Magari' esprime desiderio (ojalá) o possibilità incerta (quizás). Al congiuntivo per il desiderio." },
+    ]);
+
+    _topup("Avverbi Interrogativi", [
+      { it:"come",             es:"cómo",                              tp:"adverb", lv:"A1", ex_it:"Come stai?",                          ex_es:"¿Cómo estás?" },
+      { it:"dove",             es:"dónde",                             tp:"adverb", lv:"A1", ex_it:"Dove sei stato?",                     ex_es:"¿Dónde has estado?" },
+      { it:"quando",           es:"cuándo",                            tp:"adverb", lv:"A1", ex_it:"Quando arrivi?",                      ex_es:"¿Cuándo llegas?" },
+      { it:"quanto",           es:"cuánto",                            tp:"adverb", lv:"A1", ex_it:"Quanto costa questo?",                ex_es:"¿Cuánto cuesta esto?" },
+      { it:"perché",           es:"por qué / porque",                  tp:"adverb", lv:"A1", ex_it:"Perché sei arrivato tardi?",          ex_es:"¿Por qué has llegado tarde?", notes:"'Perché' serve sia per la domanda (por qué) che per la risposta (porque). Diversamente dallo spagnolo." },
+      { it:"come mai",         es:"¿cómo es que? / ¿por qué es que?", tp:"adverb", lv:"B1", ex_it:"Come mai non sei venuto ieri?",       ex_es:"¿Cómo es que no viniste ayer?" },
+      { it:"da dove",          es:"de dónde",                          tp:"adverb", lv:"A2", ex_it:"Da dove vieni?",                     ex_es:"¿De dónde vienes?" },
+      { it:"fino a quando",    es:"hasta cuándo",                      tp:"adverb", lv:"B1", ex_it:"Fino a quando resterai qui?",        ex_es:"¿Hasta cuándo te quedarás aquí?" },
+      { it:"da quando",        es:"desde cuándo",                      tp:"adverb", lv:"B1", ex_it:"Da quando hai questo dolore?",       ex_es:"¿Desde cuándo tienes este dolor?" },
+      { it:"quanto tempo",     es:"cuánto tiempo",                     tp:"adverb", lv:"A2", ex_it:"Quanto tempo ci vuole?",             ex_es:"¿Cuánto tiempo se necesita?" },
+      { it:"ecco",             es:"aquí está / mira / ya está",        tp:"adverb", lv:"A1", ex_it:"Ecco la soluzione!",                 ex_es:"¡Aquí está la solución!" },
+      { it:"per quanto",       es:"por cuánto (tiempo) / aunque",      tp:"adverb", lv:"B2", ex_it:"Per quanto tempo rimarrai via?",    ex_es:"¿Por cuánto tiempo te quedarás fuera?" },
+    ]);
   }
 }
 
